@@ -56,7 +56,6 @@ class CallableDefinition(TypeMember, INodeWithParameters):
 	Parameters as ParameterDeclarationCollection
 	ReturnType as TypeReference
 	ReturnTypeAttributes as AttributeCollection
-	VariableArguments as bool
 
 abstract class TypeDefinition(TypeMember):
 	Members as TypeMemberCollection
@@ -90,6 +89,9 @@ class ModuleCollection:
 	pass
 
 class ClassDefinition(TypeDefinition):
+	pass
+
+class StructDefinition(TypeDefinition):
 	pass
 
 class InterfaceDefinition(TypeDefinition):
@@ -338,6 +340,8 @@ enum BinaryOperatorType:
 	And
 	BitwiseOr
 	BitwiseAnd
+	ExclusiveOr
+	InPlaceExclusiveOr
 
 enum UnaryOperatorType:
 	None
@@ -414,12 +418,19 @@ class GeneratorExpression(Expression):
 	Declarations as DeclarationCollection
 	Iterator as Expression
 	Filter as StatementModifier
-
-class SlicingExpression(Expression):
-	Target as Expression
+	
+class Slice(Node):
 	Begin as Expression
 	End as Expression
 	Step as Expression
+	
+[collection(Slice)]
+class SliceCollection:
+	pass
+
+class SlicingExpression(Expression):
+	Target as Expression
+	Indices as SliceCollection
 
 class AsExpression(Expression):
 	Target as Expression

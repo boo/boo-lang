@@ -47,6 +47,8 @@ namespace Boo.Lang.Compiler.Ast
 		protected Boo.Lang.Compiler.TypeSystem.IEntity _entity;
 		
 		protected System.Collections.Hashtable _properties;
+		
+		protected bool _isSynthetic;
 
 		protected Node()
 		{
@@ -70,6 +72,22 @@ namespace Boo.Lang.Compiler.Ast
 		public Node CloneNode()
 		{
 			return (Node)Clone();
+		}
+		
+		/// <summary>
+		/// true when the node was constructed by the compiler.
+		/// </summary>
+		public bool IsSynthetic
+		{
+			get
+			{
+				return _isSynthetic;
+			}
+			
+			set
+			{
+				_isSynthetic = value;
+			}
 		}
 		
 		public Boo.Lang.Compiler.TypeSystem.IEntity Entity
@@ -136,7 +154,8 @@ namespace Boo.Lang.Compiler.Ast
 		public LexicalInfo LexicalInfo
 		{
 			get
-			{				
+			{			
+				/*
 				if (LexicalInfo.Empty != _lexicalInfo)
 				{
 					return _lexicalInfo;
@@ -145,6 +164,7 @@ namespace Boo.Lang.Compiler.Ast
 				{
 					return _parent.LexicalInfo;
 				}
+				*/
 				return _lexicalInfo;
 			}
 

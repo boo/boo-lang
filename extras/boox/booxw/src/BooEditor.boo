@@ -1,3 +1,24 @@
+#region license
+// Copyright (c) 2004, Rodrigo B. de Oliveira (rbo@acm.org)
+// All rights reserved.
+//
+// This file is part of Boo Explorer.
+//
+// Boo Explorer is free software; you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation; either version 2 of the License, or
+// (at your option) any later version.
+// 
+// Boo Explorer is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+// 
+// You should have received a copy of the GNU General Public License
+// along with Foobar; if not, write to the Free Software
+// Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+#endregion
+
 namespace BooExplorer
 
 import ICSharpCode.TextEditor
@@ -50,9 +71,15 @@ class BooEditor(DockContent):
 	
 	def constructor(main as MainForm):
 		_main = main
+		settings = main.Settings
 		_editor = BooxTextAreaControl(Dock: DockStyle.Fill,
-							Font: System.Drawing.Font("Lucida Console", 12.0),
-							EnableFolding: true)
+							Font: settings.TextFont,
+							EnableFolding: settings.EnableFolding,
+							ShowLineNumbers: settings.ShowLineNumbers,
+							ShowSpaces: settings.ShowSpaces,
+							ShowTabs: settings.ShowTabs,
+							ShowEOLMarkers: settings.ShowEOLMarkers,
+							IndentStyle: settings.IndentStyle)
 
 		_editor.Editor = self
 		_editor.Encoding = System.Text.Encoding.UTF8
@@ -179,7 +206,9 @@ class BooEditor(DockContent):
 		
 				_main.UpdateTaskList(result.Errors)
 				
-				unless len(result.Errors):
+				if len(result.Errors):
+					UpdateOutputPane(result.Errors.ToString(true))
+				else:
 					
 					AppDomain_AssemblyResolve = def (sender, args as ResolveEventArgs):
 						name = GetSimpleName(args.Name)
@@ -193,9 +222,8 @@ class BooEditor(DockContent):
 					except x:
 						print(x)		
 					ensure:
-						current.AssemblyResolve -= AppDomain_AssemblyResolve
-				
-				UpdateOutputPane(console.ToString())
+						current.AssemblyResolve -= AppDomain_AssemblyResolve				
+					UpdateOutputPane(console.ToString())
 		ensure:
 			_compiler.Parameters.Input.Clear()
 			
@@ -262,22 +290,23 @@ class BooEditor(DockContent):
 				MenuItem("Remove trailing whitespace", Click: _menuItemRemoveTrailingWS_Click)
 			))
 
-		tools = MenuItem(Text: "&Tools", MergeOrder: 2)
+		tools = MenuItem(Text: "&Tools", MergeOrder: 2, MergeType: MenuMerge.MergeItems)
 		tools.MenuItems.AddRange(
-			(
+			(				
 				MenuItem(Text: "Run",
 						Click: _menuItemRun_Click,
 						Shortcut: Shortcut.F5),
 				MenuItem(Text: "Expand",
 						Click: _menuItemExpand_Click,
-						Shortcut: Shortcut.CtrlE)
+						Shortcut: Shortcut.CtrlE),
+				MenuItem(Text: "-")
 			))
 
 		menu.MenuItems.AddRange((edit, tools))
 		return menu
 
 	def GetBooHighlighting():
-		return HighlightingManager.Manager.FindHighlighter("boo")
+		return HighlightingManager.Manager.FindHighlighter("Boo")
 		
 	override protected def GetPersistString():
 		return "BooEditor|${GetSafeFileName()}"

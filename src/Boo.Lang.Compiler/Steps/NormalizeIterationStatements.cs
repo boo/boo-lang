@@ -59,10 +59,7 @@ namespace Boo.Lang.Compiler.Steps
 		
 		override public void Run()
 		{
-			if (0 == Errors.Count)
-			{				
-				Visit(CompileUnit);
-			}
+			Visit(CompileUnit);
 		}
 		
 		override public void OnMethod(Method node)
@@ -175,6 +172,7 @@ namespace Boo.Lang.Compiler.Steps
 			
 			block.Add(
 				codeBuilder.CreateAssignment(
+					block.LexicalInfo,
 					codeBuilder.CreateReference(local),
 					codeBuilder.CreateMethodInvocation(
 						expression, IEnumerable_GetEnumerator)));

@@ -153,6 +153,11 @@ namespace Boo.Lang.Compiler.Ast.Visitors
 		{
 			WriteTypeDefinition("class", c);
 		}
+		
+		override public void OnStructDefinition(StructDefinition node)
+		{
+			WriteTypeDefinition("struct", node);
+		}
 
 		override public void OnInterfaceDefinition(InterfaceDefinition id)
 		{
@@ -195,7 +200,7 @@ namespace Boo.Lang.Compiler.Ast.Visitors
 			WriteIndented(node.Name);
 			if (node.Parameters.Count > 0)
 			{
-				WriteParameterList(node.Parameters, false);
+				WriteParameterList(node.Parameters);
 			}
 			WriteTypeReference(node.Type);
 			WriteLine(":");
@@ -280,7 +285,7 @@ namespace Boo.Lang.Compiler.Ast.Visitors
 			else
 			{
 				WriteKeyword("def ");
-				WriteParameterList(node.Parameters, false);
+				WriteParameterList(node.Parameters);
 				WriteTypeReference(node.ReturnType);
 				WriteLine(":");
 				WriteBlock(node.Body);
@@ -293,7 +298,7 @@ namespace Boo.Lang.Compiler.Ast.Visitors
 			WriteModifiers(node);
 			WriteKeyword(keyword);
 			Write(node.Name);
-			WriteParameterList(node.Parameters, node.VariableArguments);
+			WriteParameterList(node.Parameters);
 			WriteTypeReference(node.ReturnType);
 			if (node.ReturnTypeAttributes.Count > 0)
 			{
@@ -481,11 +486,9 @@ namespace Boo.Lang.Compiler.Ast.Visitors
 			Visit(node.Filter);
 			Write(")");
 		}
-
-		override public void OnSlicingExpression(SlicingExpression node)
+		
+		override public void OnSlice(Slice node)
 		{
-			Visit(node.Target);
-			Write("[");
 			Visit(node.Begin);
 			if (null != node.End || WasOmitted(node.Begin))
 			{
@@ -496,7 +499,14 @@ namespace Boo.Lang.Compiler.Ast.Visitors
 			{
 				Write(":");
 				Visit(node.Step);
-			}			
+			}
+		}
+
+		override public void OnSlicingExpression(SlicingExpression node)
+		{
+			Visit(node.Target);
+			Write("[");
+			WriteCommaSeparatedList(node.Indices);
 			Write("]");
 		}
 		
@@ -574,7 +584,7 @@ namespace Boo.Lang.Compiler.Ast.Visitors
 				}
 				else
 				{
-					WriteStringLiteralContents(s.Value, _writer);
+					WriteStringLiteralContents(s.Value, _writer, false);
 				}
 			}
 			Write("\"");
@@ -615,6 +625,7 @@ namespace Boo.Lang.Compiler.Ast.Visitors
 			}
 			else
 			{
+				Visit(node.Modifier);
 				WriteLine();
 			}
 		}
@@ -841,6 +852,11 @@ namespace Boo.Lang.Compiler.Ast.Visitors
 					return "*=";
 				}
 				
+				case BinaryOperatorType.InPlaceExclusiveOr:
+				{
+					return "^=";
+				}
+				
 				case BinaryOperatorType.InPlaceDivide:
 				{
 					return "/=";
@@ -930,6 +946,11 @@ namespace Boo.Lang.Compiler.Ast.Visitors
 				{
 					return "&";
 				}
+				
+				case BinaryOperatorType.ExclusiveOr:
+				{
+					return "^";
+				}
 			}
 			throw new NotImplementedException(op.ToString());
 		}
@@ -985,6 +1006,11 @@ namespace Boo.Lang.Compiler.Ast.Visitors
 		
 		public static void WriteStringLiteralContents(string text, TextWriter writer)
 		{
+			WriteStringLiteralContents(text, writer, true);
+		}
+		
+		public static void WriteStringLiteralContents(string text, TextWriter writer, bool single)
+		{
 			foreach (char ch in text)
 			{
 				switch (ch)
@@ -1013,6 +1039,32 @@ namespace Boo.Lang.Compiler.Ast.Visitors
 						break;
 					}
 					
+					case '\'':
+					{
+						if (single)
+						{
+							writer.Write("\\'");
+						}
+						else
+						{
+							writer.Write(ch);
+						}
+						break;
+					}
+					
+					case '"':
+					{
+						if (!single)
+						{
+							writer.Write("\\\"");
+						}
+						else
+						{
+							writer.Write(ch);
+						}
+						break;
+					}
+					
 					default:
 					{
 						writer.Write(ch);
@@ -1031,7 +1083,7 @@ namespace Boo.Lang.Compiler.Ast.Visitors
 			WriteBlock(block);
 		}
 		
-		void WriteParameterList(ParameterDeclarationCollection items, bool variableArguments)
+		void WriteParameterList(ParameterDeclarationCollection items)
 		{
 			Write("(");
 			int last = items.Count-1;
@@ -1041,7 +1093,7 @@ namespace Boo.Lang.Compiler.Ast.Visitors
 				{
 					Write(", ");					
 				}
-				if (variableArguments && i==last)
+				if (i == last && items.VariableNumber)
 				{
 					Write("*");
 				}

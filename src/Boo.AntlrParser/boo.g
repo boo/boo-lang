@@ -118,6 +118,7 @@ tokens
 	SUPER="super";
 	STATIC="static";
 	SUCCESS="success";
+	STRUCT="struct";
 	TRY="try";
 	TRANSIENT="transient";
 	TRUE="true";
@@ -181,6 +182,7 @@ tokens
 			case "-=": return BinaryOperatorType.InPlaceSubtract;
 			case "/=": return BinaryOperatorType.InPlaceDivide;
 			case "*=": return BinaryOperatorType.InPlaceMultiply;
+			case "^=": return BinaryOperatorType.InPlaceExclusiveOr;
 		}
 		throw new ArgumentException(op, "op");
 	}
@@ -386,7 +388,6 @@ callable_definition [TypeMemberCollection container]
 	{
 		CallableDefinition cd = null;
 		TypeReference returnType = null;
-		bool variableArguments = false;
 	}:
 	CALLABLE id:ID
 	{
@@ -396,13 +397,10 @@ callable_definition [TypeMemberCollection container]
 		AddAttributes(cd.Attributes);
 		container.Add(cd);
 	}
-	LPAREN variableArguments=parameter_declaration_list[cd.Parameters] RPAREN
+	LPAREN parameter_declaration_list[cd.Parameters] RPAREN
 	(AS returnType=type_reference { cd.ReturnType=returnType; })?			
 	eos
 	docstring[cd]
-	{
-		cd.VariableArguments = variableArguments;
-	}
 	;
 
 protected
@@ -499,18 +497,22 @@ assembly_attribute[Module module]
 protected
 class_definition [TypeMemberCollection container]
 	{
-		ClassDefinition cd = null;
+		TypeDefinition td = null;
 	}:
-	CLASS id:ID
-	{
-		cd = new ClassDefinition(ToLexicalInfo(id));
-		cd.Name = id.getText();
-		cd.Modifiers = _modifiers;
-		AddAttributes(cd.Attributes);
-		container.Add(cd);
+	(
+		CLASS { td = new ClassDefinition(); } |
+		STRUCT { td = new StructDefinition(); }
+	)
+	id:ID
+	{		
+		td.LexicalInfo = ToLexicalInfo(id);
+		td.Name = id.getText();
+		td.Modifiers = _modifiers;
+		AddAttributes(td.Attributes);
+		container.Add(td);
 	}
-	(base_types[cd.BaseTypes])?
-	begin_with_doc[cd]					
+	(base_types[td.BaseTypes])?
+	begin_with_doc[td]					
 	(
 		(PASS eos) |
 		(
@@ -518,10 +520,10 @@ class_definition [TypeMemberCollection container]
 			attributes
 			modifiers
 			(						
-				method[cd.Members] |
-				event_declaration[cd.Members] |
-				field_or_property[cd.Members] |
-				type_definition[cd.Members]
+				method[td.Members] |
+				event_declaration[td.Members] |
+				field_or_property[td.Members] |
+				type_definition[td.Members]
 			)
 		)+
 	)
@@ -574,7 +576,6 @@ interface_method [TypeMemberCollection container]
 	{
 		Method m = null;
 		TypeReference rt = null;
-		bool variableArguments = false;
 	}: 
 	DEF id:ID
 	{
@@ -583,14 +584,11 @@ interface_method [TypeMemberCollection container]
 		AddAttributes(m.Attributes);
 		container.Add(m);
 	}
-	LPAREN variableArguments=parameter_declaration_list[m.Parameters] RPAREN
+	LPAREN parameter_declaration_list[m.Parameters] RPAREN
 	(AS rt=type_reference { m.ReturnType=rt; })?			
 	(
 		(eos docstring[m]) | (empty_block (EOS)*)
 	)
-	{
-		m.VariableArguments = variableArguments;
-	}
 	;
 			
 protected
@@ -666,7 +664,6 @@ method [TypeMemberCollection container]
 	{
 		Method m = null;
 		TypeReference rt = null;
-		bool variableArguments = false;
 	}: 
 	t:DEF
 	(
@@ -677,14 +674,13 @@ method [TypeMemberCollection container]
 		m.Modifiers = _modifiers;
 		AddAttributes(m.Attributes);
 	}
-	LPAREN variableArguments=parameter_declaration_list[m.Parameters] RPAREN
+	LPAREN parameter_declaration_list[m.Parameters] RPAREN
 			(AS rt=type_reference { m.ReturnType = rt; })?
 			attributes { AddAttributes(m.ReturnTypeAttributes); }
 			begin_with_doc[m]
 				block[m.Body.Statements]
 			end
-	{
-		m.VariableArguments = variableArguments; 
+	{ 
 		container.Add(m);
 	}
 	;	
@@ -816,24 +812,35 @@ modifiers
 	
 protected	
 parameter_declaration_list[ParameterDeclarationCollection c]
-	returns [bool variableArguments]
 	{
-		variableArguments = false;
+		bool variableArguments = false;
 	}: 
 	(variableArguments=parameter_declaration[c]
 	( {!variableArguments}?(COMMA variableArguments=parameter_declaration[c]) )* )?
+	{ c.VariableNumber = variableArguments; }
 	;
 
 protected
 parameter_declaration[ParameterDeclarationCollection c]
 	returns [bool variableArguments]
 	{		
+		Token id = null;
 		TypeReference tr = null;
 		variableArguments = false;
 	}: 
 	attributes
-	(MULTIPLY { variableArguments=true; })?
-	id:ID (AS tr=type_reference)? 
+	(
+		(
+			MULTIPLY { variableArguments=true; }
+			id1:ID (AS tr=array_type_reference)?
+			{ id = id1; }
+		)
+		|
+		(
+			id2:ID (AS tr=type_reference)?
+			{ id = id2; }
+		)
+	)
 	{
 		ParameterDeclaration pd = new ParameterDeclaration(ToLexicalInfo(id));
 		pd.Name = id.getText();
@@ -860,6 +867,21 @@ callable_type_reference returns [CallableTypeReference ctr]
 	RPAREN
 	(AS tr=type_reference { ctr.ReturnType = tr; })?
 	;
+	
+protected
+array_type_reference returns [ArrayTypeReference atr]
+	{
+		TypeReference tr = null;
+		atr = null;
+	}:
+	lparen:LPAREN
+	tr=type_reference
+	rparen:RPAREN
+	{
+		atr = new ArrayTypeReference(ToLexicalInfo(lparen));
+		atr.ElementType = tr;
+	}
+	;
 
 protected
 type_reference returns [TypeReference tr]
@@ -867,16 +889,7 @@ type_reference returns [TypeReference tr]
 		tr=null;
 		Token id = null;
 	}: 
-	(
-		lparen:LPAREN
-		tr=type_reference
-		rparen:RPAREN
-		{
-			ArrayTypeReference ttr = new ArrayTypeReference(ToLexicalInfo(lparen));
-			ttr.ElementType = tr;
-			tr = ttr;
-		}
-	)
+	tr=array_type_reference
 	|
 	(CALLABLE LPAREN)=>(tr=callable_type_reference)
 	|
@@ -915,15 +928,32 @@ compound_stmt[StatementCollection c] :
 		;
 		
 protected
-macro_stmt returns [MacroStatement returnValue]
+closure_macro_stmt returns [MacroStatement returnValue]
 	{
 		returnValue = null;
 		MacroStatement macro = new MacroStatement();
 	}:
 	id:ID expression_list[macro.Arguments]
+	{
+		macro.Name = id.getText();
+		macro.LexicalInfo = ToLexicalInfo(id);		
+		returnValue = macro;
+	}
+;
+
+		
+protected
+macro_stmt returns [MacroStatement returnValue]
+	{
+		returnValue = null;
+		MacroStatement macro = new MacroStatement();
+		StatementModifier modifier = null;
+	}:
+	id:ID expression_list[macro.Arguments]
 	(
 		compound_stmt[macro.Block.Statements] |
-		eos
+		eos |
+		modifier=stmt_modifier eos { macro.Modifier = modifier; }
 	)
 	{
 		macro.Name = id.getText();
@@ -1047,9 +1077,10 @@ internal_closure_stmt returns [Statement stmt]
 	(
 		(
 			(declaration COMMA)=>stmt=unpack_stmt |
+			{IsValidMacroArgument(LA(2))}? stmt=closure_macro_stmt | 
 			stmt=expression_stmt |
 			stmt=raise_stmt |
-			stmt=yield_stmt
+			stmt=yield_stmt			
 		)
 		(modifier=stmt_modifier { stmt.Modifier = modifier; })?		
 	)
@@ -1391,10 +1422,12 @@ if_stmt returns [IfStatement returnValue]
 protected
 unpack_stmt returns [UnpackStatement s]
 	{
+		Declaration d = null;
 		s = new UnpackStatement();
 		Expression e = null;
-	}:
-	declaration_list[s.Declarations] t:ASSIGN e=array_or_expression
+	}:	
+	d=declaration COMMA { s.Declarations.Add(d); }
+	(declaration_list[s.Declarations])? t:ASSIGN e=array_or_expression
 	{
 		s.Expression = e;
 		s.LexicalInfo = ToLexicalInfo(t);
@@ -1610,14 +1643,16 @@ assignment_expression returns [Expression e]
 	}:
 	e=conditional_expression
 	(
+		options { greedy = true; }:
+		
 		op:ASSIGN
-		r=conditional_expression
+		r=assignment_expression
 		{
 			BinaryExpression be = new BinaryExpression(ToLexicalInfo(op));
 			be.Operator = ParseAssignOperator(op.getText());
 			be.Left = e;
 			be.Right = r;
-			e = be; 
+			e = be;
 		}
 	)?
 	;
@@ -1686,7 +1721,8 @@ sum returns [Expression e]
 		(
 			add:ADD { op=add; bOperator = BinaryOperatorType.Addition; } |
 			sub:SUBTRACT { op=sub; bOperator = BinaryOperatorType.Subtraction; } |
-			bitor:BITWISE_OR { op=bitor; bOperator = BinaryOperatorType.BitwiseOr; }
+			bitor:BITWISE_OR { op=bitor; bOperator = BinaryOperatorType.BitwiseOr; } |
+			eo:EXCLUSIVE_OR { op=eo; bOperator = BinaryOperatorType.ExclusiveOr; }
 		)
 		r=term
 		{
@@ -1923,11 +1959,9 @@ slicing_expression returns [Expression e]
 				)?
 			)
 			{
-				SlicingExpression se = new SlicingExpression(ToLexicalInfo(lbrack));
+				SlicingExpression se = new SlicingExpression(ToLexicalInfo(lbrack));				
 				se.Target = e;
-				se.Begin = begin;
-				se.End = end;
-				se.Step = step;
+				se.Indices.Add(new Slice(begin, end, step));
 				e = se;
 				
 				begin = end = step = null;
@@ -2309,6 +2343,8 @@ COLON : ':';
 BITWISE_OR: '|';
 
 BITWISE_AND: '&';
+
+EXCLUSIVE_OR: '^' ('=' { $setType(ASSIGN); })?;
 
 LPAREN : '(' { EnterSkipWhitespaceRegion(); };
 	

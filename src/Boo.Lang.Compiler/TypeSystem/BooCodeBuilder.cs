@@ -330,6 +330,13 @@ namespace Boo.Lang.Compiler.TypeSystem
 			return unpack;
 		}
 		
+		public BinaryExpression CreateAssignment(LexicalInfo li, Expression lhs, Expression rhs)
+		{
+			BinaryExpression assignment = CreateAssignment(lhs, rhs);
+			assignment.LexicalInfo = li;
+			return assignment;
+		}
+		
 		public BinaryExpression CreateAssignment(Expression lhs, Expression rhs)
 		{
 			BinaryExpression assignment = new BinaryExpression(
@@ -591,16 +598,25 @@ namespace Boo.Lang.Compiler.TypeSystem
 			return entity;
 		}
 		
-		public void BindParameterDeclarations(bool isStatic, ParameterDeclarationCollection parameters)
+		public void BindParameterDeclarations(bool isStatic, INodeWithParameters node)
 		{
 			// arg0 is the this pointer when member is not static			
 			int delta = isStatic ? 0 : 1; 
+			ParameterDeclarationCollection parameters = node.Parameters;
+			int last = parameters.Count - 1;
 			for (int i=0; i<parameters.Count; ++i)
 			{
 				ParameterDeclaration parameter = parameters[i];
 				if (null == parameter.Type)
 				{
-					parameter.Type = CreateTypeReference(_tss.ObjectType);
+					if (last == i && parameters.VariableNumber)
+					{
+						parameter.Type = CreateTypeReference(_tss.ObjectArrayType);
+					}
+					else
+					{
+						parameter.Type = CreateTypeReference(_tss.ObjectType);
+					}
 				}
 				parameter.Entity = new InternalParameter(parameter, i + delta);
 			}

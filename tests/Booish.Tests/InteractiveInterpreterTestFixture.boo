@@ -184,7 +184,7 @@ def spam():
 		
 		assert 3 == _interpreter.LastValue
 		assert 3 == _interpreter.GetValue("a")
-		assert _interpreter.Lookup("a") is int
+		assert int is _interpreter.Lookup("a")
 		
 		_interpreter.Reset()
 		
@@ -309,7 +309,7 @@ def foo():
 	a = 3
 	
 b = 4""")
-		assert _interpreter.Lookup("b") is int
+		assert int is _interpreter.Lookup("b")
 		assert _interpreter.Lookup("a") is null
 		
 	[Test]
@@ -369,6 +369,62 @@ dummy()""")
 		_interpreter.LoopEval("'42'*3")
 		assert "'424242'" == value
 		assert "424242" == _interpreter.GetValue("_")
+		
+	class Customer:
+		
+		[property(FirstName)]
+		_fname as string
+		
+		public LastName as string
+		
+		event Changed as System.EventHandler
+		
+		def constructor(name as string):
+			_fname = name
+		
+		def constructor():
+			pass
+		
+	[Test]
+	def Help():
+		
+		buffer = System.IO.StringWriter()
+		buffer.WriteLine()		
+		_interpreter.Print = { item | buffer.WriteLine(item) }		
+		_interpreter.help(Customer)
+		
+		expected = """
+class Customer(object):
+
+    def constructor(name as string)
+
+    def constructor()
+
+    public LastName as string
+
+    FirstName as string:
+        get
+        set
+
+    def Equals(obj as object) as bool
+
+    def GetHashCode() as int
+
+    def GetType() as System.Type
+
+    def ToString() as string
+
+    event Changed as System.EventHandler
+
+"""
+		actual = buffer.ToString().Replace("\r\n", "\n")
+		
+		# mono compatibility fix
+		# object.Equals arg on mono is called o
+		actual = actual.Replace("o as object", "obj as object")
+		
+		Assert.AreEqual(expected, actual)
+	
 		
 	[Test]
 	def Loop():

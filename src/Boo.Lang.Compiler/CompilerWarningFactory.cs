@@ -47,5 +47,15 @@ namespace Boo.Lang.Compiler
 		{
 			return new CompilerWarning("BCW0002", node.LexicalInfo);
 		}
+		
+		public static CompilerWarning UnusedLocalVariable(Node node, string name)
+		{
+			return new CompilerWarning("BCW0003", node.LexicalInfo, name);
+		}
+		
+		public static CompilerWarning IsInsteadOfIsa(Node node)
+		{
+			return new CompilerWarning("BCW0004", node.LexicalInfo);
+		}
 	}
 }

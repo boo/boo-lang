@@ -102,10 +102,17 @@ BCE0100=yield não pode ser utilizado dentro de construtores.
 BCE0101=Somente System.Collections.IEnumerable and System.Object podem ser utilizados como tipo de retorno de um generator.
 BCE0102=Generators não podem retornar valores.
 BCE0103=Não é possível estender o tipo final '{0}'.
+BCE0104='transient' só pode ser utilizado na definição de classes, campos e eventos.
+BCE0105='abstract' só pode ser utilizado na definição de classes, métodos, propriedades e eventos.
+BCE0106=Não foi possível acessar os tipos definidos no assembly '{0}'.
+BCE0107=Estruturas não podem declarar constructors sem parâmetros.
+BCE0108=Campos de estruturas não podem ter inicializadores.
 
 ;Compiler warnings
 BCW0001=AVISO: O tipo '{0}' não possui uma implementação para '{1}' e será marcado como abstrato.
 BCW0002=AVISO: Modificadores de sentença não afetam rótulos.
+BCW0003=AVISO: Variável local não utilizada '{0}'.
+BCW0004=AVISO: O operando direito do operador 'is' é uma referência a um tipo, tem certeza de que não é o operador 'isa' que você deseja utilizar?
 
 ; BooC Command Line Errors
 BCE0500=Arquivo '{0}' listado mais de uma vez.

@@ -84,7 +84,9 @@ namespace Boo.Lang
 			getter.Name = "get";
 			getter.Body.Statements.Add(
 				new ReturnStatement(
-					new ReferenceExpression(f.Name)
+					base.LexicalInfo,
+					new ReferenceExpression(f.Name),
+					null
 					)
 				);
 			return getter;
@@ -99,15 +101,19 @@ namespace Boo.Lang
 			{
 				setter.Body.Add(
 					new RaiseStatement(
+						_setPreCondition.LexicalInfo,
 						AstUtil.CreateMethodInvocationExpression(
 							AstUtil.CreateReferenceExpression("System.ArgumentException"),
-							new StringLiteralExpression(_propertyName.Name)),
+							new StringLiteralExpression("precondition '" +
+														_setPreCondition.ToString() +
+														"' failed:")),
 						new StatementModifier(
 							StatementModifierType.Unless,
 							_setPreCondition)));						
 			}
 			setter.Body.Add(
 				new BinaryExpression(
+					base.LexicalInfo,
 					BinaryOperatorType.Assign,
 					new ReferenceExpression(f.Name),
 					new ReferenceExpression("value")

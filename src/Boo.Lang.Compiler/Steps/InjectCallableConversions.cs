@@ -45,11 +45,8 @@ namespace Boo.Lang.Compiler.Steps
 		
 		override public void Run()
 		{
-			if (0 == Errors.Count)
-			{
-				Initialize();
-				Visit(CompileUnit);
-			}
+			Initialize();
+			Visit(CompileUnit);
 		}
 		
 		void Initialize()
@@ -164,10 +161,10 @@ namespace Boo.Lang.Compiler.Steps
 		override public void LeaveMethodInvocationExpression(MethodInvocationExpression node)
 		{
 			IParameter[] parameters = null;
-			
-			if (EntityType.Constructor == node.Target.Entity.EntityType)
+			IMethod entity = node.Target.Entity as IMethod;			
+			if (null != entity)
 			{
-				parameters = ((IConstructor)node.Target.Entity).GetParameters();
+				parameters = entity.GetParameters();
 			}
 			else
 			{			
@@ -178,12 +175,11 @@ namespace Boo.Lang.Compiler.Steps
 				}
 				parameters = type.GetSignature().Parameters;
 			}
-			
 			ConvertMethodInvocation(node, parameters);
 		}
 		
 		void ConvertMethodInvocation(MethodInvocationExpression node, IParameter[] parameters)
-		{		
+		{	
 			ExpressionCollection arguments = node.Arguments;
 			for (int i=0; i<parameters.Length; ++i)
 			{

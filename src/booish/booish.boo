@@ -95,6 +95,16 @@ class InteractiveInterpreter:
 	References:
 		get:
 			return _compiler.Parameters.References
+
+	def ConsoleLoopEval():			
+		while line=prompt(">>> "):
+			try:		
+				line = ReadBlock(line) if line[-1:] in ":", "\\"
+				LoopEval(line)
+			except x as System.Reflection.TargetInvocationException:
+				print(x.InnerException)
+			except x:
+				print(x)
 			
 	def LoopEval(code as string):
 		result = self.Eval(code)
@@ -192,26 +202,108 @@ class InteractiveInterpreter:
 			_print("---" + "-" * pos + "^") if pos > 0
 			_print("ERROR: ${error.Message}")
 			
+	def globals():
+		return array(
+					key for key as string in _values.Keys
+					unless key.StartsWith("@"))
+			
 	def dir([required] obj):
 		type = (obj as Type) or obj.GetType()
 		return array(
 				member for member in type.GetMembers()
 				unless (method=(member as System.Reflection.MethodInfo))
 				and method.IsSpecialName)
+				
+	def load([required] path as string):
+		References.Add(System.Reflection.Assembly.LoadFrom(path))
 		
-	def help(obj):
+	def help(obj):		
 		type = (obj as Type) or obj.GetType()
-		baseTypes = [type.BaseType].Extend(type.GetInterfaces())
-		_print("class ${type.Name}(${join(baseTypes, ', ')}):")
+		describeType("    ", type)
 		
-		for member in dir(obj):
-			_print("    ${member}")
+	def describeType(indent as string, type as Type):
+		
+		baseTypes = (getBooTypeName(type.BaseType),) + array(getBooTypeName(t) for t in type.GetInterfaces())
+		_print("class ${type.Name}(${join(baseTypes, ', ')}):")
+		_print("")
+		
+		for ctor in type.GetConstructors():
+			_print("${indent}def constructor(${describeParameters(ctor.GetParameters())})")
+			_print("")
+			
+		sortByName = def (lhs as Reflection.MemberInfo, rhs as Reflection.MemberInfo):
+			return lhs.Name.CompareTo(rhs.Name)
+			
+		for f as Reflection.FieldInfo in List(type.GetFields()).Sort(sortByName):
+			_print("${indent}public ${describeModifiers(f)}${f.Name} as ${getBooTypeName(f.FieldType)}")
+			_print("")
+			
+		for p as Reflection.PropertyInfo in List(type.GetProperties()).Sort(sortByName):
+			modifiers = describeModifiers(p)
+			params = describePropertyParameters(p.GetIndexParameters())
+			_print("${indent}${modifiers}${p.Name}${params} as ${getBooTypeName(p.PropertyType)}:")
+			_print("${indent}${indent}get") if p.GetGetMethod() is not null
+			_print("${indent}${indent}set") if p.GetSetMethod() is not null
+			_print("")		
+		
+		for m as Reflection.MethodInfo in List(type.GetMethods()).Sort(sortByName):
+			continue if m.IsSpecialName
+			modifiers = describeModifiers(m)
+			returnType = getBooTypeName(m.ReturnType)
+			_print("${indent}${modifiers}def ${m.Name}(${describeParameters(m.GetParameters())}) as ${returnType}")
+			_print("")
+			
+		for e as Reflection.EventInfo in List(type.GetEvents()).Sort(sortByName):
+			_print("${indent}${describeModifiers(e)}event ${e.Name} as ${e.EventHandlerType}")
+			_print("")
+			
+	def describeModifiers(f as Reflection.FieldInfo):
+		return "static " if f.IsStatic
+		return ""
+			
+	def describeModifiers(m as Reflection.MethodBase):
+		return "static " if m.IsStatic
+		return ""
+		
+	def describeModifiers(e as Reflection.EventInfo):
+		return describeModifiers(e.GetAddMethod() or e.GetRemoveMethod())
+		
+	def describeModifiers(p as Reflection.PropertyInfo):
+		accessor = p.GetGetMethod() or p.GetSetMethod()
+		return describeModifiers(accessor)
+			
+	def describePropertyParameters(parameters as (Reflection.ParameterInfo)):
+		return "" if 0 == len(parameters)
+		return "(${describeParameters(parameters)})"
+			
+	def describeParameters(parameters as (Reflection.ParameterInfo)):
+		return join(describeParameter(p) for p in parameters, ", ")
+		
+	def describeParameter(p as Reflection.ParameterInfo):
+		return "${p.Name} as ${getBooTypeName(p.ParameterType)}"
+		
+	def getBooTypeName(type as System.Type):
+		return "(${getBooTypeName(type.GetElementType())})" if type.IsArray
+		return "object" if object is type
+		return "string" if string is type
+		return "void" if void is type
+		return "bool" if bool is type		
+		return "byte" if byte is type
+		return "short" if short is type
+		return "int" if int is type
+		return "long" if long is type
+		return "single" if single is type
+		return "double" if double is type
+		return "date" if date is type
+		return type.FullName
 			
 	private def InitializeStandardReferences():
 		SetValue("interpreter", self)
 		SetValue("dir", dir)
 		SetValue("help", help)
 		SetValue("print", { value | _print(value) })
+		SetValue("load", load)
+		SetValue("globals", globals)
 
 	private def InitializeModuleInterpreter(asm as System.Reflection.Assembly,
 										module as Module):
@@ -339,7 +431,7 @@ class InteractiveInterpreter:
 			if entity is null:
 				type = _interpreter.Lookup(name)
 				if type is not null:
-					if type is object:
+					if object is type:
 						entity = Declare(name, _tss.DuckType)
 					else:
 						entity = Declare(name, _tss.Map(type))
@@ -439,8 +531,8 @@ class InteractiveInterpreter:
 			return true if InterpreterEntity.IsInterpreterEntity(node)
 			return super(node) 
 	
-		override def DeclareLocal(name as string, type as IType, privateScope as bool):			
-			return super(name, type, privateScope) if privateScope or not InEntryPoint
+		override def DeclareLocal(sourceNode as Node, name as string, type as IType, privateScope as bool):			
+			return super(sourceNode, name, type, privateScope) if privateScope or not InEntryPoint
 			
 			external = type as ExternalType
 			_interpreter.Declare(name, external.ActualType) if external
@@ -566,14 +658,7 @@ if "--print-modules" in argv:
 if "--debug" in argv:
 	Debug.Listeners.Add(TextWriterTraceListener(Console.Out))
 
-while line=prompt(">>> "):
-	try:		
-		line = ReadBlock(line) if line[-1:] in ":", "\\"
-		interpreter.LoopEval(line)
-	except x as System.Reflection.TargetInvocationException:
-		print(x.InnerException)
-	except x:
-		print(x)
+interpreter.ConsoleLoopEval()
 	
 
 

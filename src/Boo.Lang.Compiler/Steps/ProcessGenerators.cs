@@ -43,10 +43,7 @@ namespace Boo.Lang.Compiler.Steps
 		
 		override public void Run()
 		{
-			if (0 == Errors.Count)
-			{
-				Visit(CompileUnit.Modules);
-			}
+			Visit(CompileUnit.Modules);
 		}
 		
 		override public void OnInterfaceDefinition(InterfaceDefinition node)
@@ -157,6 +154,11 @@ namespace Boo.Lang.Compiler.Steps
 		override public void Run()
 		{
 			_enumerable = (BooClassBuilder)_generator.Method["GeneratorClassBuilder"];
+			if (null == _enumerable)
+			{
+				Errors.Add(CompilerErrorFactory.InternalError(_generator.Method, null));
+			}
+			
 			CreateEnumerableConstructor();
 			CreateEnumerator();
 			
@@ -335,7 +337,11 @@ namespace Boo.Lang.Compiler.Steps
 		override public void LeaveYieldStatement(YieldStatement node)
 		{						
 			Block block = new Block();			
-			block.Add(new ReturnStatement(CreateYieldInvocation(node.Expression)));				
+			block.Add(
+				new ReturnStatement(
+					node.LexicalInfo,
+					CreateYieldInvocation(node.Expression),
+					null));				
 			block.Add(CreateLabel(node));					
 			ReplaceCurrentNode(block);
 		}

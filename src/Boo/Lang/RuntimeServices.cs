@@ -1,4 +1,4 @@
-﻿#region license
+#region license
 // Copyright (c) 2004, Rodrigo B. de Oliveira (rbo@acm.org)
 // All rights reserved.
 // 
@@ -40,9 +40,15 @@ namespace Boo.Lang
 	{
 		const BindingFlags DefaultBindingFlags = BindingFlags.Public |
 												BindingFlags.OptionalParamBinding |
+												BindingFlags.Static |
+												BindingFlags.FlattenHierarchy |
 												BindingFlags.Instance;
 									
 		const BindingFlags InvokeBindingFlags = DefaultBindingFlags |
+												BindingFlags.InvokeMethod;
+
+		const BindingFlags InvokeOperatorBindingFlags = BindingFlags.Public |
+												BindingFlags.Static |
 												BindingFlags.InvokeMethod;												
 												
 		const BindingFlags SetPropertyBindingFlags = DefaultBindingFlags |
@@ -56,14 +62,31 @@ namespace Boo.Lang
 			
 		public static object Invoke(object target, string name, object[] args)
 		{
+			IQuackFu duck = target as IQuackFu;
+			if (null != duck)
+			{
+				return duck.QuackInvoke(name, args);
+			}
+			
 			try
 			{
-				return target.GetType().InvokeMember(name,
-													InvokeBindingFlags,
-													null,
-													target,
-													args);
-													
+				Type type = target as Type;
+				if (null == type)
+				{
+					return target.GetType().InvokeMember(name,
+														InvokeBindingFlags,
+														null,
+														target,
+														args);
+				}
+				else
+				{	// static method
+					return type.InvokeMember(name,
+														InvokeBindingFlags,
+														null,
+														null,
+														args);
+				}
 			}
 			catch (TargetInvocationException x)
 			{
@@ -71,15 +94,87 @@ namespace Boo.Lang
 			}				
 		}
 		
-		public static object SetProperty(object target, string name, object value)
+		public static object InvokeBinaryOperator(string operatorName, object lhs, object rhs)
 		{
+			object[] args = new object[] { lhs, rhs };
+			
+			Type lhsType = lhs.GetType();
+			Type rhsType = rhs.GetType();
+			
+			if (lhsType.IsPrimitive && rhsType.IsPrimitive)
+			{
+				return InvokeRuntimeServicesOperator(operatorName, args);
+			}
+			
 			try
 			{
-				target.GetType().InvokeMember(name,
+				return lhsType.InvokeMember(operatorName,
+									InvokeOperatorBindingFlags,
+									null,
+									null,
+									args);
+			}
+			catch (MissingMethodException)
+			{
+				try
+				{
+					return rhsType.InvokeMember(operatorName,
+									InvokeOperatorBindingFlags,
+									null,
+									null,
+									args);
+				}
+				catch (MissingMethodException)
+				{
+					try
+					{
+						return InvokeRuntimeServicesOperator(operatorName, args);
+					}
+					catch (MissingMethodException)
+					{
+					}										
+				}
+				
+				throw; // always throw the original exception
+			}
+		}
+		
+		private static object InvokeRuntimeServicesOperator(string operatorName, object[] args)
+		{
+			return typeof(RuntimeServices).InvokeMember(operatorName,
+										InvokeOperatorBindingFlags,
+										null,
+										null,
+										args);
+		}
+		
+		public static object SetProperty(object target, string name, object value)
+		{
+			IQuackFu duck = target as IQuackFu;
+			if (null != duck)
+			{
+				return duck.QuackSet(name, value);
+			}
+			
+			try
+			{
+				Type type = target as Type;
+				if (null == type)
+				{
+					target.GetType().InvokeMember(name,
 										SetPropertyBindingFlags,
 										null, 
 										target,
 										new object[] { value });
+				}
+				else
+				{	// static member
+					type.InvokeMember(name,
+										SetPropertyBindingFlags,
+										null, 
+										null,
+										new object[] { value });
+				}
 				return value;
 			}
 			catch (TargetInvocationException x)
@@ -88,15 +183,33 @@ namespace Boo.Lang
 			}
 		}
 		
-		public static object GetProperty(object target, string name, object[] args)
+		public static object GetProperty(object target, string name)
 		{
+			IQuackFu duck = target as IQuackFu;
+			if (null != duck)
+			{
+				return duck.QuackGet(name);
+			}
+			
 			try
 			{
-				return target.GetType().InvokeMember(name,
+				Type type = target as Type;
+				if (null == type)
+				{
+					return target.GetType().InvokeMember(name,
 										GetPropertyBindingFlags,
 										null, 
 										target,
-										args);
+										null);
+				}
+				else
+				{	// static member
+					return type.InvokeMember(name,
+										GetPropertyBindingFlags,
+										null, 
+										null,
+										null);
+				}
 			}
 			catch (TargetInvocationException x)
 			{
@@ -423,6 +536,88 @@ namespace Boo.Lang
 				}
 			}
 			return true;
+		}
+		#endregion
+		
+		#region dynamic operator for primitive types
+		public static long op_Multiply(long lhs, long rhs)
+		{
+			return lhs*rhs;
+		}
+		
+		public static int op_Multiply(int lhs, int rhs)
+		{
+			return lhs*rhs;
+		}
+		
+		public static float op_Multiply(float lhs, float rhs)
+		{
+			return lhs*rhs;
+		}
+		
+		public static double op_Multiply(double lhs, double rhs)
+		{
+			return lhs*rhs;
+		}
+		
+		public static long op_Division(long lhs, long rhs)
+		{
+			return lhs/rhs;
+		}
+		
+		public static int op_Division(int lhs, int rhs)
+		{
+			return lhs/rhs;
+		}
+		
+		public static float op_Division(float lhs, float rhs)
+		{
+			return lhs/rhs;
+		}
+		
+		public static double op_Division(double lhs, double rhs)
+		{
+			return lhs/rhs;
+		}
+		
+		public static long op_Addition(long lhs, long rhs)
+		{
+			return lhs+rhs;
+		}
+		
+		public static int op_Addition(int lhs, int rhs)
+		{
+			return lhs+rhs;
+		}
+		
+		public static float op_Addition(float lhs, float rhs)
+		{
+			return lhs+rhs;
+		}
+		
+		public static double op_Addition(double lhs, double rhs)
+		{
+			return lhs+rhs;
+		}
+		
+		public static long op_Subtraction(long lhs, long rhs)
+		{
+			return lhs-rhs;
+		}
+		
+		public static int op_Subtraction(int lhs, int rhs)
+		{
+			return lhs-rhs;
+		}
+		
+		public static float op_Subtraction(float lhs, float rhs)
+		{
+			return lhs-rhs;
+		}
+		
+		public static double op_Subtraction(double lhs, double rhs)
+		{
+			return lhs-rhs;
 		}
 		#endregion
 		

@@ -41,16 +41,33 @@ namespace Boo.Lang.Compiler.Steps
 		
 		override public void Run()
 		{
-			if (0 == Errors.Count)
-			{
-				Visit(CompileUnit);
-			}
+			Visit(CompileUnit);
 		}
 		
 		override public void Dispose()
 		{
 			_members.Clear();
 			base.Dispose();
+		}
+		
+		override public void LeaveBinaryExpression(BinaryExpression node)
+		{
+			if (BinaryOperatorType.ReferenceEquality == node.Operator)
+			{
+				if (IsTypeReference(node.Right))
+				{
+					Warnings.Add(
+						CompilerWarningFactory.IsInsteadOfIsa(node));
+				}
+			}
+		}
+		
+		bool IsTypeReference(Expression node)
+		{
+			return (NodeType.TypeofExpression == node.NodeType) ||
+				(
+					node is ReferenceExpression &&
+					node.Entity is IType);
 		}
 		
 		override public void LeaveEnumDefinition(EnumDefinition node)
@@ -238,6 +255,20 @@ namespace Boo.Lang.Compiler.Steps
 								superAccess));
 				}
 			}
+			
+			CheckUnusedLocals(node);
+		}
+		
+		void CheckUnusedLocals(Method node)
+		{
+			foreach (Local local in node.Locals)
+			{
+				InternalLocal entity = (InternalLocal)local.Entity;
+				if (!entity.IsPrivateScope && !entity.IsUsed)
+				{
+					Warnings.Add(CompilerWarningFactory.UnusedLocalVariable(local, local.Name));
+				}
+			}
 		}
 		
 		override public void LeaveConstructor(Constructor node)
@@ -253,6 +284,7 @@ namespace Boo.Lang.Compiler.Steps
 					Error(CompilerErrorFactory.StaticConstructorCannotDeclareParameters(node));
 				}
 			}
+			CheckUnusedLocals(node);
 		}
 		
 		override public void LeaveMethodInvocationExpression(MethodInvocationExpression node)

@@ -546,6 +546,31 @@ namespace Boo.Lang.Compiler
 			return new CompilerError("BCE0103", node.LexicalInfo, typeName);
 		}
 		
+		public static CompilerError CantBeMarkedTransient(Node node)
+		{
+			return new CompilerError("BCE0104", node.LexicalInfo);
+		}
+		
+		public static CompilerError CantBeMarkedAbstract(Node node)
+		{
+			return new CompilerError("BCE0105", node.LexicalInfo);
+		}
+		
+		public static CompilerError FailedToLoadTypesFromAssembly(string assemblyName, Exception x)
+		{
+			return new CompilerError("BCE0106", LexicalInfo.Empty, x, assemblyName);
+		}
+		
+		public static CompilerError ValueTypesCannotDeclareParameterlessConstructors(Node node)
+		{
+			return new CompilerError("BCE0107", node.LexicalInfo);
+		}
+		
+		public static CompilerError ValueTypeFieldsCannotHaveInitializers(Node node)
+		{
+			return new CompilerError("BCE0108", node.LexicalInfo);
+		}
+		
 		public static string ToStringList(System.Collections.IEnumerable names)
 		{
 			StringBuilder builder = new StringBuilder();

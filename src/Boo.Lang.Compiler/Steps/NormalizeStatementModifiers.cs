@@ -1,29 +1,29 @@
 #region license
-// boo - an extensible programming language for the CLI
-// Copyright (C) 2004 Rodrigo B. de Oliveira
-//
-// Permission is hereby granted, free of charge, to any person 
-// obtaining a copy of this software and associated documentation 
-// files (the "Software"), to deal in the Software without restriction, 
-// including without limitation the rights to use, copy, modify, merge, 
-// publish, distribute, sublicense, and/or sell copies of the Software, 
-// and to permit persons to whom the Software is furnished to do so, 
-// subject to the following conditions:
+// Copyright (c) 2004, Rodrigo B. de Oliveira (rbo@acm.org)
+// All rights reserved.
 // 
-// The above copyright notice and this permission notice shall be included 
-// in all copies or substantial portions of the Software.
+// Redistribution and use in source and binary forms, with or without modification,
+// are permitted provided that the following conditions are met:
 // 
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, 
-// EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF 
-// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. 
-// IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY 
-// CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, 
-// TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE 
-// OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+//     * Redistributions of source code must retain the above copyright notice,
+//     this list of conditions and the following disclaimer.
+//     * Redistributions in binary form must reproduce the above copyright notice,
+//     this list of conditions and the following disclaimer in the documentation
+//     and/or other materials provided with the distribution.
+//     * Neither the name of Rodrigo B. de Oliveira nor the names of its
+//     contributors may be used to endorse or promote products derived from this
+//     software without specific prior written permission.
 // 
-// Contact Information
-//
-// mailto:rbo@acm.org
+// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+// ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+// WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+// DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE
+// FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+// DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+// SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+// CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+// OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+// THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #endregion
 
 using System;
@@ -65,12 +65,12 @@ namespace Boo.Lang.Compiler.Steps
 		
 		override public void LeaveClassDefinition(ClassDefinition node)
 		{
-			LeaveTypeDefinition(node);
-			
-			if (!node.HasConstructor)
-			{				
+			LeaveTypeDefinition(node);		
+			if (!node.HasInstanceConstructor)
+			{	
 				node.Members.Add(AstUtil.CreateConstructor(node, TypeMemberModifiers.Public));
 			}
+
 		}
 		
 		override public void LeaveField(Field node)
@@ -82,6 +82,14 @@ namespace Boo.Lang.Compiler.Steps
 		}
 		
 		override public void LeaveProperty(Property node)
+		{
+			if (!node.IsVisibilitySet)
+			{
+				node.Modifiers |= TypeMemberModifiers.Public;
+			}
+		}
+		
+		override public void LeaveEvent(Event node)
 		{
 			if (!node.IsVisibilitySet)
 			{
@@ -104,6 +112,11 @@ namespace Boo.Lang.Compiler.Steps
 				node.Modifiers |= TypeMemberModifiers.Public;
 			}
 		}		
+		
+		override public void LeaveUnpackStatement(UnpackStatement node)
+		{
+			LeaveStatement(node);
+		}
 		
 		override public void LeaveExpressionStatement(ExpressionStatement node)
 		{
@@ -130,53 +143,69 @@ namespace Boo.Lang.Compiler.Steps
 			LeaveStatement(node);
 		}
 		
-		public void LeaveStatement(Statement node)
+		override public void LeaveGotoStatement(GotoStatement node)
+		{
+			LeaveStatement(node);
+		}
+		
+		override public void LeaveYieldStatement(YieldStatement node)
+		{
+			LeaveStatement(node);
+		}
+		
+		override public void LeaveLabelStatement(LabelStatement node)
 		{
 			if (null != node.Modifier)
 			{
-				switch (node.Modifier.Type)
-				{
-					case StatementModifierType.If:
-					{	
-						IfStatement stmt = new IfStatement(node.Modifier.LexicalInfo);
-						stmt.Condition = node.Modifier.Condition;
-						stmt.TrueBlock = new Block();						
-						stmt.TrueBlock.Statements.Add(node);						
-						node.Modifier = null;
-						
-						ReplaceCurrentNode(stmt);
-						
-						break;
-					}
-					
-					case StatementModifierType.Unless:
-					{
-						UnlessStatement stmt = new UnlessStatement(node.Modifier.LexicalInfo);
-						stmt.Condition = node.Modifier.Condition;
-						stmt.Block.Statements.Add(node);
-						node.Modifier = null;
-						
-						ReplaceCurrentNode(stmt);
-						break;
-					}
-					
-					case StatementModifierType.While:
-					{
-						WhileStatement stmt = new WhileStatement(node.Modifier.LexicalInfo);
-						stmt.Condition = node.Modifier.Condition;
-						stmt.Block.Statements.Add(node);
-						node.Modifier = null;
-						
-						ReplaceCurrentNode(stmt);
-						break;
-					}
-						
-					default:
-					{							
-						Errors.Add(CompilerErrorFactory.NotImplemented(node, string.Format("modifier {0} supported", node.Modifier.Type)));
-						break;
-					}
+				Warnings.Add(
+					CompilerWarningFactory.ModifiersInLabelsHaveNoEffect(node.Modifier));
+			}
+		}
+		
+		override public void LeaveMacroStatement(MacroStatement node)
+		{
+			LeaveStatement(node);
+		}
+		
+		public static Statement CreateModifiedStatement(StatementModifier modifier, Statement node)
+		{
+			switch (modifier.Type)
+			{
+				case StatementModifierType.If:
+				{	
+					IfStatement stmt = new IfStatement(modifier.LexicalInfo);
+					stmt.Condition = modifier.Condition;
+					stmt.TrueBlock = new Block();						
+					stmt.TrueBlock.Statements.Add(node);
+					return stmt;
 				}
+				
+				case StatementModifierType.Unless:
+				{
+					UnlessStatement stmt = new UnlessStatement(modifier.LexicalInfo);
+					stmt.Condition = modifier.Condition;
+					stmt.Block.Statements.Add(node);
+					return stmt;
+				}
+				
+				case StatementModifierType.While:
+				{
+					WhileStatement stmt = new WhileStatement(modifier.LexicalInfo);
+					stmt.Condition = modifier.Condition;
+					stmt.Block.Statements.Add(node);
+					return stmt;
+				}
+			}
+			throw CompilerErrorFactory.NotImplemented(node, string.Format("modifier {0} supported", modifier.Type));
+		}
+		
+		public void LeaveStatement(Statement node)
+		{
+			StatementModifier modifier = node.Modifier;
+			if (null != modifier)
+			{
+				node.Modifier = null;
+				ReplaceCurrentNode(CreateModifiedStatement(modifier, node));
 			}
 		}
 		
@@ -192,6 +221,32 @@ namespace Boo.Lang.Compiler.Steps
 					ReplaceCurrentNode(integer);
 				}
 			}
+		}
+		
+		override public void LeaveBinaryExpression(BinaryExpression node)
+		{
+			if (IsNull(node.Left) || IsNull(node.Right))
+			{
+				switch (node.Operator)
+				{
+					case BinaryOperatorType.Inequality:
+					{		
+						node.Operator = BinaryOperatorType.ReferenceInequality;
+						break;
+					}
+					
+					case BinaryOperatorType.Equality:
+					{
+						node.Operator = BinaryOperatorType.ReferenceEquality;
+						break;
+					}
+				}
+			}
+		}
+		
+		bool IsNull(Expression node)
+		{
+			return NodeType.NullLiteralExpression == node.NodeType;
 		}
 	}
 }

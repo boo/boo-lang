@@ -1,111 +1,147 @@
 <?xml version="1.0"?>
 <project name="tests" default="run">
 
-	<!-- find out where nunit.framework.dll is -->
-	<property name="lib.dir"
-		value="${path::combine(nant::get-base-directory(), 'lib')}"
-		dynamic="true" />
-		
-    <property name="lib.family.dir"
-		value="${path::combine(lib.dir,framework::get-family(framework::get-target-framework()))}"
-		dynamic="true" />
-		
-    <property name="lib.framework.dir"
-		value="${path::combine(lib.family.dir, framework::get-version(framework::get-target-framework()))}"
-		dynamic="true" />
-
-	<property name="nant.tasks.nunit2"
-			value="False"
-			unless="${property::exists('nant.tasks.nunit2')}" />
-
-	<property name="nunit.framework.dll"
-			value="${path::combine(lib.framework.dir, 'nunit.framework.dll')}" />
+	<include buildfile="nunit.inc" />	
 
 	<target name="run" depends="compile" if="${nant.tasks.nunit2}">
 
 		<nunit2>       
 			<formatter type="Plain" />
 			<test>
-				<assemblies basedir="build">
-					<includes name="Boo.AntlrParser.Tests.dll" />
-					<includes name="Boo.Lang.Compiler.Tests.dll" />
-					<includes name="Boo.Tests.dll" />
-					<includes name="CompilerResources.Tests.dll" />					
+				<assemblies basedir="build">				
+					<include name="Boo.Tests.dll" />
+					<include name="Boo.Lang.Parser.Tests.dll" />
+					<include name="Boo.Lang.Compiler.Tests.dll" />
+					<include name="Boo.Lang.Interpreter.Tests.dll" />
+					<include name="BooCompiler.Tests.dll" />					
+					<include name="BooCompilerResources.Tests.dll" />					
+					<include name="Regression.Tests.dll" />					
 				</assemblies>
 			</test>
 		</nunit2>
 		
 	</target>
 	
-	<target name="compile" depends="init">
+	<target name="compile" depends="init">	
+	
+		<boo src="generate_regression.boo" />
+		
+		<booc 
+			target="library"
+			output="build/BooModules.dll">
+			
+			<sources basedir="BooModules">
+				<include name="*.boo" />
+			</sources>
+		</booc>
+		
+		<csc
+			target="library"
+			output="build/BooCompiler.Tests.dll">
+			
+			<sources>
+				<include name="BooCompiler.Tests/**/*.cs" />
+				<include name="build/RegressionTestFixture.cs" />
+				<include name="build/CompilerErrorsTestFixture.cs" />
+				<include name="build/CompilerWarningsTestFixture.cs" />
+				<include name="build/IntegrationTestFixture.cs" />
+				<include name="build/StdlibTestFixture.cs" />
+				<include name="build/AttributesTestFixture.cs" />
+				<include name="build/SemanticsTestFixture.cs" />
+				<include name="build/MacrosTestFixture.cs" />
+				<include name="build/DuckyTestFixture.cs" />
+			</sources>
+			
+			<references basedir="build">
+				<include name="${nunit.framework.dll}" />
+				<include name="Boo.dll" />
+				<include name="Boo.Lang.Compiler.dll" />
+				<include name="BooModules.dll" />
+			</references>
+		</csc>
 	
 		<booc
 			target="library"
 			output="build/Boo.Tests.dll">
 
 			<sources basedir="Boo.Tests">
-				<includes name="**/*.boo" />
+				<include name="**/*.boo" />
 			</sources>
 
 			<references>
-				<includes name="${nunit.framework.dll}" />
+				<include name="${nunit.framework.dll}" />
 			</references>
 		</booc>
 		
 		<booc
 			target="library"
-			output="build/CompilerResources.Tests.dll">
+			output="build/Boo.Lang.Compiler.Tests.dll">
 			
-			<sources basedir="CompilerResources.Tests">
-				<includes name="**/*.boo" />
+			<sources basedir="Boo.Lang.Compiler.Tests">
+				<include name="**/*.boo" />
 			</sources>
 			
 			<references>
-				<includes name="${nunit.framework.dll}" />
+				<include name="${nunit.framework.dll}" />
+			</references>
+		</booc>
+		
+		<booc
+			target="library"
+			output="build/BooCompilerResources.Tests.dll">
+			
+			<sources basedir="BooCompilerResources.Tests">
+				<include name="**/*.boo" />
+			</sources>
+			
+			<references>
+				<include name="${nunit.framework.dll}" />
+			</references>
+		</booc>		
+		
+		<booc
+			target="library"
+			output="build/Boo.Lang.Interpreter.Tests.dll">
+			
+			<sources basedir="Boo.Lang.Interpreter.Tests">
+				<include name="**/*.boo" />
+			</sources>
+			
+			<references basedir="build">
+				<include name="Boo.Lang.Interpreter.dll" />
+				<include name="${nunit.framework.dll}" />
 			</references>
 		</booc>
 		
 		<csc
 			target="library"
-			output="build/Boo.Lang.Compiler.Tests.dll">
+			output="build/Boo.Lang.Parser.Tests.dll">
 			
-			<sources basedir="Boo.Lang.Compiler.Tests">
-				<includes name="**/*.cs" />
+			<sources>
+				<include name="Boo.Lang.Parser.Tests/**/*.cs" />
+				<include name="build/ParserRoundtripTestFixture.cs" />
 			</sources>
 			
 			<references basedir="build">
-				<includes name="${nunit.framework.dll}" />
-				<includes name="Boo.dll" />
-				<includes name="Boo.Lang.Compiler.dll" />
-			</references>
-		</csc>
-		
-		<csc
-			target="library"
-			output="build/Boo.AntlrParser.Tests.dll">
-			
-			<sources basedir="Boo.AntlrParser.Tests">
-				<includes name="**/*.cs" />
-			</sources>
-			
-			<references basedir="build">
-				<includes name="${nunit.framework.dll}" />
-				<includes name="Boo.Lang.Compiler.dll" />
-				<includes name="Boo.Lang.Compiler.Tests.dll" />
-				<includes name="Boo.AntlrParser.dll" />
-				<includes name="antlr.runtime.dll" />
+				<include name="${nunit.framework.dll}" />
+				<include name="BooCompiler.Tests.dll" />
+				<include name="Boo.Lang.Compiler.dll" />				
+				<include name="Boo.Lang.Parser.dll" />
 			</references>			
 		</csc>
 	</target>
 	
 	<target name="init">
+		<delete dir="build" if="${directory::exists('build')}" />
 		<mkdir dir="build" />
 		<copy todir="build">
 			<fileset basedir="../build">
-				<includes name="*.dll" />
-				<includes name="pt/*.dll" />
+				<include name="*.dll" />
+				<include name="*.pdb" />
+				<include name="pt/*.dll" />
 			</fileset>
 		</copy>
-		<loadtasks assembly="build/Boo.NAnt.dll" />
+		<copy todir="build" file="${nunit.framework.dll}" />
+		<loadtasks assembly="build/Boo.NAnt.Tasks.dll" />
 	</target>
 </project>

@@ -1,7 +1,8 @@
 """
+[Boo.Lang.ModuleAttribute]
 public final transient class Stringslice0Module(System.Object):
 
-	private static def __Main__(argv as (System.String)) as System.Void:
+	private static def Main(argv as (System.String)) as System.Void:
 		s = 'foo'
 		Boo.Lang.Builtins.print(s.get_Chars(0))
 		Boo.Lang.Builtins.print(s.Substring(1))

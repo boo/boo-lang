@@ -1,9 +1,10 @@
 """
 import System.IO
 
+[Boo.Lang.ModuleAttribute]
 public final transient class Using1Module(System.Object):
 
-	private static def __Main__(argv as (System.String)) as System.Void:
+	private static def Main(argv as (System.String)) as System.Void:
 		try:
 			f1 = System.IO.File.OpenText('using0.boo')
 			try:
@@ -13,13 +14,11 @@ public final transient class Using1Module(System.Object):
 				if (__disposable__ = (f2 as System.IDisposable)):
 					__disposable__.Dispose()
 					__disposable__ = null
-				f2 = null
 			Boo.Lang.Builtins.print(f1.ReadLine())
 		ensure:
 			if (__disposable__ = (f1 as System.IDisposable)):
 				__disposable__.Dispose()
 				__disposable__ = null
-			f1 = null
 
 	private def constructor():
 		super()

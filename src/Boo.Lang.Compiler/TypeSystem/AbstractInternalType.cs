@@ -1,29 +1,29 @@
 #region license
-// boo - an extensible programming language for the CLI
-// Copyright (C) 2004 Rodrigo B. de Oliveira
-//
-// Permission is hereby granted, free of charge, to any person 
-// obtaining a copy of this software and associated documentation 
-// files (the "Software"), to deal in the Software without restriction, 
-// including without limitation the rights to use, copy, modify, merge, 
-// publish, distribute, sublicense, and/or sell copies of the Software, 
-// and to permit persons to whom the Software is furnished to do so, 
-// subject to the following conditions:
+// Copyright (c) 2004, Rodrigo B. de Oliveira (rbo@acm.org)
+// All rights reserved.
 // 
-// The above copyright notice and this permission notice shall be included 
-// in all copies or substantial portions of the Software.
+// Redistribution and use in source and binary forms, with or without modification,
+// are permitted provided that the following conditions are met:
 // 
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, 
-// EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF 
-// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. 
-// IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY 
-// CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, 
-// TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE 
-// OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+//     * Redistributions of source code must retain the above copyright notice,
+//     this list of conditions and the following disclaimer.
+//     * Redistributions in binary form must reproduce the above copyright notice,
+//     this list of conditions and the following disclaimer in the documentation
+//     and/or other materials provided with the distribution.
+//     * Neither the name of Rodrigo B. de Oliveira nor the names of its
+//     contributors may be used to endorse or promote products derived from this
+//     software without specific prior written permission.
 // 
-// Contact Information
-//
-// mailto:rbo@acm.org
+// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+// ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+// WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+// DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE
+// FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+// DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+// SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+// CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+// OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+// THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #endregion
 
 namespace Boo.Lang.Compiler.TypeSystem
@@ -38,19 +38,16 @@ namespace Boo.Lang.Compiler.TypeSystem
 		
 		protected TypeDefinition _typeDefinition;
 		
-		protected IEntity[] _members;
-		
 		protected IType[] _interfaces;
 		
 		protected INamespace _parentNamespace;
 		
-		protected Boo.Lang.List _buffer = new Boo.Lang.List();
+		protected System.Type _generatedType;
 		
-		protected AbstractInternalType(TypeSystemServices tagManager, TypeDefinition typeDefinition)
+		protected AbstractInternalType(TypeSystemServices typeSystemServices, TypeDefinition typeDefinition)
 		{
-			_typeSystemServices = tagManager;
-			_typeDefinition = typeDefinition;
-			_parentNamespace = (INamespace)TypeSystemServices.GetEntity(_typeDefinition.ParentNode);
+			_typeSystemServices = typeSystemServices;
+			_typeDefinition = typeDefinition;			
 		}
 		
 		public string FullName
@@ -77,10 +74,22 @@ namespace Boo.Lang.Compiler.TypeSystem
 			}
 		}
 		
+		public IType NestingType
+		{
+			get
+			{
+				return _typeDefinition.ParentNode.Entity as IType;
+			}
+		}
+		
 		public virtual INamespace ParentNamespace
 		{
 			get
 			{
+				if (null == _parentNamespace)
+				{
+					_parentNamespace = (INamespace)TypeSystemServices.GetEntity(_typeDefinition.ParentNode);
+				}
 				return _parentNamespace;
 			}
 		}
@@ -93,28 +102,8 @@ namespace Boo.Lang.Compiler.TypeSystem
 			{
 				if (tag.Name == name && NameResolutionService.IsFlagSet(flags, tag.EntityType))
 				{
-					targetList.AddUnique(tag);
+					targetList.Add(tag);
 					found = true;
-				}
-			}
-			
-			if (!found)
-			{			
-				foreach (TypeReference baseType in _typeDefinition.BaseTypes)
-				{
-					if (TypeSystemServices.GetType(baseType).Resolve(targetList, name, flags))
-					{
-						found = true;
-					}
-				}
-					
-				if (IsInterface)
-				{
-					// also look in System.Object
-					if (_typeSystemServices.ObjectType.Resolve(targetList, name, flags))
-					{
-						found = true;
-					}
 				}
 			}
 			
@@ -153,11 +142,32 @@ namespace Boo.Lang.Compiler.TypeSystem
 			}
 		}
 		
+		public IType GetElementType()
+		{
+			return null;
+		}
+		
 		public bool IsClass
 		{
 			get
 			{
 				return NodeType.ClassDefinition == _typeDefinition.NodeType;
+			}
+		}
+		
+		public bool IsAbstract
+		{
+			get
+			{
+				return _typeDefinition.IsAbstract;
+			}
+		}
+		
+		virtual public bool IsFinal
+		{
+			get
+			{
+				return _typeDefinition.IsFinal || IsValueType;
 			}
 		}
 		
@@ -177,11 +187,11 @@ namespace Boo.Lang.Compiler.TypeSystem
 			}
 		}
 		
-		public bool IsValueType
+		virtual public bool IsValueType
 		{
 			get
 			{
-				return IsEnum;
+				return false;
 			}
 		}
 		
@@ -211,12 +221,16 @@ namespace Boo.Lang.Compiler.TypeSystem
 						StringLiteralExpression memberName = attribute.Arguments[0] as StringLiteralExpression;
 						if (null != memberName)
 						{
-							_buffer.Clear();
-							Resolve(_buffer, memberName.Value, EntityType.Any);
-							return NameResolutionService.GetEntityFromList(_buffer);
+							Boo.Lang.List buffer = new Boo.Lang.List();
+							Resolve(buffer, memberName.Value, EntityType.Any);
+							return NameResolutionService.GetEntityFromList(buffer);
 						}
 					}
 				}
+			}
+			if (null != BaseType)
+			{
+				return BaseType.GetDefaultMember();
 			}
 			return null;
 		}
@@ -250,41 +264,90 @@ namespace Boo.Lang.Compiler.TypeSystem
 		{
 			if (null == _interfaces)
 			{
-				_buffer.Clear();
+				Boo.Lang.List buffer = new Boo.Lang.List();
 				
 				foreach (TypeReference baseType in _typeDefinition.BaseTypes)
 				{
 					IType tag = TypeSystemServices.GetType(baseType);
 					if (tag.IsInterface)
 					{
-						_buffer.AddUnique(tag);
+						buffer.AddUnique(tag);
 					}
 				}
 				
-				_interfaces = (IType[])_buffer.ToArray(typeof(IType));
+				_interfaces = (IType[])buffer.ToArray(typeof(IType));
 			}
 			return _interfaces;
 		}
 		
 		public virtual IEntity[] GetMembers()
-		{
-			if (null == _members)
+		{			
+			ArrayList buffer = new ArrayList();
+			foreach (TypeMember member in _typeDefinition.Members)
 			{
-				_buffer.Clear();
-				foreach (TypeMember member in _typeDefinition.Members)
-				{
-					IEntity tag = TypeSystemServices.GetEntity(member);
-					if (EntityType.Type == tag.EntityType)
-					{
-						tag = _typeSystemServices.GetTypeReference((IType)tag);
-					}
-					_buffer.Add(tag);
-				}
-
-				_members = (IEntity[])_buffer.ToArray(typeof(IEntity));
-				_buffer.Clear();				
+				buffer.Add(GetMemberEntity(member));
 			}
-			return _members;
+
+			return (IEntity[])buffer.ToArray(typeof(IEntity));
+		}
+		
+		private IEntity GetMemberEntity(TypeMember member)
+		{
+			if (null == member.Entity)
+			{
+				member.Entity = CreateEntity(member);
+			}
+			return member.Entity;
+		}
+		
+		private IEntity CreateEntity(TypeMember member)
+		{
+			switch (member.NodeType)
+			{
+				case NodeType.Field:
+				{
+					return new InternalField(_typeSystemServices,(Field)member);
+				}
+					
+				case NodeType.EnumMember:
+				{
+					return new InternalEnumMember(_typeSystemServices, (EnumMember)member);
+				}
+					
+				case NodeType.Method:
+				{
+					return new InternalMethod(_typeSystemServices, (Method)member);
+				}
+					
+				case NodeType.Constructor:
+				{
+					return new InternalConstructor(_typeSystemServices, (Constructor)member);
+				}
+					
+				case NodeType.Property:
+				{
+					return new InternalProperty(_typeSystemServices, (Property)member);
+				}
+					
+				case NodeType.Event:
+				{
+					return new InternalEvent(_typeSystemServices, (Event)member);
+				}
+			}
+			throw new ArgumentException("Member type not supported: " + member);
+		}
+		
+		public System.Type GeneratedType
+		{
+			get
+			{
+				return _generatedType;
+			}
+			
+			set
+			{
+				_generatedType = value;
+			}
 		}
 		
 		override public string ToString()

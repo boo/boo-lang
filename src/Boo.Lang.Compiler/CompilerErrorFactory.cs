@@ -1,29 +1,29 @@
-#region license
-// boo - an extensible programming language for the CLI
-// Copyright (C) 2004 Rodrigo B. de Oliveira
-//
-// Permission is hereby granted, free of charge, to any person 
-// obtaining a copy of this software and associated documentation 
-// files (the "Software"), to deal in the Software without restriction, 
-// including without limitation the rights to use, copy, modify, merge, 
-// publish, distribute, sublicense, and/or sell copies of the Software, 
-// and to permit persons to whom the Software is furnished to do so, 
-// subject to the following conditions:
+﻿#region license
+// Copyright (c) 2004, Rodrigo B. de Oliveira (rbo@acm.org)
+// All rights reserved.
 // 
-// The above copyright notice and this permission notice shall be included 
-// in all copies or substantial portions of the Software.
+// Redistribution and use in source and binary forms, with or without modification,
+// are permitted provided that the following conditions are met:
 // 
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, 
-// EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF 
-// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. 
-// IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY 
-// CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, 
-// TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE 
-// OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+//     * Redistributions of source code must retain the above copyright notice,
+//     this list of conditions and the following disclaimer.
+//     * Redistributions in binary form must reproduce the above copyright notice,
+//     this list of conditions and the following disclaimer in the documentation
+//     and/or other materials provided with the distribution.
+//     * Neither the name of Rodrigo B. de Oliveira nor the names of its
+//     contributors may be used to endorse or promote products derived from this
+//     software without specific prior written permission.
 // 
-// Contact Information
-//
-// mailto:rbo@acm.org
+// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+// ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+// WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+// DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE
+// FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+// DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+// SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+// CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+// OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+// THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #endregion
 
 namespace Boo.Lang.Compiler
@@ -121,7 +121,7 @@ namespace Boo.Lang.Compiler
 			return new CompilerError("BCE0014", node.LexicalInfo);
 		}
 		
-		public static CompilerError NodeNotEntityged(Node node)
+		public static CompilerError InvalidNode(Node node)
 		{
 			return new CompilerError("BCE0015", node.LexicalInfo, node);
 		}
@@ -206,7 +206,7 @@ namespace Boo.Lang.Compiler
 			return new CompilerError("BCE0033", node.LexicalInfo, attributeType);
 		}
 		
-		public static CompilerError ExpressionStatementMustHaveSideEffect(Node node)
+		public static CompilerError ExpressionMustBeExecutedForItsSideEffects(Node node)
 		{
 			return new CompilerError("BCE0034", node.LexicalInfo);
 		}
@@ -401,6 +401,181 @@ namespace Boo.Lang.Compiler
 			return new CompilerError("BCE0074", node.LexicalInfo);
 		}
 		
+		public static CompilerError NamespaceIsNotAnExpression(Node node, string name)
+		{
+			return new CompilerError("BCE0075", node.LexicalInfo, name);
+		}
+		
+		public static CompilerError RuntimeMethodBodyMustBeEmpty(Node node, string name)
+		{
+			return new CompilerError("BCE0076", node.LexicalInfo, name);
+		}
+		
+		public static CompilerError TypeIsNotCallable(Node node, string name)
+		{
+			return new CompilerError("BCE0077", node.LexicalInfo, name);
+		}
+		
+		public static CompilerError MethodReferenceExpected(Node node)
+		{
+			return new CompilerError("BCE0078", node.LexicalInfo);
+		}
+		
+		public static CompilerError AddressOfOutsideDelegateConstructor(Node node)
+		{
+			return new CompilerError("BCE0079", node.LexicalInfo);
+		}
+		
+		public static CompilerError BuiltinCannotBeUsedAsExpression(Node node, string name)
+		{
+			return new CompilerError("BCE0080", node.LexicalInfo, name);
+		}
+		
+		public static CompilerError ReRaiseOutsideExceptionHandler(Node node)
+		{
+			return new CompilerError("BCE0081", node.LexicalInfo);
+		}
+		
+		public static CompilerError EventTypeIsNotCallable(Node node, string typeName)
+		{
+			return new CompilerError("BCE0082", node.LexicalInfo, typeName);
+		}
+		
+		public static CompilerError StaticConstructorMustBePublic(Node node)
+		{
+			return new CompilerError("BCE0083", node.LexicalInfo);
+		}
+		
+		public static CompilerError StaticConstructorCannotDeclareParameters(Node node)
+		{
+			return new CompilerError("BCE0084", node.LexicalInfo);
+		}
+		
+		public static CompilerError CantCreateInstanceOfAbstractType(Node node, string typeName)
+		{
+			return new CompilerError("BCE0085", node.LexicalInfo, typeName);
+		}
+		
+		public static CompilerError CantCreateInstanceOfInterface(Node node, string typeName)
+		{
+			return new CompilerError("BCE0086", node.LexicalInfo, typeName);
+		}
+		
+		public static CompilerError CantCreateInstanceOfEnum(Node node, string typeName)
+		{
+			return new CompilerError("BCE0087", node.LexicalInfo, typeName);
+		}
+		
+		public static CompilerError ReservedPrefix(Node node, string prefix)
+		{
+			return new CompilerError("BCE0088", node.LexicalInfo, prefix); 
+		}
+		
+		public static CompilerError MemberNameConflict(Node node, string typeName, string memberName)
+		{
+			return new CompilerError("BCE0089", node.LexicalInfo, typeName, memberName);
+		}
+		
+		public static CompilerError DerivedMethodCannotReduceAccess(Node node, string derivedMethod, string superMethod, TypeMemberModifiers derivedAccess, TypeMemberModifiers superAccess)
+		{
+			return new CompilerError("BCE0090", node.LexicalInfo, derivedMethod, superMethod, superAccess.ToString().ToLower(), derivedAccess.ToString().ToLower());
+		}
+		
+		public static CompilerError EventIsNotAnExpression(Node node, string eventName)
+		{
+			return new CompilerError("BCE0091", node.LexicalInfo, eventName);
+		}
+		
+		public static CompilerError InvalidRaiseArgument(Node node, string typeName)
+		{
+			return new CompilerError("BCE0092", node.LexicalInfo, typeName);
+		}
+		
+		public static CompilerError CannotBranchIntoEnsure(Node node)
+		{
+			return new CompilerError("BCE0093", node.LexicalInfo);
+		}
+		
+		public static CompilerError CannotBranchIntoExcept(Node node)
+		{
+			return new CompilerError("BCE0094", node.LexicalInfo);
+		}
+		
+		public static CompilerError NoSuchLabel(Node node, string label)
+		{
+			return new CompilerError("BCE0095", node.LexicalInfo, label);
+		}
+		
+		public static CompilerError LabelAlreadyDefined(Node node, string methodName, string label)
+		{
+			return new CompilerError("BCE0096", node.LexicalInfo, methodName, label);
+		}
+		
+		public static CompilerError CannotBranchIntoTry(Node node)
+		{
+			return new CompilerError("BCE0097", node.LexicalInfo);
+		}
+		
+		public static CompilerError InvalidSwitch(Node node)
+		{
+			return new CompilerError("BCE0098", node.LexicalInfo);
+		}
+		
+		public static CompilerError YieldInsideTryBlock(Node node)
+		{
+			return new CompilerError("BCE0099", node.LexicalInfo);
+		}
+		
+		public static CompilerError YieldInsideConstructor(Node node)
+		{
+			return new CompilerError("BCE0100", node.LexicalInfo);
+		}
+		
+		public static CompilerError InvalidGeneratorReturnType(Node node)
+		{
+			return new CompilerError("BCE0101", node.LexicalInfo);
+		}
+		
+		public static CompilerError GeneratorCantReturnValue(Node node)
+		{
+			return new CompilerError("BCE0102", node.LexicalInfo);
+		}
+		
+		public static CompilerError CannotExtendFinalType(Node node, string typeName)
+		{
+			return new CompilerError("BCE0103", node.LexicalInfo, typeName);
+		}
+		
+		public static CompilerError CantBeMarkedTransient(Node node)
+		{
+			return new CompilerError("BCE0104", node.LexicalInfo);
+		}
+		
+		public static CompilerError CantBeMarkedAbstract(Node node)
+		{
+			return new CompilerError("BCE0105", node.LexicalInfo);
+		}
+		
+		public static CompilerError FailedToLoadTypesFromAssembly(string assemblyName, Exception x)
+		{
+			return new CompilerError("BCE0106", LexicalInfo.Empty, x, assemblyName);
+		}
+		
+		public static CompilerError ValueTypesCannotDeclareParameterlessConstructors(Node node)
+		{
+			return new CompilerError("BCE0107", node.LexicalInfo);
+		}
+		
+		public static CompilerError ValueTypeFieldsCannotHaveInitializers(Node node)
+		{
+			return new CompilerError("BCE0108", node.LexicalInfo);
+		}
+		
+		public static CompilerError InvalidArrayRank(Node node, string arrayName, int real, int given)
+		{
+			return new CompilerError("BCE0109", node.LexicalInfo, arrayName, real, given);
+		}
+		
 		public static string ToStringList(System.Collections.IEnumerable names)
 		{
 			StringBuilder builder = new StringBuilder();
@@ -432,7 +607,10 @@ namespace Boo.Lang.Compiler
 			StringBuilder sb = new StringBuilder("(");
 			for (int i=0; i<parameters.Length; ++i)
 			{
-				if (i>0) { sb.Append(", "); }
+				if (i>0)
+				{
+					sb.Append(", ");
+				}
 				if (null != parameters)
 				{
 					sb.Append(parameters[i].GetType());

@@ -1,29 +1,29 @@
 #region license
-// boo - an extensible programming language for the CLI
-// Copyright (C) 2004 Rodrigo B. de Oliveira
-//
-// Permission is hereby granted, free of charge, to any person 
-// obtaining a copy of this software and associated documentation 
-// files (the "Software"), to deal in the Software without restriction, 
-// including without limitation the rights to use, copy, modify, merge, 
-// publish, distribute, sublicense, and/or sell copies of the Software, 
-// and to permit persons to whom the Software is furnished to do so, 
-// subject to the following conditions:
+// Copyright (c) 2004, Rodrigo B. de Oliveira (rbo@acm.org)
+// All rights reserved.
 // 
-// The above copyright notice and this permission notice shall be included 
-// in all copies or substantial portions of the Software.
+// Redistribution and use in source and binary forms, with or without modification,
+// are permitted provided that the following conditions are met:
 // 
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, 
-// EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF 
-// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. 
-// IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY 
-// CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, 
-// TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE 
-// OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+//     * Redistributions of source code must retain the above copyright notice,
+//     this list of conditions and the following disclaimer.
+//     * Redistributions in binary form must reproduce the above copyright notice,
+//     this list of conditions and the following disclaimer in the documentation
+//     and/or other materials provided with the distribution.
+//     * Neither the name of Rodrigo B. de Oliveira nor the names of its
+//     contributors may be used to endorse or promote products derived from this
+//     software without specific prior written permission.
 // 
-// Contact Information
-//
-// mailto:rbo@acm.org
+// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+// ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+// WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+// DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE
+// FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+// DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+// SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+// CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+// OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+// THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #endregion
 
 namespace Boo.Lang.Compiler.TypeSystem
@@ -34,37 +34,47 @@ namespace Boo.Lang.Compiler.TypeSystem
 
 	public class InternalMethod : IInternalEntity, IMethod, INamespace
 	{
-		TypeSystemServices _typeSystemServices;
+		public static readonly ReferenceExpression[] EmptyReferenceExpressionArray = new ReferenceExpression[0];
 		
-		Boo.Lang.Compiler.Ast.Method _method;
+		public static readonly InternalLabel[] EmptyInternalLabelArray = new InternalLabel[0];
 		
-		IMethod _override;
+		protected TypeSystemServices _typeSystemServices;
 		
-		IType _declaringType;
+		protected Boo.Lang.Compiler.Ast.Method _method;
 		
-		IParameter[] _parameters;
+		protected IMethod _override;
 		
-		public ExpressionCollection ReturnExpressions;
+		protected ICallableType _type;
 		
-		public ExpressionCollection SuperExpressions;
+		protected IType _declaringType;
 		
-		internal InternalMethod(TypeSystemServices manager, Boo.Lang.Compiler.Ast.Method method)
+		protected IParameter[] _parameters;
+		
+		protected ExpressionCollection _returnExpressions;
+		
+		protected ExpressionCollection _yieldExpressions;
+		
+		protected ExpressionCollection _superExpressions;
+		
+		protected Boo.Lang.List _labelReferences;
+		
+		protected Boo.Lang.List _labels;
+		
+		internal InternalMethod(TypeSystemServices typeSystemServices, Boo.Lang.Compiler.Ast.Method method)
 		{			
-			_typeSystemServices = manager;
+			_typeSystemServices = typeSystemServices;
 			_method = method;
 			if (method.NodeType != NodeType.Constructor)
 			{
-				SuperExpressions = new ExpressionCollection();
-				ReturnExpressions = new ExpressionCollection();
 				if (null == _method.ReturnType)
 				{
 					if (_method.DeclaringType.NodeType == NodeType.ClassDefinition)
 					{
-						_method.ReturnType = _typeSystemServices.CreateTypeReference(Unknown.Default);
+						_method.ReturnType = _typeSystemServices.CodeBuilder.CreateTypeReference(Unknown.Default);
 					}
 					else
 					{
-						_method.ReturnType = _typeSystemServices.CreateTypeReference(_typeSystemServices.VoidType);
+						_method.ReturnType = _typeSystemServices.CodeBuilder.CreateTypeReference(_typeSystemServices.VoidType);
 					}
 				}
 			}
@@ -95,6 +105,22 @@ namespace Boo.Lang.Compiler.TypeSystem
 			get
 			{
 				return _method.IsPublic;
+			}
+		}
+		
+		public bool IsProtected
+		{
+			get
+			{
+				return _method.IsProtected;
+			}
+		}
+		
+		public bool IsAbstract
+		{
+			get
+			{
+				return _method.IsAbstract;
 			}
 		}
 		
@@ -142,7 +168,11 @@ namespace Boo.Lang.Compiler.TypeSystem
 		{
 			get
 			{
-				return null;
+				if (null == _type)
+				{
+					_type = _typeSystemServices.GetCallableType(this);
+				}
+				return _type;
 			}
 		}
 		
@@ -150,7 +180,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 		{
 			get
 			{
-				return ReturnType;
+				return CallableType;
 			}
 		}
 		
@@ -192,7 +222,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 			return _parameters;
 		}
 		
-		public IType ReturnType
+		public virtual IType ReturnType
 		{
 			get
 			{					
@@ -206,6 +236,127 @@ namespace Boo.Lang.Compiler.TypeSystem
 			{
 				return DeclaringType;
 			}
+		}
+		
+		public bool IsGenerator
+		{
+			get
+			{
+				return null != _yieldExpressions;
+			}
+		}
+		
+		public ExpressionCollection ReturnExpressions
+		{
+			get
+			{
+				return _returnExpressions;
+			}
+		}
+		
+		public ExpressionCollection YieldExpressions
+		{
+			get
+			{
+				return _yieldExpressions;
+			}
+		}
+		
+		public ExpressionCollection SuperExpressions
+		{
+			get
+			{
+				return _superExpressions;
+			}
+		}
+		
+		public ReferenceExpression[] LabelReferences
+		{
+			get
+			{
+				if (null == _labelReferences)
+				{
+					return EmptyReferenceExpressionArray;
+				}
+				return (ReferenceExpression[])_labelReferences.ToArray(typeof(ReferenceExpression));
+			}
+		}
+		
+		public InternalLabel[] Labels
+		{
+			get
+			{
+				if (null == _labels)
+				{
+					return EmptyInternalLabelArray;
+				}
+				return (InternalLabel[])_labels.ToArray(typeof(InternalLabel));
+			}
+		}
+		
+		public void AddYieldExpression(Expression expression)
+		{
+			if (null == _yieldExpressions)
+			{
+				_yieldExpressions = new ExpressionCollection();
+			}
+			_yieldExpressions.Add(expression);
+		}
+		
+		public void AddReturnExpression(Expression expression)
+		{
+			if (null == _returnExpressions)
+			{
+				_returnExpressions = new ExpressionCollection();
+			}
+			_returnExpressions.Add(expression);
+		}
+		
+		public void AddSuperExpression(SuperLiteralExpression expression)
+		{
+			if (null == _superExpressions)
+			{
+				_superExpressions = new ExpressionCollection();
+			}
+			_superExpressions.Add(expression);
+		}
+		
+		public void AddLabelReference(ReferenceExpression node)
+		{
+			if (null == _labelReferences)
+			{
+				_labelReferences = new Boo.Lang.List();
+			}
+			_labelReferences.Add(node);
+		}
+		
+		public void AddLabel(InternalLabel node)
+		{
+			if (null == node)
+			{
+				throw new ArgumentNullException("node");
+			}
+			
+			if (null == _labels)
+			{
+				_labels = new Boo.Lang.List();
+			}
+			_labels.Add(node);
+		}
+		
+		public InternalLabel ResolveLabel(string name)
+		{
+			if (null != _labels)
+			{
+				foreach (InternalLabel label in _labels)
+				{
+					if (name == label.Name)
+					{
+						return label;
+					}
+				}
+			}
+			return null;
 		}
 		
 		public Boo.Lang.Compiler.Ast.Local ResolveLocal(string name)
@@ -238,7 +389,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 		}
 		
 		public bool Resolve(Boo.Lang.List targetList, string name, EntityType flags)
-		{
+		{			
 			if (NameResolutionService.IsFlagSet(flags, EntityType.Local))
 			{
 				Boo.Lang.Compiler.Ast.Local local = ResolveLocal(name);
@@ -258,43 +409,18 @@ namespace Boo.Lang.Compiler.TypeSystem
 					return true;
 				}
 			}
+
 			return false;
+		}
+		
+		IEntity[] INamespace.GetMembers()
+		{
+			return NullNamespace.EmptyEntityArray;
 		}
 		
 		override public string ToString()
 		{
-			return TypeSystemServices.GetSignature(this);
+			return _typeSystemServices.GetSignature(this);
 		}
-	}
-	
-	public class InternalConstructor : InternalMethod, IConstructor
-	{
-		bool _hasSuperCall = false;
-		
-		public InternalConstructor(TypeSystemServices tagManager,
-		                                  Constructor constructor) : base(tagManager, constructor)
-		{
-		}
-		  
-		public bool HasSuperCall
-		{
-			get
-			{
-				return _hasSuperCall;
-			}
-			
-			set
-			{
-				_hasSuperCall = value;
-			}
-		}
-	      
-	    override public EntityType EntityType
-	    {
-	    	get
-	    	{
-	    		return EntityType.Constructor;
-	    	}
-	    }
 	}
 }

@@ -1,29 +1,29 @@
-#region license
-// boo - an extensible programming language for the CLI
-// Copyright (C) 2004 Rodrigo B. de Oliveira
-//
-// Permission is hereby granted, free of charge, to any person 
-// obtaining a copy of this software and associated documentation 
-// files (the "Software"), to deal in the Software without restriction, 
-// including without limitation the rights to use, copy, modify, merge, 
-// publish, distribute, sublicense, and/or sell copies of the Software, 
-// and to permit persons to whom the Software is furnished to do so, 
-// subject to the following conditions:
+﻿#region license
+// Copyright (c) 2004, Rodrigo B. de Oliveira (rbo@acm.org)
+// All rights reserved.
 // 
-// The above copyright notice and this permission notice shall be included 
-// in all copies or substantial portions of the Software.
+// Redistribution and use in source and binary forms, with or without modification,
+// are permitted provided that the following conditions are met:
 // 
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, 
-// EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF 
-// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. 
-// IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY 
-// CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, 
-// TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE 
-// OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+//     * Redistributions of source code must retain the above copyright notice,
+//     this list of conditions and the following disclaimer.
+//     * Redistributions in binary form must reproduce the above copyright notice,
+//     this list of conditions and the following disclaimer in the documentation
+//     and/or other materials provided with the distribution.
+//     * Neither the name of Rodrigo B. de Oliveira nor the names of its
+//     contributors may be used to endorse or promote products derived from this
+//     software without specific prior written permission.
 // 
-// Contact Information
-//
-// mailto:rbo@acm.org
+// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+// ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+// WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+// DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE
+// FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+// DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+// SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+// CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+// OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+// THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #endregion
 
 namespace Boo.Lang.Compiler.TypeSystem
@@ -33,12 +33,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 
 	public class ExternalType : IType
 	{
-		const BindingFlags DefaultBindingFlags = BindingFlags.Public |
-												BindingFlags.NonPublic |
-												BindingFlags.Static |
-												BindingFlags.Instance;
-		
-		TypeSystemServices _typeSystemServices;
+		protected TypeSystemServices _typeSystemServices;
 		
 		Type _type;
 		
@@ -47,8 +42,6 @@ namespace Boo.Lang.Compiler.TypeSystem
 		IType[] _interfaces;
 		
 		IEntity[] _members;
-		
-		IType _elementType;
 		
 		int _typeDepth = -1;
 		
@@ -60,10 +53,6 @@ namespace Boo.Lang.Compiler.TypeSystem
 			}
 			_typeSystemServices = manager;
 			_type = type;
-			if (_type.IsArray)
-			{
-				_elementType = _typeSystemServices.Map(type.GetElementType());
-			}
 		}
 		
 		public string FullName
@@ -98,6 +87,14 @@ namespace Boo.Lang.Compiler.TypeSystem
 			}
 		}
 		
+		public bool IsFinal
+		{
+			get
+			{
+				return _type.IsSealed;
+			}
+		}
+		
 		public bool IsByRef
 		{
 			get
@@ -106,11 +103,24 @@ namespace Boo.Lang.Compiler.TypeSystem
 			}
 		}
 		
+		public IType GetElementType()
+		{
+			return _typeSystemServices.Map(_type.GetElementType());
+		}
+		
 		public bool IsClass
 		{
 			get
 			{
 				return _type.IsClass;
+			}
+		}
+		
+		public bool IsAbstract
+		{
+			get
+			{
+				return _type.IsAbstract;
 			}
 		}
 		
@@ -167,10 +177,10 @@ namespace Boo.Lang.Compiler.TypeSystem
 			}
 		}
 		
-		public bool IsSubclassOf(IType other)
+		public virtual bool IsSubclassOf(IType other)
 		{
 			ExternalType external = other as ExternalType;
-			if (null == external)
+			if (null == external /*|| _typeSystemServices.VoidType == other*/)
 			{
 				return false;
 			}
@@ -180,7 +190,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 				;
 		}
 		
-		public bool IsAssignableFrom(IType other)
+		public virtual bool IsAssignableFrom(IType other)
 		{
 			ExternalType external = other as ExternalType;
 			if (null == external)
@@ -190,6 +200,10 @@ namespace Boo.Lang.Compiler.TypeSystem
 					return !IsValueType;
 				}
 				return other.IsSubclassOf(this);
+			}
+			if (other == _typeSystemServices.VoidType)
+			{
+				return false;
 			}
 			return _type.IsAssignableFrom(external._type);
 		}
@@ -227,12 +241,18 @@ namespace Boo.Lang.Compiler.TypeSystem
 		{
 			if (null == _members)
 			{
-				BindingFlags flags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance;
+				BindingFlags flags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static | BindingFlags.FlattenHierarchy;
 				MemberInfo[] members = _type.GetMembers(flags);
-				_members = new IMember[members.Length];
-				for (int i=0; i<members.Length; ++i)
+				Type[] nested = _type.GetNestedTypes();
+				_members = new IEntity[members.Length+nested.Length];
+				int i = 0;
+				for (i=0; i<members.Length; ++i)
 				{
 					_members[i] = _typeSystemServices.Map(members[i]);
+				}
+				for (int j=0; j<nested.Length; ++j)
+				{
+					_members[i++] = _typeSystemServices.Map(nested[j]);
 				}
 			}
 			return _members;
@@ -258,17 +278,25 @@ namespace Boo.Lang.Compiler.TypeSystem
 		public virtual bool Resolve(Boo.Lang.List targetList, string name, EntityType flags)
 		{					
 			bool found = false;
-			foreach (System.Reflection.MemberInfo member in _type.GetMember(name, DefaultBindingFlags))
+			foreach (IEntity member in GetMembers())
 			{
-				targetList.AddUnique(_typeSystemServices.Map(member));
-				found = true;
+				if (member.Name == name && NameResolutionService.IsFlagSet(flags, member.EntityType))
+				{
+					targetList.AddUnique(member);
+					found = true;
+				}
 			}
 			
 			if (IsInterface)
-			{
+			{				
 				if (_typeSystemServices.ObjectType.Resolve(targetList, name, flags))
 				{
 					found = true;
+				}
+				
+				foreach (IType baseInterface in GetInterfaces())
+				{
+					found |= baseInterface.Resolve(targetList, name, flags);
 				}
 			}
 			return found;

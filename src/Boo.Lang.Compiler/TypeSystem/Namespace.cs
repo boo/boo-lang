@@ -1,29 +1,29 @@
-#region license
-// boo - an extensible programming language for the CLI
-// Copyright (C) 2004 Rodrigo B. de Oliveira
-//
-// Permission is hereby granted, free of charge, to any person 
-// obtaining a copy of this software and associated documentation 
-// files (the "Software"), to deal in the Software without restriction, 
-// including without limitation the rights to use, copy, modify, merge, 
-// publish, distribute, sublicense, and/or sell copies of the Software, 
-// and to permit persons to whom the Software is furnished to do so, 
-// subject to the following conditions:
+﻿#region license
+// Copyright (c) 2004, Rodrigo B. de Oliveira (rbo@acm.org)
+// All rights reserved.
 // 
-// The above copyright notice and this permission notice shall be included 
-// in all copies or substantial portions of the Software.
+// Redistribution and use in source and binary forms, with or without modification,
+// are permitted provided that the following conditions are met:
 // 
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, 
-// EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF 
-// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. 
-// IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY 
-// CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, 
-// TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE 
-// OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+//     * Redistributions of source code must retain the above copyright notice,
+//     this list of conditions and the following disclaimer.
+//     * Redistributions in binary form must reproduce the above copyright notice,
+//     this list of conditions and the following disclaimer in the documentation
+//     and/or other materials provided with the distribution.
+//     * Neither the name of Rodrigo B. de Oliveira nor the names of its
+//     contributors may be used to endorse or promote products derived from this
+//     software without specific prior written permission.
 // 
-// Contact Information
-//
-// mailto:rbo@acm.org
+// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+// ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+// WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+// DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE
+// FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+// DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+// SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+// CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+// OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+// THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #endregion
 
 namespace Boo.Lang.Compiler.TypeSystem
@@ -65,6 +65,11 @@ namespace Boo.Lang.Compiler.TypeSystem
 			}
 			return false;
 		}
+		
+		public virtual IEntity[] GetMembers()
+		{
+			return (IEntity[])Builtins.array(typeof(IEntity), _children.Values);
+		}
 	}
 	
 	public class GlobalNamespace : SimpleNamespace
@@ -74,6 +79,10 @@ namespace Boo.Lang.Compiler.TypeSystem
 		public GlobalNamespace(IDictionary children) : base(null, children)
 		{
 			_empty = (INamespace)children[""];
+			if (null == _empty)
+			{
+				_empty = NullNamespace.Default;
+			}
 		}
 		
 		override public bool Resolve(Boo.Lang.List targetList, string name, EntityType flags)
@@ -133,6 +142,11 @@ namespace Boo.Lang.Compiler.TypeSystem
 		{
 			return _subject.Resolve(targetList, name, _assembly, flags);
 		}
+		
+		public IEntity[] GetMembers()
+		{
+			return _subject.GetMembers();
+		}
 	}
 	
 	public class AliasedNamespace : IEntity, INamespace
@@ -187,6 +201,11 @@ namespace Boo.Lang.Compiler.TypeSystem
 			}
 			return false;
 		}
+		
+		public IEntity[] GetMembers()
+		{
+			return ((INamespace)_subject).GetMembers();
+		}
 	}
 	
 	public class NamespaceDelegator : INamespace
@@ -197,6 +216,10 @@ namespace Boo.Lang.Compiler.TypeSystem
 		
 		public NamespaceDelegator(INamespace parent, params INamespace[] namespaces)
 		{
+			if (null == namespaces)
+			{
+				throw new ArgumentNullException("namespaces");
+			}
 			_parent = parent;
 			_namespaces = namespaces;
 		}
@@ -220,6 +243,12 @@ namespace Boo.Lang.Compiler.TypeSystem
 				}
 			}
 			return found;
+		}
+		
+		public IEntity[] GetMembers()
+		{
+			// TODO: implement this
+			return NullNamespace.EmptyEntityArray;
 		}
 	}
 	
@@ -265,6 +294,11 @@ namespace Boo.Lang.Compiler.TypeSystem
 				}
 			}
 			return false;
+		}
+		
+		public IEntity[] GetMembers()
+		{
+			return NullNamespace.EmptyEntityArray;
 		}
 	}
 

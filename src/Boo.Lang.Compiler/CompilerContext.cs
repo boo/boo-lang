@@ -1,29 +1,29 @@
-#region license
-// boo - an extensible programming language for the CLI
-// Copyright (C) 2004 Rodrigo B. de Oliveira
-//
-// Permission is hereby granted, free of charge, to any person 
-// obtaining a copy of this software and associated documentation 
-// files (the "Software"), to deal in the Software without restriction, 
-// including without limitation the rights to use, copy, modify, merge, 
-// publish, distribute, sublicense, and/or sell copies of the Software, 
-// and to permit persons to whom the Software is furnished to do so, 
-// subject to the following conditions:
+﻿#region license
+// Copyright (c) 2004, Rodrigo B. de Oliveira (rbo@acm.org)
+// All rights reserved.
 // 
-// The above copyright notice and this permission notice shall be included 
-// in all copies or substantial portions of the Software.
+// Redistribution and use in source and binary forms, with or without modification,
+// are permitted provided that the following conditions are met:
 // 
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, 
-// EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF 
-// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. 
-// IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY 
-// CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, 
-// TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE 
-// OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+//     * Redistributions of source code must retain the above copyright notice,
+//     this list of conditions and the following disclaimer.
+//     * Redistributions in binary form must reproduce the above copyright notice,
+//     this list of conditions and the following disclaimer in the documentation
+//     and/or other materials provided with the distribution.
+//     * Neither the name of Rodrigo B. de Oliveira nor the names of its
+//     contributors may be used to endorse or promote products derived from this
+//     software without specific prior written permission.
 // 
-// Contact Information
-//
-// mailto:rbo@acm.org
+// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+// ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+// WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+// DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE
+// FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+// DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+// SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+// CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+// OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+// THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #endregion
 
 using System;
@@ -37,7 +37,7 @@ namespace Boo.Lang.Compiler
 	/// <summary>
 	/// boo compilation context.
 	/// </summary>
-	public class CompilerContext : System.MarshalByRefObject
+	public class CompilerContext
 	{				
 		protected CompilerParameters _parameters;
 
@@ -47,9 +47,11 @@ namespace Boo.Lang.Compiler
 
 		protected CompilerErrorCollection _errors;
 		
-		protected TypeSystem.TypeSystemServices _typeSystemServices;		
+		protected CompilerWarningCollection _warnings;
 		
-		protected TypeSystem.NameResolutionService _nameResolutionService;
+		protected TypeSystem.TypeSystemServices _typeSystemServices;
+		
+		protected readonly TypeSystem.NameResolutionService _nameResolutionService;
 		
 		protected TraceSwitch _traceSwitch;
 
@@ -59,7 +61,13 @@ namespace Boo.Lang.Compiler
 		
 		protected Assembly _generatedAssembly;
 		
+		protected string _generatedAssemblyFileName;
+		
 		protected Hash _properties;
+		
+		public CompilerContext() : this(new CompileUnit())
+		{
+		}
 
 		public CompilerContext(CompileUnit unit) : this(new CompilerParameters(), unit)
 		{				
@@ -78,10 +86,10 @@ namespace Boo.Lang.Compiler
 			}
 
 			_unit = unit;
-			_errors = new CompilerErrorCollection();
+			_errors = new CompilerErrorCollection();			
+			_warnings = new CompilerWarningCollection();
 			_assemblyReferences = options.References;
 			_parameters = options;
-			_typeSystemServices = new TypeSystem.TypeSystemServices();
 			_nameResolutionService = new TypeSystem.NameResolutionService(this); 
 			_traceSwitch = _parameters.TraceSwitch;
 			_properties = new Hash();
@@ -92,6 +100,23 @@ namespace Boo.Lang.Compiler
 			get
 			{
 				return _properties;
+			}
+		}
+		
+		public string GeneratedAssemblyFileName
+		{
+			get
+			{
+				return _generatedAssemblyFileName;
+			}
+			
+			set
+			{
+				if (null == value || 0 == value.Length)
+				{
+					throw new ArgumentException("GeneratedAssemblyFileName");
+				}
+				_generatedAssemblyFileName = value;
 			}
 		}
 		
@@ -131,6 +156,14 @@ namespace Boo.Lang.Compiler
 				return _errors;
 			}
 		}
+		
+		public CompilerWarningCollection Warnings
+		{
+			get
+			{
+				return _warnings;
+			}
+		}
 
 		public CompileUnit CompileUnit
 		{
@@ -146,7 +179,24 @@ namespace Boo.Lang.Compiler
 			{
 				return _typeSystemServices;
 			}
+			
+			set
+			{
+				if (null == value)
+				{
+					throw new ArgumentNullException("TypeSystemServices");
+				}
+				_typeSystemServices = value;
+			}
 		}		
+		
+		public TypeSystem.BooCodeBuilder CodeBuilder
+		{
+			get
+			{
+				return _typeSystemServices.CodeBuilder;
+			}
+		}
 		
 		public TypeSystem.NameResolutionService NameResolutionService
 		{
@@ -268,5 +318,13 @@ namespace Boo.Lang.Compiler
 				Trace.WriteLine(message);
 			}
 		}	
+		
+		public void TraceError(string message, params object[] args)
+		{
+			if (_traceSwitch.TraceError)
+			{
+				Trace.WriteLine(string.Format(message, args));
+			}
+		}
 	}
 }

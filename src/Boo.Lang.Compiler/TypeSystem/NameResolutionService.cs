@@ -1,29 +1,29 @@
 ﻿#region license
-// boo - an extensible programming language for the CLI
-// Copyright (C) 2004 Rodrigo B. de Oliveira
-//
-// Permission is hereby granted, free of charge, to any person 
-// obtaining a copy of this software and associated documentation 
-// files (the "Software"), to deal in the Software without restriction, 
-// including without limitation the rights to use, copy, modify, merge, 
-// publish, distribute, sublicense, and/or sell copies of the Software, 
-// and to permit persons to whom the Software is furnished to do so, 
-// subject to the following conditions:
+// Copyright (c) 2004, Rodrigo B. de Oliveira (rbo@acm.org)
+// All rights reserved.
 // 
-// The above copyright notice and this permission notice shall be included 
-// in all copies or substantial portions of the Software.
+// Redistribution and use in source and binary forms, with or without modification,
+// are permitted provided that the following conditions are met:
 // 
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, 
-// EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF 
-// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. 
-// IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY 
-// CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, 
-// TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE 
-// OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+//     * Redistributions of source code must retain the above copyright notice,
+//     this list of conditions and the following disclaimer.
+//     * Redistributions in binary form must reproduce the above copyright notice,
+//     this list of conditions and the following disclaimer in the documentation
+//     and/or other materials provided with the distribution.
+//     * Neither the name of Rodrigo B. de Oliveira nor the names of its
+//     contributors may be used to endorse or promote products derived from this
+//     software without specific prior written permission.
 // 
-// Contact Information
-//
-// mailto:rbo@acm.org
+// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+// ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+// WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+// DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE
+// FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+// DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+// SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+// CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+// OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+// THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #endregion
 
 namespace Boo.Lang.Compiler.TypeSystem
@@ -40,7 +40,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 		
 		protected INamespace _current;
 		
-		protected INamespace _global;
+		protected INamespace _global = NullNamespace.Default;
 		
 		protected Boo.Lang.List _buffer = new Boo.Lang.List();
 		
@@ -64,6 +64,10 @@ namespace Boo.Lang.Compiler.TypeSystem
 			
 			set
 			{
+				if (null == value)
+				{
+					throw new ArgumentNullException("GlobalNamespace");
+				}
 				_global = value;
 			}
 		}		
@@ -87,10 +91,6 @@ namespace Boo.Lang.Compiler.TypeSystem
 		
 		public void Reset()
 		{
-			if (null == _global)
-			{
-				throw new InvalidOperationException(Boo.ResourceManager.GetString("GlobalNamespaceIsNotSet"));
-			}
 			EnterNamespace(_global);
 		}
 		
@@ -225,7 +225,8 @@ namespace Boo.Lang.Compiler.TypeSystem
 			}
 			else
 			{
-				node.Entity = _context.TypeSystemServices.GetArrayType(elementType);
+				int rank = null == node.Rank ? 1 : (int)node.Rank.Value;
+				node.Entity = _context.TypeSystemServices.GetArrayType(elementType, rank);
 			}
 		}
 		
@@ -243,20 +244,59 @@ namespace Boo.Lang.Compiler.TypeSystem
 			}
 			else
 			{
-				info = Resolve(node.Name, EntityType.TypeReference);
+				info = Resolve(node.Name, EntityType.Type);
 			}
 			
-			if (null == info || EntityType.TypeReference != info.EntityType)
+			if (null == info || EntityType.Type != info.EntityType)
 			{
 				_context.Errors.Add(CompilerErrorFactory.NameNotType(node, node.Name));
 				info = TypeSystemServices.ErrorEntity;
 			}
 			else
 			{
-				node.Name = info.Name;
+				node.Name = info.FullName;
 			}
 			
 			node.Entity = info;
+		}
+		
+		public IField ResolveField(IType type, string name)
+		{
+			return (IField)ResolveMember(type, name, EntityType.Field);
+		}
+		
+		public IMethod ResolveMethod(IType type, string name)
+		{
+			return (IMethod)ResolveMember(type, name, EntityType.Method);
+		}
+		
+		public IProperty ResolveProperty(IType type, string name)
+		{
+			return (IProperty)ResolveMember(type, name, EntityType.Property);
+		}
+		
+		public IEntity ResolveMember(IType type, string name, EntityType elementType)
+		{
+			foreach (IMember member in type.GetMembers())
+			{				
+				if (elementType == member.EntityType && name == member.Name)
+				{
+					return member;
+				}
+			}
+			return null;
+		}
+		
+		public IEntity Resolve(INamespace ns, string name, EntityType elementType)
+		{
+			_buffer.Clear();
+			ns.Resolve(_buffer, name, elementType);
+			return GetEntityFromList(_buffer);
+		}
+		
+		public IEntity Resolve(INamespace ns, string name)
+		{
+			return Resolve(ns, name, EntityType.Any);
 		}
 		
 		IEntity GetEntityFromBuffer()
@@ -264,14 +304,14 @@ namespace Boo.Lang.Compiler.TypeSystem
 			return GetEntityFromList(_buffer);
 		}
 		
-		public static IEntity GetEntityFromList(Boo.Lang.List list)
+		public static IEntity GetEntityFromList(System.Collections.IList list)
 		{
 			IEntity element = null;
 			if (list.Count > 0)
 			{
 				if (list.Count > 1)
 				{
-					element = new Ambiguous((IEntity[])list.ToArray(typeof(IEntity)));
+					element = new Ambiguous(list);
 				}
 				else
 				{

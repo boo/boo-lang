@@ -1,0 +1,63 @@
+<?xml version="1.0"?>
+<project name="Boo Explorer" default="run">
+
+	<property name="extras.dir" value="${path::get-full-path('..')}" />
+	<include buildfile="${extras.dir}/common-properties.build" />
+	
+	<target name="run" depends="build">
+		<exec program="build/${boox}.exe" useruntimeengine="true">
+		</exec>
+	</target>
+
+	<target name="booxg" depends="BooExplorer.Common">
+		<booc target="exe" output="build/booxg.exe">
+			<sources basedir="booxg">
+				<include name="*.boo" />
+			</sources>
+			<references>
+				<include name="build/BooExplorer.Common.dll" />
+			</references>
+		</booc>
+	</target>
+	
+	<target name="booxw" depends="BooExplorer.Common">
+		<nant buildfile="booxw/default.build" />
+	</target>
+	
+	<target name="BooExplorer.Common" depends="init">
+		<booc target="library" output="build/BooExplorer.Common.dll">
+			<sources basedir="BooExplorer.Common">
+				<include name="*.boo" />
+			</sources>
+		</booc>
+	</target>
+	
+	<target name="rebuild" depends="clean, build">
+	</target>
+	
+	<target name="build" depends="select-platform">
+		<call target="${boox}" />
+	</target>
+
+	<target name="select-platform">
+		<property name="boox" value="booxg" unless="${nant.platform.win32}" />
+		<property name="boox" value="booxw" if="${nant.platform.win32}" />
+	</target>
+
+	<target name="init">
+		<mkdir dir="build" unless="${directory::exists('build')}" />
+		<copy todir="build">
+			<fileset basedir="${boo.dir}">
+				<include name="Boo.dll" />
+				<include name="Boo.Lang.Compiler.dll" />
+				<include name="Boo.Lang.Parser.dll" />
+				<include name="Boo.Lang.Interpreter.dll" />
+			</fileset>
+		</copy>
+		<loadtasks assembly="${boo.dir}/Boo.NAnt.Tasks.dll" />
+	</target>
+	
+	<target name="clean">
+		<delete dir="build" if="${directory::exists('build')}" />
+	</target>
+</project>

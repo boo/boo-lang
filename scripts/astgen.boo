@@ -1,36 +1,43 @@
-#region license
-// boo - an extensible programming language for the CLI
-// Copyright (C) 2004 Rodrigo B. de Oliveira
-//
-// This program is free software; you can redistribute it and/or
-// modify it under the terms of the GNU General Public License
-// as published by the Free Software Foundation; either version 2
-// of the License, or (at your option) any later version.
-//
-// This program is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU General Public License for more details.
-//
-// You should have received a copy of the GNU General Public License
-// along with this program; if not, write to the Free Software
-// Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
-//
-// As a special exception, if you link this library with other files to
-// produce an executable, this library does not by itself cause the
-// resulting executable to be covered by the GNU General Public License.
-// This exception does not however invalidate any other reasons why the
-// executable file might be covered by the GNU General Public License.
-//
-// Contact Information
-//
-// mailto:rbo@acm.org
+﻿#region license
+// Copyright (c) 2004, Rodrigo B. de Oliveira (rbo@acm.org)
+// All rights reserved.
+// 
+// Redistribution and use in source and binary forms, with or without modification,
+// are permitted provided that the following conditions are met:
+// 
+//     * Redistributions of source code must retain the above copyright notice,
+//     this list of conditions and the following disclaimer.
+//     * Redistributions in binary form must reproduce the above copyright notice,
+//     this list of conditions and the following disclaimer in the documentation
+//     and/or other materials provided with the distribution.
+//     * Neither the name of Rodrigo B. de Oliveira nor the names of its
+//     contributors may be used to endorse or promote products derived from this
+//     software without specific prior written permission.
+// 
+// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+// ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+// WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+// DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE
+// FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+// DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+// SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+// CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+// OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+// THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #endregion
 
 import System
 import System.IO
-import Boo.AntlrParser from Boo.AntlrParser
+import Boo.IO
+import Boo.Lang.Compiler
+import Boo.Lang.Compiler.Pipelines
 import Boo.Lang.Compiler.Ast
+
+class LicenseWriter:
+	static _license = TextFile.ReadFile("notice.txt")
+	
+	static def WriteLicenseNotice(writer as TextWriter):
+		writer.Write(_license)	
 
 def WriteNodeTypeEnum(module as Module):
 	using writer=OpenFile(GetPath("NodeType.cs")):
@@ -65,7 +72,10 @@ namespace Boo.Lang.Compiler.Ast
 	using System;
 
 	[Serializable]
-	public enum ${node.Name}
+""")
+		if node.Name == "TypeMemberModifiers":
+			writer.WriteLine("	[FlagsAttribute]")
+		writer.Write("""	public enum ${node.Name}
 	{	
 """)
 		last = node.Members[-1]
@@ -83,17 +93,10 @@ namespace Boo.Lang.Compiler.Ast
 """)
 
 def FormatParameterList(fields as List):
-	buffer = System.Text.StringBuilder()
-	last = fields[-1]
-	
-	for field as Field in fields:
-		buffer.Append(field.Type)
-		buffer.Append(" ")
-		buffer.Append(GetParameterName(field))
-		if field is not last:
-			buffer.Append(", ")
-			
-	return buffer.ToString()
+	return join(
+			"${field.Type} ${GetParameterName(field)}"
+			for field as Field in fields,
+			", ")
 	
 def GetParameterName(field as Field):
 	name = field.Name
@@ -223,9 +226,15 @@ namespace Boo.Lang.Compiler.Ast.Impl
 		{
 			${node.Name} clone = FormatterServices.GetUninitializedObject(typeof(${node.Name})) as ${node.Name};
 			clone._lexicalInfo = _lexicalInfo;
+			clone._endSourceLocation = _endSourceLocation;
 			clone._documentation = _documentation;
 			clone._entity = _entity;
 			""")
+			
+			if IsExpression(node):
+				writer.WriteLine("""
+			clone._expressionType = _expressionType;
+			""");
 			
 			for field as Field in allFields:
 				fieldType = ResolveFieldType(field)
@@ -247,6 +256,17 @@ namespace Boo.Lang.Compiler.Ast.Impl
 			""")
 		
 		for field as Field in node.Members:
+			if field.Name == "Name":
+				writer.Write("""
+		[System.Xml.Serialization.XmlAttribute]""")
+			elif field.Name == "Modifiers":
+				writer.Write("""
+		[System.Xml.Serialization.XmlAttribute,
+		System.ComponentModel.DefaultValue(TypeMemberModifiers.None)]""")
+			else:
+				writer.Write("""
+		[System.Xml.Serialization.XmlElement]""")
+
 			writer.WriteLine("""
 		public ${field.Type} ${field.Name}
 		{
@@ -344,7 +364,7 @@ namespace Boo.Lang.Compiler.Ast
 {
 	using System;
 	
-	[Serializable]
+	[Serializable]	
 	public class ${node.Name} : Boo.Lang.Compiler.Ast.Impl.${node.Name}Impl
 	{
 		public ${node.Name}()
@@ -365,6 +385,9 @@ def GetCollectionItemType(node as ClassDefinition):
 	
 def ResolveFieldType(field as Field):
 	return field.DeclaringType.DeclaringType.Members[(field.Type as SimpleTypeReference).Name]
+	
+def IsExpression(node as ClassDefinition):
+	return IsSubclassOf(node, "Expression")
 	
 def GetResultingTransformerNode(node as ClassDefinition):
 	for subclass in "Statement", "Expression", "TypeReference":
@@ -395,6 +418,7 @@ namespace Boo.Lang.Compiler.Ast.Impl
 	using Boo.Lang.Compiler.Ast;
 	
 	[Serializable]
+	[Boo.Lang.EnumeratorItemType(typeof(${itemType}))]
 	public class ${node.Name}Impl : NodeCollection
 	{
 		protected ${node.Name}Impl()
@@ -449,6 +473,11 @@ namespace Boo.Lang.Compiler.Ast.Impl
 			return base.ReplaceNode(existing, newItem);
 		}
 		
+		public void ReplaceAt(int index, ${itemType} newItem)
+		{
+			base.ReplaceAt(index, newItem);
+		}
+		
 		public new ${itemType}[] ToArray()
 		{
 			return (${itemType}[])InnerList.ToArray(typeof(${itemType}));
@@ -500,35 +529,7 @@ def WriteWarning(writer as TextWriter):
 """)
 	
 def WriteLicense(writer as TextWriter):
-	writer.Write(
-"""#region license
-// boo - an extensible programming language for the CLI
-// Copyright (C) 2004 Rodrigo B. de Oliveira
-//
-// Permission is hereby granted, free of charge, to any person 
-// obtaining a copy of this software and associated documentation 
-// files (the "Software"), to deal in the Software without restriction, 
-// including without limitation the rights to use, copy, modify, merge, 
-// publish, distribute, sublicense, and/or sell copies of the Software, 
-// and to permit persons to whom the Software is furnished to do so, 
-// subject to the following conditions:
-// 
-// The above copyright notice and this permission notice shall be included 
-// in all copies or substantial portions of the Software.
-// 
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, 
-// EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF 
-// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. 
-// IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY 
-// CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, 
-// TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE 
-// OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
-// 
-// Contact Information
-//
-// mailto:rbo@acm.org
-#endregion
-""")
+	LicenseWriter.WriteLicenseNotice(writer)
 
 def WriteDepthFirstTransformer(module as Module):
 	
@@ -607,14 +608,30 @@ namespace Boo.Lang.Compiler.Ast
 		{
 			if (null != node)
 			{
-				Node saved = _resultingNode;
-				_resultingNode = node;
-				node.Accept(this);
-				Node result = _resultingNode;
-				_resultingNode = saved;
-				return result;
+				try
+				{
+					Node saved = _resultingNode;
+					_resultingNode = node;
+					node.Accept(this);
+					Node result = _resultingNode;
+					_resultingNode = saved;
+					return result;
+				}
+				catch (Boo.Lang.Compiler.CompilerError)
+				{
+					throw;
+				}
+				catch (Exception error)
+				{
+					OnError(node, error);
+				}
 			}
 			return null;
+		}
+		
+		protected virtual void OnError(Node node, Exception error)
+		{
+			throw Boo.Lang.Compiler.CompilerErrorFactory.InternalError(node, error);
 		}
 		
 		public Node Visit(Node node)
@@ -648,6 +665,7 @@ namespace Boo.Lang.Compiler.Ast
 						int actualIndex = i-removed;
 						if (null == resultingNode)
 						{
+							++removed;
 							collection.RemoveAt(actualIndex);
 						}
 						else
@@ -705,33 +723,26 @@ def GetPrivateName(field as Field):
 	
 def GetSimpleFields(node as ClassDefinition):
 	
-	fields = []
-	for field as Field in node.Members:
-		if IsCollectionField(field) or field.Attributes.Contains("auto"):
-			continue
-		fields.Add(field)
-	return fields
+	return [field
+			for field as Field in node.Members
+			unless IsCollectionField(field) or field.Attributes.Contains("auto")]
 	
 def GetAllFields(node as ClassDefinition):
 	fields = []
-	module as Module = node.ParentNode
 	
 	for item as TypeDefinition in GetTypeHierarchy(node):
-		for field as Field in item.Members:
-			fields.Add(field)
+		fields.Extend(item.Members)
+			
 	return fields
 
 def GetAcceptableFields(item as ClassDefinition):
-	fields = []
 	
-	module as Module = item.ParentNode
+	fields = []
 	
 	for item as TypeDefinition in GetTypeHierarchy(item):	
 		for field as Field in item.Members:
 			type = ResolveFieldType(field)
-			if type:
-				if not IsEnum(type):
-					fields.Add(field)
+			fields.Add(field) if type and not IsEnum(type)
 	
 	return fields
 
@@ -796,10 +807,15 @@ namespace Boo.Lang.Compiler.Ast
 				}
 				catch (Exception error)
 				{
-					throw Boo.Lang.Compiler.CompilerErrorFactory.InternalError(node, error);
+					OnError(node, error);
 				}
 			}
 			return false;
+		}
+		
+		protected virtual void OnError(Node node, Exception error)
+		{
+			throw Boo.Lang.Compiler.CompilerErrorFactory.InternalError(node, error);
 		}
 		
 		public void Visit(Node[] array, NodeType nodeType)
@@ -851,9 +867,17 @@ namespace Boo.Lang.Compiler.Ast
 }
 """)
 
+def parse(fname):
+	compiler = BooCompiler()
+	compiler.Parameters.Pipeline = Parse()
+	compiler.Parameters.Input.Add(Boo.Lang.Compiler.IO.FileInput(fname))
+	result = compiler.Run()
+	raise join(result.Errors, "\n") if len(result.Errors)
+	return result.CompileUnit
+
 start = date.Now
 
-module = BooParser.ParseFile("ast.model.boo").Modules[0]
+module = parse("ast.model.boo").Modules[0]
 
 WriteVisitor(module)
 WriteDepthFirstVisitor(module)

@@ -1,12 +1,13 @@
 <?xml version="1.0"?>
 <project name="Boo asp.net examples" default="build">
 
-	<property name="booc" value="../../build/booc.exe" />
-	<property name="Boo.dll" value="../../build/Boo.dll" />
-	<property name="Boo.Lang.Compiler.dll" value="../../build/Boo.Lang.Compiler.dll" />
-	<property name="Boo.AntlrParser.dll" value="../../build/Boo.AntlrParser.dll" />
-	<property name="antlr.runtime.dll" value="../../build/antlr.runtime.dll" />
-	<property name="Boo.NAnt.dll" value="../../build/Boo.NAnt.dll" />
+	<property name="boo.dir" value="${path::get-full-path('../../bin')}" />
+	
+	<property name="Boo.dll" value="${boo.dir}/Boo.dll" />
+	<property name="Boo.Lang.Compiler.dll" value="${boo.dir}/Boo.Lang.Compiler.dll" />
+	<property name="Boo.CodeDom.dll" value="${boo.dir}/Boo.CodeDom.dll" />
+	<property name="Boo.Lang.Parser.dll" value="${boo.dir}/Boo.Lang.Parser.dll" />
+	<property name="Boo.NAnt.Tasks.dll" value="${boo.dir}/Boo.NAnt.Tasks.dll" />
 	
 	<target name="rebuild" depends="clean, build" />
 	
@@ -17,37 +18,39 @@
 	<target name="build">
 		<mkdir dir="output" />
 		<mkdir dir="output/bin" />
-		
+		<copy todir="output" file="web.config" />
 		<copy todir="output/bin" file="${Boo.dll}" />
 		<copy todir="output/bin" file="${Boo.Lang.Compiler.dll}" />
-		<copy todir="output/bin" file="${Boo.AntlrParser.dll}" />
-		<copy todir="output/bin" file="${antlr.runtime.dll}" />
+		<copy todir="output/bin" file="${Boo.Lang.Parser.dll}" />
+		<copy todir="output/bin" file="${Boo.CodeDom.dll}" />
 		
-		<loadtasks assembly="${Boo.NAnt.dll}" />
+		<loadtasks assembly="${Boo.NAnt.Tasks.dll}" />
 		
 		<booc output="output/bin/Boo.Examples.Web.dll" target="library">
 		
 			<sources basedir=".">
-				<includes name="*.boo" />
+				<include name="*.boo" />
 			</sources>
 			
 			<references>
-				<includes name="System.Web.dll" />
-				<includes name="${Boo.AntlrParser.dll}" />
+				<include name="System.Web.dll" />
+				<include name="System.Web.Services.dll" />
+				<include name="${Boo.Lang.Parser.dll}" />
 			</references>
 			
 		</booc>
 
 		<copy todir="output">			
 			<fileset basedir=".">
-				<includes name="*.aspx" />
+				<include name="*.aspx" />
+				<include name="*.asmx" />
 			</fileset>
 		</copy>
 		
 	</target>
 	
 	<target name="run" depends="build">
-		<exec program="cassiniwebserver.exe">
+		<exec program="CassiniWebserver.exe">
 			<arg file="output" />
 			<arg value="8088" />
 		</exec>

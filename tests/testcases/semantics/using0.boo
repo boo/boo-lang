@@ -1,7 +1,8 @@
 """
+[Boo.Lang.ModuleAttribute]
 public final transient class Using0Module(System.Object):
 
-	private static def __Main__(argv as (System.String)) as System.Void:
+	private static def Main(argv as (System.String)) as System.Void:
 		try:
 			f = System.IO.File.OpenText('using0.boo')
 			Boo.Lang.Builtins.print(f.ReadLine())
@@ -9,7 +10,6 @@ public final transient class Using0Module(System.Object):
 			if (__disposable__ = (f as System.IDisposable)):
 				__disposable__.Dispose()
 				__disposable__ = null
-			f = null
 
 	private def constructor():
 		super()

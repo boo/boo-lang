@@ -7,20 +7,24 @@ by a boo script.
 namespace Boo.Ast
 
 class CompileUnit(Node):
-	Modules as ModuleCollection
+	Modules as ModuleCollection	
 
 enum TypeMemberModifiers:
 	None = 0
-	Public = 1
-	Protected = 2
-	Private = 4
-	Internal = 8		
+	Private = 1
+	Internal = 2	
+	Protected = 4
+	Public = 8
 	Transient = 16
 	Static = 32
 	Final = 64
 	Virtual = 128
 	Override = 256
 	Abstract = 512
+	
+enum MethodImplementationFlags:
+	None = 0
+	Runtime = 1
 
 abstract class TypeMember(Node, INodeWithAttributes):
 	Modifiers as TypeMemberModifiers
@@ -39,10 +43,20 @@ class SimpleTypeReference(TypeReference):
 
 class ArrayTypeReference(TypeReference):
 	ElementType as TypeReference
+	Rank as IntegerLiteralExpression
+	
+class CallableTypeReference(TypeReference):
+	Parameters as TypeReferenceCollection
+	ReturnType as TypeReference
 
 [collection(TypeReference)]
 class TypeReferenceCollection:
 	pass
+
+class CallableDefinition(TypeMember, INodeWithParameters):
+	Parameters as ParameterDeclarationCollection
+	ReturnType as TypeReference
+	ReturnTypeAttributes as AttributeCollection
 
 abstract class TypeDefinition(TypeMember):
 	Members as TypeMemberCollection
@@ -69,12 +83,16 @@ class Module(TypeDefinition):
 	Imports as ImportCollection
 	[auto]
 	Globals as Block
+	AssemblyAttributes as AttributeCollection
 
 [collection(Module)]
 class ModuleCollection:
 	pass
 
 class ClassDefinition(TypeDefinition):
+	pass
+
+class StructDefinition(TypeDefinition):
 	pass
 
 class InterfaceDefinition(TypeDefinition):
@@ -95,6 +113,12 @@ class Property(TypeMember, INodeWithParameters):
 	Getter as Method
 	Setter as Method
 	Type as TypeReference
+	
+class Event(TypeMember):
+	Add as Method
+	Remove as Method
+	Raise as Method
+	Type as TypeReference
 
 class Local(Node):
 	Name as string
@@ -109,14 +133,11 @@ class CallableBlockExpression(Expression, INodeWithParameters):
 	[auto]
 	Body as Block
 
-class Method(TypeMember, INodeWithParameters):
-	Parameters as ParameterDeclarationCollection
-	ReturnType as TypeReference
-	ReturnTypeAttributes as AttributeCollection
+class Method(CallableDefinition):	
 	[auto]
 	Body as Block
 	Locals as LocalCollection
-	VariableArguments as bool
+	ImplementationFlags as MethodImplementationFlags
 
 class Constructor(Method):
 	pass
@@ -159,6 +180,12 @@ class StatementModifier(Node):
 
 abstract class Statement(Node):
 	Modifier as StatementModifier
+	
+class GotoStatement(Statement):
+	Label as ReferenceExpression
+	
+class LabelStatement(Statement):
+	Name as string
 
 class Block(Statement):
 	Statements as StatementCollection
@@ -170,10 +197,6 @@ class StatementCollection:
 class DeclarationStatement(Statement):
 	Declaration as Declaration
 	Initializer as Expression
-
-class AssertStatement(Statement):
-	Condition as Expression
-	Message as Expression
 
 class MacroStatement(Statement):
 	Name as string
@@ -317,6 +340,9 @@ enum BinaryOperatorType:
 	Or
 	And
 	BitwiseOr
+	BitwiseAnd
+	ExclusiveOr
+	InPlaceExclusiveOr
 
 enum UnaryOperatorType:
 	None
@@ -333,6 +359,11 @@ class BinaryExpression(Expression):
 	Operator as BinaryOperatorType
 	Left as Expression
 	Right as Expression
+	
+class TernaryExpression(Expression):
+	Condition as Expression
+	TrueValue as Expression
+	FalseValue as Expression
 
 class ReferenceExpression(Expression):
 	Name as string
@@ -388,12 +419,19 @@ class GeneratorExpression(Expression):
 	Declarations as DeclarationCollection
 	Iterator as Expression
 	Filter as StatementModifier
-
-class SlicingExpression(Expression):
-	Target as Expression
+	
+class Slice(Node):
 	Begin as Expression
 	End as Expression
 	Step as Expression
+	
+[collection(Slice)]
+class SliceCollection:
+	pass
+
+class SlicingExpression(Expression):
+	Target as Expression
+	Indices as SliceCollection
 
 class AsExpression(Expression):
 	Target as Expression

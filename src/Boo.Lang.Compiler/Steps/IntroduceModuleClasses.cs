@@ -1,29 +1,29 @@
 ﻿#region license
-// boo - an extensible programming language for the CLI
-// Copyright (C) 2004 Rodrigo B. de Oliveira
-//
-// Permission is hereby granted, free of charge, to any person 
-// obtaining a copy of this software and associated documentation 
-// files (the "Software"), to deal in the Software without restriction, 
-// including without limitation the rights to use, copy, modify, merge, 
-// publish, distribute, sublicense, and/or sell copies of the Software, 
-// and to permit persons to whom the Software is furnished to do so, 
-// subject to the following conditions:
+// Copyright (c) 2004, Rodrigo B. de Oliveira (rbo@acm.org)
+// All rights reserved.
 // 
-// The above copyright notice and this permission notice shall be included 
-// in all copies or substantial portions of the Software.
+// Redistribution and use in source and binary forms, with or without modification,
+// are permitted provided that the following conditions are met:
 // 
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, 
-// EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF 
-// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. 
-// IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY 
-// CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, 
-// TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE 
-// OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+//     * Redistributions of source code must retain the above copyright notice,
+//     this list of conditions and the following disclaimer.
+//     * Redistributions in binary form must reproduce the above copyright notice,
+//     this list of conditions and the following disclaimer in the documentation
+//     and/or other materials provided with the distribution.
+//     * Neither the name of Rodrigo B. de Oliveira nor the names of its
+//     contributors may be used to endorse or promote products derived from this
+//     software without specific prior written permission.
 // 
-// Contact Information
-//
-// mailto:rbo@acm.org
+// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+// ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+// WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+// DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE
+// FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+// DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+// SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+// CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+// OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+// THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #endregion
 
 namespace Boo.Lang.Compiler.Steps
@@ -35,16 +35,53 @@ namespace Boo.Lang.Compiler.Steps
 	
 	public class IntroduceModuleClasses : AbstractVisitorCompilerStep
 	{
-		public const string MainModuleMethodName = "__Main__";
+		public const string EntryPointMethodName = "Main";
+		
+		protected IType _booModuleAttributeType;
+		
+		protected bool _forceModuleClass = false;
+		
+		public bool ForceModuleClass
+		{
+			get
+			{
+				return _forceModuleClass;
+			}
+			
+			set
+			{
+				_forceModuleClass = true;
+			}
+		}
+		
+		override public void Initialize(CompilerContext context)
+		{
+			base.Initialize(context);
+			_booModuleAttributeType = TypeSystemServices.Map(typeof(Boo.Lang.ModuleAttribute));
+		}
 		
 		override public void Run()
-		{
+		{			
 			Visit(CompileUnit.Modules);
 		}
 		
+		override public void Dispose()
+		{
+			_booModuleAttributeType = null;
+			base.Dispose();			
+		}
+		
 		override public void OnModule(Module node)
-		{		
-			ClassDefinition moduleClass = new ClassDefinition();
+		{	
+			bool hasModuleClass = true;
+			ClassDefinition moduleClass = FindModuleClass(node);
+			if (null == moduleClass)
+			{
+				moduleClass = new ClassDefinition();
+				hasModuleClass = false;
+			}
+			
+			Method entryPoint = moduleClass.Members["Main"] as Method;
 			
 			int removed = 0;			
 			TypeMember[] members = node.Members.ToArray();
@@ -53,6 +90,10 @@ namespace Boo.Lang.Compiler.Steps
 				TypeMember member = members[i];
 				if (member.NodeType == NodeType.Method)
 				{
+					if (EntryPointMethodName == member.Name)
+					{
+						entryPoint = (Method)member;
+					}
 					member.Modifiers |= TypeMemberModifiers.Static;
 					node.Members.RemoveAt(i-removed);
 					moduleClass.Members.Add(member);
@@ -64,28 +105,66 @@ namespace Boo.Lang.Compiler.Steps
 			{
 				Method method = new Method(node.Globals.LexicalInfo);
 				method.Parameters.Add(new ParameterDeclaration("argv", new ArrayTypeReference(new SimpleTypeReference("string"))));
-				method.ReturnType = CreateTypeReference(TypeSystemServices.VoidType);
+				method.ReturnType = CodeBuilder.CreateTypeReference(TypeSystemServices.VoidType);
 				method.Body = node.Globals;
-				method.Name = MainModuleMethodName;
+				method.Name = EntryPointMethodName;
 				method.Modifiers = TypeMemberModifiers.Static | TypeMemberModifiers.Private;				
 				moduleClass.Members.Add(method);
 				
 				node.Globals = null;
-				ContextAnnotations.SetEntryPoint(Context, method);
+				entryPoint = method;
 			}
 			
-			if (moduleClass.Members.Count > 0)
+			if (null != entryPoint)
 			{
-				moduleClass.Members.Add(AstUtil.CreateConstructor(node, TypeMemberModifiers.Private));
+				ContextAnnotations.SetEntryPoint(Context, entryPoint);
+			}
 			
-				moduleClass.Name = BuildModuleClassName(node);
+			if (hasModuleClass || _forceModuleClass || (moduleClass.Members.Count > 0))
+			{
+				if (!hasModuleClass)
+				{
+					moduleClass.Name = BuildModuleClassName(node);
+					moduleClass.Attributes.Add(CreateBooModuleAttribute());
+					node.Members.Add(moduleClass);
+				}
+				
+				moduleClass.Members.Add(AstUtil.CreateConstructor(node, TypeMemberModifiers.Private));			
 				moduleClass.Modifiers = TypeMemberModifiers.Public |
 										TypeMemberModifiers.Final |
-										TypeMemberModifiers.Transient;
-				node.Members.Add(moduleClass);
+										TypeMemberModifiers.Transient;				
 				
 				((ModuleEntity)node.Entity).InitializeModuleClass(moduleClass);				
 			}
+		}
+		
+		ClassDefinition FindModuleClass(Module node)
+		{
+			ClassDefinition found = null;
+			
+			foreach (TypeMember member in node.Members)
+			{
+				if (NodeType.ClassDefinition == member.NodeType &&
+					member.Attributes.Contains("Boo.Lang.ModuleAttribute"))
+				{
+					if (null == found)
+					{
+						found = (ClassDefinition)member;
+					}
+					else
+					{
+						// ERROR: only a single module class is allowed per module
+					}
+				}
+			}
+			return found;
+		}
+		
+		Boo.Lang.Compiler.Ast.Attribute CreateBooModuleAttribute()
+		{
+			Boo.Lang.Compiler.Ast.Attribute attribute = new Boo.Lang.Compiler.Ast.Attribute("Boo.Lang.ModuleAttribute");
+			attribute.Entity = _booModuleAttributeType;
+			return attribute;
 		}
 		
 		string BuildModuleClassName(Module module)

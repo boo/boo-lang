@@ -1,29 +1,29 @@
-#region license
-// boo - an extensible programming language for the CLI
-// Copyright (C) 2004 Rodrigo B. de Oliveira
-//
-// Permission is hereby granted, free of charge, to any person
-// obtaining a copy of this software and associated documentation
-// files (the "Software"), to deal in the Software without restriction,
-// including without limitation the rights to use, copy, modify, merge,
-// publish, distribute, sublicense, and/or sell copies of the Software,
-// and to permit persons to whom the Software is furnished to do so,
-// subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included
-// in all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
-// EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
-// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
-// IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
-// CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
-// TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
-// OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
-//
-// Contact Information
-//
-// mailto:rbo@acm.org
+﻿#region license
+// Copyright (c) 2004, Rodrigo B. de Oliveira (rbo@acm.org)
+// All rights reserved.
+// 
+// Redistribution and use in source and binary forms, with or without modification,
+// are permitted provided that the following conditions are met:
+// 
+//     * Redistributions of source code must retain the above copyright notice,
+//     this list of conditions and the following disclaimer.
+//     * Redistributions in binary form must reproduce the above copyright notice,
+//     this list of conditions and the following disclaimer in the documentation
+//     and/or other materials provided with the distribution.
+//     * Neither the name of Rodrigo B. de Oliveira nor the names of its
+//     contributors may be used to endorse or promote products derived from this
+//     software without specific prior written permission.
+// 
+// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+// ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+// WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+// DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE
+// FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+// DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+// SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+// CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+// OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+// THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #endregion
 
 namespace Boo.Lang
@@ -31,16 +31,17 @@ namespace Boo.Lang
 	using System;
 	using System.Collections;
 	using System.Diagnostics;
+	using System.IO;
 	using System.Text;
+	using System.Reflection;
 
 	/// <summary>
 	/// boo language builtin functions.
 	/// </summary>
 	public class Builtins
-	{
-		public static void print(string s)
+	{		
+		public class duck
 		{
-			Console.WriteLine(s);
 		}
 
 		public static void print(object o)
@@ -62,35 +63,56 @@ namespace Boo.Lang
 		public static string join(IEnumerable enumerable, string separator)
 		{
 			StringBuilder sb = new StringBuilder();
-			foreach (object item in enumerable)
+			IEnumerator enumerator = enumerable.GetEnumerator();
+			if (enumerator.MoveNext())
 			{
-				if (sb.Length>0) { sb.Append(separator); }
-				sb.Append(item);
+				sb.Append(enumerator.Current);
+				while (enumerator.MoveNext())
+				{
+					sb.Append(separator);
+					sb.Append(enumerator.Current);
+				}
+			}
+			return sb.ToString();
+		}
+		
+		public static string join(IEnumerable enumerable, char separator)
+		{
+			StringBuilder sb = new StringBuilder();
+			IEnumerator enumerator = enumerable.GetEnumerator();
+			if (enumerator.MoveNext())
+			{
+				sb.Append(enumerator.Current);
+				while (enumerator.MoveNext())
+				{
+					sb.Append(separator);
+					sb.Append(enumerator.Current);
+				}
 			}
 			return sb.ToString();
 		}
 
 		public static string join(IEnumerable enumerable)
 		{
-			return join(enumerable, " ");
+			return join(enumerable, ' ');
 		}
 
-		public static IEnumerable map(ICallable function, object enumerable)
-		{
-			if (null == function)
-			{
-				throw new ArgumentNullException("function");
-			}
+		public static IEnumerable map(object enumerable, ICallable function)
+		{			
 			if (null == enumerable)
 			{
 				throw new ArgumentNullException("enumerable");
 			}
-			return new MapEnumerator(function, GetEnumerator(enumerable));
+			if (null == function)
+			{
+				throw new ArgumentNullException("function");
+			}
+			return new MapEnumerable(RuntimeServices.GetEnumerable(enumerable), function);
 		}
 
 		public static object[] array(IEnumerable enumerable)
 		{
-			return (object[])array(typeof(object), enumerable);
+			return new List(enumerable).ToArray();
 		}
 
 		public static Array array(Type elementType, ICollection collection)
@@ -104,8 +126,21 @@ namespace Boo.Lang
 				throw new ArgumentNullException("elementType");
 			}
 
-			Array array = Array.CreateInstance(elementType, collection.Count);
-			collection.CopyTo(array, 0);
+			Array array = Array.CreateInstance(elementType, collection.Count);			
+			if (RuntimeServices.IsPromotableNumeric(Type.GetTypeCode(elementType)))
+			{
+				int i=0;
+				foreach (object item in collection)
+				{
+					object value = RuntimeServices.CheckNumericPromotion(item).ToType(elementType, null);
+					array.SetValue(value, i);
+					++i;
+				}
+			}
+			else
+			{
+				collection.CopyTo(array, 0);
+			}
 			return array;
 		}
 
@@ -119,16 +154,38 @@ namespace Boo.Lang
 			{
 				throw new ArgumentNullException("elementType");
 			}
-			return new List(enumerable).ToArray(elementType);
+			
+			// future optimization, check EnumeratorItemType of enumerable
+			// and get the fast path whenever possible			
+			List l = null;
+			if (RuntimeServices.IsPromotableNumeric(Type.GetTypeCode(elementType)))
+			{
+				l = new List();
+				foreach (object item in enumerable)
+				{
+					object value = RuntimeServices.CheckNumericPromotion(item).ToType(elementType, null);
+					l.Add(value);							
+				}
+			}
+			else
+			{
+				l = new List(enumerable);
+			}
+			return l.ToArray(elementType);
+		}
+		
+		public static Array array(Type elementType, int length)
+		{
+			return matrix(elementType, length);
 		}
 
-		public static Array array(Type elementType, int length)
+		public static Array matrix(Type elementType, params int[] lengths)
 		{
 			if (null == elementType)
 			{
 				throw new ArgumentNullException("elementType");
 			}
-			return Array.CreateInstance(elementType, length);
+			return Array.CreateInstance(elementType, lengths);
 		}
 
 		public static IEnumerable iterator(object enumerable)
@@ -143,6 +200,8 @@ namespace Boo.Lang
 			p.StartInfo.CreateNoWindow = true;
 			p.StartInfo.UseShellExecute = false;
 			p.StartInfo.RedirectStandardOutput = true;
+			p.StartInfo.RedirectStandardInput = true;
+			p.StartInfo.RedirectStandardError = true;
 			p.StartInfo.FileName = filename;
 			p.Start();
 			return p;
@@ -154,6 +213,68 @@ namespace Boo.Lang
 			string output = p.StandardOutput.ReadToEnd();
 			p.WaitForExit();
 			return output;
+		}
+		
+		internal class AssemblyExecutor : MarshalByRefObject
+		{
+			string _filename;
+			string[] _arguments;
+			string _capturedOutput = "";
+			
+			public AssemblyExecutor(string filename, string[] arguments)
+			{
+				_filename = filename;
+				_arguments = arguments;
+			}
+			
+			public string CapturedOutput
+			{
+				get
+				{
+					return _capturedOutput;
+				}
+			}
+			
+			public void Execute()
+			{
+				StringWriter output = new System.IO.StringWriter();
+				TextWriter saved = Console.Out;
+				try
+				{
+					Console.SetOut(output);
+					//AppDomain.CurrentDomain.ExecuteAssembly(_filename, null, _arguments);
+					Assembly.LoadFrom(_filename).EntryPoint.Invoke(null, new object[1] { _arguments });
+				}
+				finally
+				{					
+					Console.SetOut(saved);
+					_capturedOutput = output.ToString();
+				}
+			}
+		}
+		
+		/// <summary>
+		/// Execute the specified MANAGED application in a new AppDomain.
+		///
+		/// The base directory for the new application domain will be set to
+		/// directory containing filename (Path.GetDirectoryName(Path.GetFullPath(filename))).
+		/// </summary>
+		public static string shellm(string filename, string[] arguments)
+		{
+			AppDomainSetup setup = new AppDomainSetup();
+			setup.ApplicationBase = Path.GetDirectoryName(Path.GetFullPath(filename)); 
+				
+			AppDomain domain = AppDomain.CreateDomain("shellm", null, setup);
+			try
+			{					
+				AssemblyExecutor executor = new AssemblyExecutor(filename, arguments);
+				domain.DoCallBack(new CrossAppDomainDelegate(executor.Execute));
+				return executor.CapturedOutput;
+			}
+			finally
+			{
+				AppDomain.Unload(domain);
+			}			
 		}
 
 		public static EnumerateEnumerator enumerate(object enumerable)
@@ -205,18 +326,25 @@ namespace Boo.Lang
 			return new ZipEnumerator(GetEnumerator(first),
 									GetEnumerator(second));
 		}
-
-		public static void assert(string message, bool condition)
+		
+		private class MapEnumerable : IEnumerable
 		{
-			throw new System.NotImplementedException();
+			IEnumerable _enumerable;
+			ICallable _function;
+			
+			public MapEnumerable(IEnumerable enumerable, ICallable function)
+			{
+				_enumerable = enumerable;
+				_function = function;
+			}
+			
+			public IEnumerator GetEnumerator()
+			{
+				return new MapEnumerator(_enumerable.GetEnumerator(), _function);
+			}
 		}
 
-		public static void assert(bool condition)
-		{
-			throw new System.NotImplementedException();
-		}
-
-		private class MapEnumerator : IEnumerator, IEnumerable
+		private class MapEnumerator : IEnumerator
 		{
 			IEnumerator _enumerator;
 
@@ -226,10 +354,10 @@ namespace Boo.Lang
 
 			object[] _arguments = new object[1];
 
-			public MapEnumerator(ICallable function, IEnumerator enumerator)
+			public MapEnumerator(IEnumerator enumerator, ICallable function)
 			{
-				_function = function;
 				_enumerator = enumerator;
+				_function = function;
 			}
 
 			public void Reset()
@@ -254,11 +382,6 @@ namespace Boo.Lang
 				{
 					return _current;
 				}
-			}
-
-			public IEnumerator GetEnumerator()
-			{
-				return this;
 			}
 		}
 

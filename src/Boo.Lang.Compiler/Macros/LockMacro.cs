@@ -1,34 +1,35 @@
 #region license
-// boo - an extensible programming language for the CLI
-// Copyright (C) 2004 Rodrigo B. de Oliveira
-//
-// Permission is hereby granted, free of charge, to any person 
-// obtaining a copy of this software and associated documentation 
-// files (the "Software"), to deal in the Software without restriction, 
-// including without limitation the rights to use, copy, modify, merge, 
-// publish, distribute, sublicense, and/or sell copies of the Software, 
-// and to permit persons to whom the Software is furnished to do so, 
-// subject to the following conditions:
+// Copyright (c) 2004, Rodrigo B. de Oliveira (rbo@acm.org)
+// All rights reserved.
 // 
-// The above copyright notice and this permission notice shall be included 
-// in all copies or substantial portions of the Software.
+// Redistribution and use in source and binary forms, with or without modification,
+// are permitted provided that the following conditions are met:
 // 
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, 
-// EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF 
-// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. 
-// IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY 
-// CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, 
-// TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE 
-// OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+//     * Redistributions of source code must retain the above copyright notice,
+//     this list of conditions and the following disclaimer.
+//     * Redistributions in binary form must reproduce the above copyright notice,
+//     this list of conditions and the following disclaimer in the documentation
+//     and/or other materials provided with the distribution.
+//     * Neither the name of Rodrigo B. de Oliveira nor the names of its
+//     contributors may be used to endorse or promote products derived from this
+//     software without specific prior written permission.
 // 
-// Contact Information
-//
-// mailto:rbo@acm.org
+// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+// ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+// WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+// DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE
+// FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+// DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+// SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+// CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+// OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+// THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #endregion
 
 namespace Boo.Lang
 {
 	using System;
+	using Boo.Lang.Compiler;
 	using Boo.Lang.Compiler.Ast;
 	
 	public class LockAttribute : Boo.Lang.Compiler.AbstractAstAttribute
@@ -67,8 +68,9 @@ namespace Boo.Lang
 		
 		Block CreateLockedBlock(Block body)
 		{
-			using (LockMacro macro = new LockMacro(_context))
+			using (LockMacro macro = new LockMacro())
 			{
+				macro.Initialize(_context);
 				return macro.CreateLockedBlock(_monitor, body);
 			}
 		}
@@ -78,7 +80,7 @@ namespace Boo.Lang
 	/// lock obj1, obj2:
 	///		obj1.Foo(obj2)
 	/// </summary>
-	public class LockMacro : Boo.Lang.Compiler.IAstMacro
+	public class LockMacro : AbstractAstMacro
 	{
 		public const string MonitorLocalName = "__monitor{0}__";
 		
@@ -86,34 +88,8 @@ namespace Boo.Lang
 		
 		static Expression Monitor_Exit = AstUtil.CreateReferenceExpression("System.Threading.Monitor.Exit");
 		
-		Boo.Lang.Compiler.CompilerContext _context;
-		
-		public LockMacro()
-		{
-		}
-		
-		public LockMacro(Boo.Lang.Compiler.CompilerContext context)
-		{
-			_context = context;
-		}
-		
-		public void Initialize(Boo.Lang.Compiler.CompilerContext context)
-		{			
-			_context = context;
-		}
-		
-		public void Dispose()
-		{			
-			_context = null;
-		}
-		
-		public Statement Expand(MacroStatement macro)
+		public override Statement Expand(MacroStatement macro)
 		{				
-			if (null == _context)
-			{
-				throw new InvalidOperationException("macro was not property initialized!");
-			}
-			
 			if (0 == macro.Arguments.Count)
 			{
 				throw Boo.Lang.Compiler.CompilerErrorFactory.InvalidLockMacroArguments(macro);
@@ -129,14 +105,6 @@ namespace Boo.Lang
 			}
 			
 			return resulting;
-		}
-		
-		MethodInvocationExpression CreateMethodInvocation(Expression target, Expression arg)
-		{
-			MethodInvocationExpression mie = new MethodInvocationExpression(arg.LexicalInfo);
-			mie.Target = (Expression)target.Clone();			
-			mie.Arguments.Add((Expression)arg.Clone());
-			return mie;
 		}
 		
 		ReferenceExpression CreateMonitorReference(LexicalInfo lexicalInfo)
@@ -158,7 +126,7 @@ namespace Boo.Lang
 										monitor));
 
 			// System.Threading.Monitor.Enter(__monitorN__)			
-			block.Add(CreateMethodInvocation(Monitor_Enter, monitorReference));	
+			block.Add(AstUtil.CreateMethodInvocationExpression(Monitor_Enter, monitorReference));	
 			
 			// try:			
 			// 		<the rest>
@@ -168,7 +136,7 @@ namespace Boo.Lang
 			stmt.ProtectedBlock = body;
 			stmt.EnsureBlock = new Block();
 			stmt.EnsureBlock.Add(
-				CreateMethodInvocation(Monitor_Exit, monitorReference));
+				AstUtil.CreateMethodInvocationExpression(Monitor_Exit, monitorReference));
 				
 			block.Add(stmt);
 			

@@ -1,34 +1,35 @@
 #region license
-// boo - an extensible programming language for the CLI
-// Copyright (C) 2004 Rodrigo B. de Oliveira
-//
-// Permission is hereby granted, free of charge, to any person 
-// obtaining a copy of this software and associated documentation 
-// files (the "Software"), to deal in the Software without restriction, 
-// including without limitation the rights to use, copy, modify, merge, 
-// publish, distribute, sublicense, and/or sell copies of the Software, 
-// and to permit persons to whom the Software is furnished to do so, 
-// subject to the following conditions:
+// Copyright (c) 2004, Rodrigo B. de Oliveira (rbo@acm.org)
+// All rights reserved.
 // 
-// The above copyright notice and this permission notice shall be included 
-// in all copies or substantial portions of the Software.
+// Redistribution and use in source and binary forms, with or without modification,
+// are permitted provided that the following conditions are met:
 // 
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, 
-// EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF 
-// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. 
-// IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY 
-// CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, 
-// TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE 
-// OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+//     * Redistributions of source code must retain the above copyright notice,
+//     this list of conditions and the following disclaimer.
+//     * Redistributions in binary form must reproduce the above copyright notice,
+//     this list of conditions and the following disclaimer in the documentation
+//     and/or other materials provided with the distribution.
+//     * Neither the name of Rodrigo B. de Oliveira nor the names of its
+//     contributors may be used to endorse or promote products derived from this
+//     software without specific prior written permission.
 // 
-// Contact Information
-//
-// mailto:rbo@acm.org
+// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+// ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+// WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+// DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE
+// FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+// DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+// SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+// CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+// OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+// THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #endregion
 
 import System
 import System.IO
 import System.Reflection
+import System.Security.Permissions
 import System.Threading
 import Boo.Lang.Compiler
 import Boo.Lang.Compiler.IO
@@ -62,31 +63,34 @@ class AssemblyResolver:
 		return Assembly.LoadFrom(fname) if File.Exists(fname)
 
 def consume(reader as TextReader):
-	writer = StringWriter()
-	for line in reader:
-		writer.WriteLine(line)
-	return writer.ToString()
+	return join(line for line in reader, "\n")
 
-def main(argv as (string)):
-	Thread.CurrentThread.ApartmentState = ApartmentState.STA
+[STAThread]
+def Main(argv as (string)):
 	
-	compiler = BooCompiler()
+	if len(argv) < 1:
+		print("booi <script.boo>") 
+		return -1
 		
-	// boo memory pipeline
-	// compiles the code in memory only
+	compiler = BooCompiler()
+	
 	compiler.Parameters.Pipeline = CompileToMemory()	
 	
-	if "-" == argv[0]:
-		compiler.Parameters.Input.Add(StringInput("<stdin>", consume(Console.In)))
-	else:
-		compiler.Parameters.Input.Add(FileInput(argv[0]))
+	for arg in argv:
+		if "-" == arg:
+			compiler.Parameters.Input.Add(StringInput("<stdin>", consume(Console.In)))
+			break
+		elif "-ducky" == arg:
+			compiler.Parameters.Ducky = true
+		else:
+			compiler.Parameters.Input.Add(FileInput(arg))
+			break
 	
 	resolver = AssemblyResolver()
 	AppDomain.CurrentDomain.AssemblyResolve += resolver.AssemblyResolve
 	result = compiler.Run()
 	if len(result.Errors):
-		for error as CompilerError in result.Errors:
-			print(error.ToString(true))
+		print(result.Errors.ToString(true))
 		return -1
 	else:	
 		try: 
@@ -97,7 +101,8 @@ def main(argv as (string)):
 			return -1
 	return 0
 	
-if len(argv) > 0:
-	Environment.Exit(main(argv))
-else:
-	print("booi <script.boo>")
+[assembly: SecurityPermission(
+						SecurityAction.RequestMinimum,
+						ControlAppDomain: true)] 
+	
+

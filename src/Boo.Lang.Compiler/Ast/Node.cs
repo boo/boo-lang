@@ -1,29 +1,29 @@
-#region license
-// boo - an extensible programming language for the CLI
-// Copyright (C) 2004 Rodrigo B. de Oliveira
-//
-// Permission is hereby granted, free of charge, to any person 
-// obtaining a copy of this software and associated documentation 
-// files (the "Software"), to deal in the Software without restriction, 
-// including without limitation the rights to use, copy, modify, merge, 
-// publish, distribute, sublicense, and/or sell copies of the Software, 
-// and to permit persons to whom the Software is furnished to do so, 
-// subject to the following conditions:
+﻿#region license
+// Copyright (c) 2004, Rodrigo B. de Oliveira (rbo@acm.org)
+// All rights reserved.
 // 
-// The above copyright notice and this permission notice shall be included 
-// in all copies or substantial portions of the Software.
+// Redistribution and use in source and binary forms, with or without modification,
+// are permitted provided that the following conditions are met:
 // 
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, 
-// EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF 
-// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. 
-// IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY 
-// CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, 
-// TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE 
-// OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+//     * Redistributions of source code must retain the above copyright notice,
+//     this list of conditions and the following disclaimer.
+//     * Redistributions in binary form must reproduce the above copyright notice,
+//     this list of conditions and the following disclaimer in the documentation
+//     and/or other materials provided with the distribution.
+//     * Neither the name of Rodrigo B. de Oliveira nor the names of its
+//     contributors may be used to endorse or promote products derived from this
+//     software without specific prior written permission.
 // 
-// Contact Information
-//
-// mailto:rbo@acm.org
+// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+// ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+// WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+// DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE
+// FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+// DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+// SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+// CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+// OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+// THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #endregion
 
 namespace Boo.Lang.Compiler.Ast
@@ -31,6 +31,7 @@ namespace Boo.Lang.Compiler.Ast
 	using System;
 	using System.Collections;
 	using System.IO;
+	using System.Xml.Serialization;
 
 	/// <summary>
 	/// Base class for every node in the AST.
@@ -39,6 +40,8 @@ namespace Boo.Lang.Compiler.Ast
 	public abstract class Node : ICloneable
 	{
 		protected LexicalInfo _lexicalInfo = LexicalInfo.Empty;
+		
+		protected SourceLocation _endSourceLocation = LexicalInfo.Empty;
 
 		protected Node _parent;
 		
@@ -47,6 +50,8 @@ namespace Boo.Lang.Compiler.Ast
 		protected Boo.Lang.Compiler.TypeSystem.IEntity _entity;
 		
 		protected System.Collections.Hashtable _properties;
+		
+		protected bool _isSynthetic;
 
 		protected Node()
 		{
@@ -72,6 +77,25 @@ namespace Boo.Lang.Compiler.Ast
 			return (Node)Clone();
 		}
 		
+		/// <summary>
+		/// true when the node was constructed by the compiler.
+		/// </summary>
+		[XmlAttribute]
+		[System.ComponentModel.DefaultValue(false)]
+		public bool IsSynthetic
+		{
+			get
+			{
+				return _isSynthetic;
+			}
+			
+			set
+			{
+				_isSynthetic = value;
+			}
+		}
+		
+		[XmlIgnore]
 		public Boo.Lang.Compiler.TypeSystem.IEntity Entity
 		{
 			get
@@ -82,6 +106,32 @@ namespace Boo.Lang.Compiler.Ast
 			set
 			{
 				_entity = value;
+			}
+		}
+		
+		public object this[object key]
+		{
+			get
+			{
+				if (null == _properties)
+				{
+					return null;
+				}
+				return _properties[key];
+			}
+			
+			set
+			{
+				if (null == key)
+				{
+					throw new ArgumentNullException("key");
+				}
+				
+				if (null == _properties)
+				{
+					_properties = new Hashtable();
+				}
+				_properties[key] = value;
 			}
 		}
 		
@@ -106,19 +156,11 @@ namespace Boo.Lang.Compiler.Ast
 			}
 		}
 
-		[System.Xml.Serialization.XmlIgnore]
+		[XmlIgnore]
 		public LexicalInfo LexicalInfo
 		{
 			get
-			{				
-				if (LexicalInfo.Empty != _lexicalInfo)
-				{
-					return _lexicalInfo;
-				}
-				if (null != _parent)
-				{
-					return _parent.LexicalInfo;
-				}
+			{	
 				return _lexicalInfo;
 			}
 
@@ -129,6 +171,29 @@ namespace Boo.Lang.Compiler.Ast
 					throw new ArgumentNullException("LexicalInfo");
 				}
 				_lexicalInfo = value;
+			}
+		}
+		
+		/// <summary>
+		/// Where this element ends in the source file.
+		/// This information is generally available and/or accurate
+		/// only for blocks and type definitions.
+		/// </summary>
+		[System.Xml.Serialization.XmlIgnore]
+		public virtual SourceLocation EndSourceLocation
+		{
+			get
+			{
+				return _endSourceLocation;
+			}
+			
+			set
+			{
+				if (null == value)
+				{
+					throw new ArgumentNullException("EndSourceLocation");
+				}
+				_endSourceLocation = value;
 			}
 		}
 		
@@ -153,6 +218,13 @@ namespace Boo.Lang.Compiler.Ast
 		public abstract NodeType NodeType
 		{
 			get;
+		}
+		
+		override public string ToString()
+		{
+			System.IO.StringWriter writer = new System.IO.StringWriter();
+			new Visitors.BooPrinterVisitor(writer).Visit(this);
+			return writer.ToString();
 		}
 	}
 

@@ -1,29 +1,29 @@
-#region license
-// boo - an extensible programming language for the CLI
-// Copyright (C) 2004 Rodrigo B. de Oliveira
-//
-// Permission is hereby granted, free of charge, to any person 
-// obtaining a copy of this software and associated documentation 
-// files (the "Software"), to deal in the Software without restriction, 
-// including without limitation the rights to use, copy, modify, merge, 
-// publish, distribute, sublicense, and/or sell copies of the Software, 
-// and to permit persons to whom the Software is furnished to do so, 
-// subject to the following conditions:
+﻿#region license
+// Copyright (c) 2004, Rodrigo B. de Oliveira (rbo@acm.org)
+// All rights reserved.
 // 
-// The above copyright notice and this permission notice shall be included 
-// in all copies or substantial portions of the Software.
+// Redistribution and use in source and binary forms, with or without modification,
+// are permitted provided that the following conditions are met:
 // 
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, 
-// EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF 
-// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. 
-// IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY 
-// CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, 
-// TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE 
-// OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+//     * Redistributions of source code must retain the above copyright notice,
+//     this list of conditions and the following disclaimer.
+//     * Redistributions in binary form must reproduce the above copyright notice,
+//     this list of conditions and the following disclaimer in the documentation
+//     and/or other materials provided with the distribution.
+//     * Neither the name of Rodrigo B. de Oliveira nor the names of its
+//     contributors may be used to endorse or promote products derived from this
+//     software without specific prior written permission.
 // 
-// Contact Information
-//
-// mailto:rbo@acm.org
+// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+// ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+// WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+// DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE
+// FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+// DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+// SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+// CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+// OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+// THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #endregion
 
 namespace Boo.Lang.Compiler
@@ -32,17 +32,73 @@ namespace Boo.Lang.Compiler
 	using System.IO;
 	using System.Collections;
 	
+	public class CompilerStepEventArgs : EventArgs
+	{
+		public CompilerContext Context;
+		public ICompilerStep Step;
+		
+		public CompilerStepEventArgs(CompilerContext context, ICompilerStep step)
+		{
+			this.Context = context;
+			this.Step = step;
+		}
+	}
+	
+	public delegate void CompilerStepEventHandler(object sender, CompilerStepEventArgs args);
+	
 	/// <summary>
 	/// A ordered set of <see cref="ICompilerStep"/> implementations
 	/// that should be executed in sequence.
 	/// </summary>
 	public class CompilerPipeline : System.MarshalByRefObject
 	{	
-		Boo.Lang.List _items;
+		public event CompilerStepEventHandler BeforeStep;
+		
+		public event CompilerStepEventHandler AfterStep;
+		
+		public static CompilerPipeline GetPipeline(string name)
+		{
+			switch (name)
+			{
+				case "parse": return new Pipelines.Parse();
+				case "compile": return new Pipelines.Compile();
+				case "run": return new Pipelines.Run();
+				case "default": return new Pipelines.CompileToFile();
+				case "verify": return new Pipelines.CompileToFileAndVerify();
+				case "roundtrip": return new Pipelines.ParseAndPrint();
+				case "boo": return new Pipelines.CompileToBoo();
+				case "xml": return new Pipelines.ParseAndPrintXml();
+				case "dumpreferences":
+				{
+					CompilerPipeline pipeline = new Pipelines.CompileToBoo();
+					pipeline.Add(new Boo.Lang.Compiler.Steps.DumpReferences());
+					return pipeline;
+				}
+			}
+			return (CompilerPipeline)Activator.CreateInstance(Type.GetType(name, true));
+		}
+		
+		protected Boo.Lang.List _items;
+		
+		protected bool _breakOnErrors;
 
 		public CompilerPipeline()
 		{
 			_items = new Boo.Lang.List();
+			_breakOnErrors = true;
+		}
+		
+		public bool BreakOnErrors
+		{
+			get
+			{
+				return _breakOnErrors;
+			}
+			
+			set
+			{
+				_breakOnErrors = value;
+			}
 		}
 		
 		public CompilerPipeline Add(ICompilerStep step)
@@ -56,6 +112,12 @@ namespace Boo.Lang.Compiler
 			return this;
 		}
 		
+		public CompilerPipeline RemoveAt(int index)
+		{
+			_items.RemoveAt(index);
+			return this;
+		}
+		
 		public CompilerPipeline Insert(int index, ICompilerStep step)
 		{
 			if (null == step)
@@ -65,6 +127,58 @@ namespace Boo.Lang.Compiler
 			
 			_items.Insert(index, step);
 			return this;
+		} 
+		
+		public CompilerPipeline InsertAfter(Type stepExactType, ICompilerStep step)
+		{			
+			return Insert(Find(stepExactType)+1, step);
+		}
+		
+		public CompilerPipeline InsertBefore(Type stepExactType, ICompilerStep step)
+		{
+			return Insert(Find(stepExactType)-1, step);
+		}
+		
+		public CompilerPipeline Replace(Type stepExactType, ICompilerStep step)
+		{
+			if (null == step)
+			{
+				throw new ArgumentNullException("step");
+			}
+			
+			int index = Find(stepExactType);
+			if (-1 == index)
+			{
+				throw new ArgumentException("stepExactType");
+			}
+			_items[index] = step;
+			return this;
+		}
+		
+		public int Find(Type stepExactType)
+		{
+			if (null == stepExactType)
+			{
+				throw new ArgumentNullException("stepExactType");
+			}
+			for (int i=0; i<_items.Count; ++i)
+			{
+				if (_items[i].GetType() == stepExactType)
+				{
+					return i;
+				}
+			}
+			return -1;
+		}
+		
+		public ICompilerStep Get(Type stepExactType)
+		{
+			int index = Find(stepExactType);
+			if (-1 != index)
+			{
+				return (ICompilerStep)_items[index];
+			}
+			return null;
 		}
 
 		public int Count
@@ -81,38 +195,76 @@ namespace Boo.Lang.Compiler
 			{
 				return (ICompilerStep)_items[index];
 			}
+			
+			set
+			{
+				if (null == value)
+				{
+					throw new ArgumentNullException("value");
+				}
+				_items[index] = value;
+			}
 		}
 		
 		virtual public void Clear()
 		{
 			_items.Clear();
 		}
+		
+		virtual protected void OnBeforeStep(CompilerContext context, ICompilerStep step)
+		{
+			if (null != BeforeStep)
+			{
+				BeforeStep(this, new CompilerStepEventArgs(context, step));
+			}
+		}
+		
+		virtual protected void OnAfterStep(CompilerContext context, ICompilerStep step)
+		{
+			if (null != AfterStep)
+			{
+				AfterStep(this, new CompilerStepEventArgs(context, step));
+			}
+		}
 
 		virtual public void Run(CompilerContext context)
 		{
 			foreach (ICompilerStep step in _items)
 			{				
-				context.TraceEnter("Entering {0}...", step);			
+				RunStep(context, step);
 				
-				step.Initialize(context);
-				try
+				if (_breakOnErrors && context.Errors.Count > 0)
 				{
-					step.Run();
+					break;
 				}
-				catch (Boo.Lang.Compiler.CompilerError error)
-				{
-					context.Errors.Add(error);
-				}
-				catch (Exception x)
-				{
-					context.Errors.Add(CompilerErrorFactory.StepExecutionError(x, step));
-				}
-				context.TraceLeave("Left {0}.", step);
 			}
 			
 			foreach (ICompilerStep step in _items)
 			{
 				step.Dispose();
+			}
+		}
+		
+		protected void RunStep(CompilerContext context, ICompilerStep step)
+		{
+			OnBeforeStep(context, step);	
+				
+			step.Initialize(context);
+			try
+			{
+				step.Run();
+			}
+			catch (Boo.Lang.Compiler.CompilerError error)
+			{
+				context.Errors.Add(error);
+			}
+			catch (System.Exception x)
+			{
+				context.Errors.Add(CompilerErrorFactory.StepExecutionError(x, step));
+			}
+			finally
+			{				
+				OnAfterStep(context, step);
 			}
 		}
 	}

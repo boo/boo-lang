@@ -1,29 +1,29 @@
-#region license
-// boo - an extensible programming language for the CLI
-// Copyright (C) 2004 Rodrigo B. de Oliveira
-//
-// Permission is hereby granted, free of charge, to any person 
-// obtaining a copy of this software and associated documentation 
-// files (the "Software"), to deal in the Software without restriction, 
-// including without limitation the rights to use, copy, modify, merge, 
-// publish, distribute, sublicense, and/or sell copies of the Software, 
-// and to permit persons to whom the Software is furnished to do so, 
-// subject to the following conditions:
+﻿#region license
+// Copyright (c) 2004, Rodrigo B. de Oliveira (rbo@acm.org)
+// All rights reserved.
 // 
-// The above copyright notice and this permission notice shall be included 
-// in all copies or substantial portions of the Software.
+// Redistribution and use in source and binary forms, with or without modification,
+// are permitted provided that the following conditions are met:
 // 
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, 
-// EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF 
-// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. 
-// IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY 
-// CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, 
-// TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE 
-// OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+//     * Redistributions of source code must retain the above copyright notice,
+//     this list of conditions and the following disclaimer.
+//     * Redistributions in binary form must reproduce the above copyright notice,
+//     this list of conditions and the following disclaimer in the documentation
+//     and/or other materials provided with the distribution.
+//     * Neither the name of Rodrigo B. de Oliveira nor the names of its
+//     contributors may be used to endorse or promote products derived from this
+//     software without specific prior written permission.
 // 
-// Contact Information
-//
-// mailto:rbo@acm.org
+// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+// ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+// WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+// DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE
+// FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+// DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+// SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+// CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+// OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+// THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #endregion
 
 namespace Boo.Lang
@@ -34,6 +34,8 @@ namespace Boo.Lang
 
 	// callable Predicate(item) as bool
 	public delegate bool Predicate(object item);
+	
+	public delegate int Comparer(object lhs, object rhs); 
 
 	/// <summary>
 	/// List.
@@ -102,6 +104,11 @@ namespace Boo.Lang
 			result.Extend(lhs);
 			result.Extend(rhs);
 			return result;
+		}
+		
+		public static string operator%(string format, List rhs)
+		{
+			return string.Format(format, rhs.ToArray());
 		}
 		
 		public List Multiply(int count)
@@ -248,10 +255,34 @@ namespace Boo.Lang
 			Array.Sort(_items, 0, _count, comparer);
 			return this;
 		}
+		
+		private class ComparerImpl : IComparer
+		{
+			Comparer _comparer;
+			
+			public ComparerImpl(Comparer comparer)
+			{
+				_comparer = comparer;
+			}
+			
+			public int Compare(object lhs, object rhs)
+			{
+				return _comparer(lhs, rhs);
+			}
+		}
+		
+		public List Sort(Comparer comparer)
+		{
+			if (null == comparer)
+			{
+				throw new ArgumentNullException("comparer");
+			}
+			return Sort(new ComparerImpl(comparer));
+		}
 
 		override public string ToString()
 		{
-			return Join(", ");
+			return "[" + Join(", ") + "]";
 		}
 		
 		public string Join(string separator)
@@ -294,7 +325,7 @@ namespace Boo.Lang
 			
 			for (int i=0; i<_count; ++i)
 			{
-				if (!object.Equals(_items[i], rhs[i]))
+				if (!RuntimeServices.op_Equality(_items[i], rhs[i]))
 				{
 					return false;
 				}
@@ -304,26 +335,67 @@ namespace Boo.Lang
 		
 		public void Clear()
 		{
+			for (int i=0; i<_count; ++i)
+			{
+				_items[i] = null;
+			}
 			_count = 0;
+		}
+		
+		public List GetRange(int begin)
+		{
+			return InnerGetRange(AdjustIndex(NormalizeIndex(begin)), _count);
+		}
+		
+		public List GetRange(int begin, int end)
+		{
+			return InnerGetRange(
+					AdjustIndex(NormalizeIndex(begin)),
+					AdjustIndex(NormalizeIndex(end)));
 		}
 		
 		public bool Contains(object item)
 		{
+			return -1 != IndexOf(item);
+		}
+		
+		public bool Contains(Predicate condition)
+		{
+			return -1 != IndexOf(condition);
+		}
+		
+		public object Find(Predicate condition)
+		{
+			int index = IndexOf(condition);
+			if (-1 != index)
+			{
+				return _items[index];
+			}
+			return null;
+		}
+		
+		public int IndexOf(Predicate condition)
+		{
+			if (null == condition)
+			{
+				throw new ArgumentNullException("condition");
+			}
+			
 			for (int i=0; i<_count; ++i)
 			{
-				if (object.Equals(_items[i], item))
+				if (condition(_items[i]))
 				{
-					return true;
+					return i;
 				}
 			}
-			return false;
+			return -1;
 		}
 		
 		public int IndexOf(object item)
 		{			
 			for (int i=0; i<_count; ++i)
 			{
-				if (object.Equals(_items[i], item))
+				if (RuntimeServices.op_Equality(_items[i], item))
 				{
 					return i;
 				}
@@ -453,6 +525,31 @@ namespace Boo.Lang
 					target.Add(item);
 				}
 			}
+		}
+		
+		List InnerGetRange(int begin, int end)
+		{
+			int targetLen = end-begin;
+			if (targetLen > 0)
+			{
+				object[] target = new object[targetLen];
+				Array.Copy(_items, begin, target, 0, targetLen);
+				return new List(target, true);
+			}
+			return new List();
+		}
+		
+		int AdjustIndex(int index)
+		{
+			if (index > _count)
+			{
+				return _count;
+			}
+			if (index < 0)
+			{
+				return 0;
+			}
+			return index;
 		}
 		
 		int CheckIndex(int index)

@@ -59,12 +59,12 @@ interface ICompletionWindowImageProvider:
 		get
 	EventIndex as int:
 		get
-
-class InteractiveInterpreterControl(TextEditorControl):
-	
-	enum InputState:
+		
+internal enum InputState:
 		SingleLine = 0
 		Block = 1
+		
+class InteractiveInterpreterControl(TextEditorControl):	
 		
 	class NullCompletionWindowImageProvider(ICompletionWindowImageProvider):
 		

@@ -2946,7 +2946,7 @@ namespace Boo.Lang.Compiler.Steps
 		{
 			return TypeSystemServices.Map(type);
 		}
-		
+
 		Type GetSystemType(Node node)
 		{
 			return GetSystemType(GetType(node));
@@ -2967,17 +2967,7 @@ namespace Boo.Lang.Compiler.Steps
 					if (tag.IsArray)
 					{				
 						IArrayType arrayType = (IArrayType)tag;
-						IType elementType = GetSimpleEntityType(arrayType);						
-						if (elementType is IInternalEntity)
-						{
-							string typeName = GetArrayTypeName(arrayType);
-							type = _moduleBuilder.GetType(typeName, true);
-						}
-						else
-						{
-							//type = Type.GetType(typeName, true);
-							type = Array.CreateInstance(GetSystemType(arrayType.GetElementType()), 0).GetType();
-						}
+						type = GetSystemType(arrayType.GetElementType()).MakeArrayType();
 					}
 					else
 					{
@@ -2998,69 +2988,6 @@ namespace Boo.Lang.Compiler.Steps
 				_typeCache.Add(tag, type);
 			}
 			return type;
-		}
-		
-		IType GetSimpleEntityType(IArrayType tag)
-		{
-			return GetSimpleEntityType(tag.GetElementType());
-		}
-		
-		IType GetSimpleEntityType(IType tag)
-		{
-			if (tag.IsArray)
-			{
-				return GetSimpleEntityType(((IArrayType)tag).GetElementType());
-			}
-			return tag;
-		}
-		
-		string GetArrayTypeName(IType tag)
-		{
-			System.Text.StringBuilder builder = new System.Text.StringBuilder();
-			GetArrayTypeName(builder, tag);
-			return builder.ToString();			
-		}
-		
-		void GetArrayTypeName(System.Text.StringBuilder buffer, IType tag)
-		{
-			if (tag.IsArray)
-			{
-				GetArrayTypeName(buffer, ((IArrayType)tag).GetElementType());
-				buffer.Append("[]");
-			}
-			else
-			{
-				AppendFullTypeName(buffer, tag);
-			}
-		}
-		
-		void AppendFullTypeName(System.Text.StringBuilder buffer, IType type)
-		{
-			AbstractInternalType internalType = (AbstractInternalType)type;
-			AppendFullTypeName(buffer, internalType.TypeDefinition);
-		}
-		
-		void AppendFullTypeName(System.Text.StringBuilder buffer, TypeDefinition type)
-		{
-			TypeDefinition parent = type.DeclaringType;
-			if (null != parent)
-			{
-				if (NodeType.Module == parent.NodeType)
-				{
-					NamespaceDeclaration ns = parent.EnclosingNamespace;
-					if (null != ns)
-					{
-						buffer.Append(ns.Name);
-						buffer.Append('.');
-					}
-				}
-				else
-				{
-					AppendFullTypeName(buffer, parent);
-					buffer.Append('+'); // nested type
-				}
-			}
-			buffer.Append(type.Name);
 		}
 		
 		TypeAttributes GetNestedTypeAttributes(TypeMember type)

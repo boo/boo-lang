@@ -309,6 +309,9 @@ class MethodInvocationExpression(Expression, INodeWithArguments):
 	Target as Expression
 	Arguments as ExpressionCollection
 	NamedArguments as ExpressionPairCollection
+	
+class GenericMethodInvocationExpression(MethodInvocationExpression):
+	TypeParameters as TypeReferenceCollection
 
 enum BinaryOperatorType:
 	None

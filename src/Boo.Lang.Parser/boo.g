@@ -1930,6 +1930,26 @@ member returns [Token name]
 	;
 	
 protected
+generic_method_invocation[Expression target] returns [GenericMethodInvocationExpression gmi]
+	{
+		TypeReference tr = null;
+		gmi = new GenericMethodInvocationExpression();
+		gmi.Target = target;
+	}:
+	start:LESS_THAN
+		tr=type_reference { gmi.TypeParameters.Add(tr); }
+		(COMMA tr=type_reference { gmi.TypeParameters.Add(tr); } )*
+	GREATER_THAN
+	LPAREN
+		argument_list[gmi]
+	end:RPAREN
+	{
+		gmi.LexicalInfo = ToLexicalInfo(start);
+		gmi.EndSourceLocation = ToLexicalInfo(end);
+	}
+	;
+	
+protected
 slicing_expression returns [Expression e]
 	{
 		e = null;
@@ -1940,7 +1960,11 @@ slicing_expression returns [Expression e]
 		Token memberName = null;
 	} :
 	e=atom
-	( options { greedy=true; }:
+	( options { greedy=true; }:	
+		(LESS_THAN type_reference (COMMA type_reference)* GREATER_THAN LPAREN)=>(
+			e=generic_method_invocation[e]
+		)
+		|
 		(
 			lbrack:LBRACK
 			(

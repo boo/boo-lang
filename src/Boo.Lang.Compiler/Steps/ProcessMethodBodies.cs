@@ -3185,7 +3185,32 @@ namespace Boo.Lang.Compiler.Steps
 			}
 			return resolved;
 		}
-		
+
+		void ResolveGenericType(Expression node)
+		{
+			if (NodeType.ReferenceExpression != node.NodeType)
+			{
+				NotImplemented(node, "ResolveGenericType on anything but simple type references");
+			}
+		}
+
+		public override void OnGenericMethodInvocationExpression(GenericMethodInvocationExpression node)
+		{
+			Visit(node.Arguments);
+			Visit(node.TypeParameters);
+			Visit(node.NamedArguments);
+
+			ResolveGenericType(node.Target);
+
+			IType type = GetType(node.Target);
+			if (!type.IsGenericTypeDefinition)
+			{
+				NotImplemented(node, "GenericMethodInvocation on non generic definition.");
+			}
+
+			NotImplemented(node, "GenericMethodInvocation");
+		}
+
 		override public void OnMethodInvocationExpression(MethodInvocationExpression node)
 		{			
 			if (null != node.ExpressionType)

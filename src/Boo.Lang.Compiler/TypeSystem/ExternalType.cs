@@ -31,12 +31,35 @@ namespace Boo.Lang.Compiler.TypeSystem
 	using System;
 	using System.Reflection;
 
+	public class ExternalGenericType : ExternalType
+	{
+		internal ExternalGenericType(TypeSystemServices typeSystemServices, Type type) : base(typeSystemServices, type)
+		{
+		}
+
+		override public string Name
+		{
+			get
+			{
+				return _type.Name.Split('`')[0];
+			}
+		}
+
+		override public bool IsGenericTypeDefinition
+		{
+			get
+			{
+				return true;
+			}
+		}
+	}
+
 	public class ExternalType : IType
 	{
 		protected TypeSystemServices _typeSystemServices;
-		
-		Type _type;
-		
+
+		protected Type _type;
+
 		IConstructor[] _constructors;
 		
 		IType[] _interfaces;
@@ -55,7 +78,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 			_type = type;
 		}
 		
-		public string FullName
+		public virtual string FullName
 		{
 			get
 			{
@@ -63,7 +86,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 			}
 		}
 		
-		public string Name
+		public virtual string Name
 		{
 			get
 			{
@@ -177,11 +200,11 @@ namespace Boo.Lang.Compiler.TypeSystem
 			}
 		}
 
-		public bool IsGenericTypeDefinition
+		public virtual bool IsGenericTypeDefinition
 		{
 			get
 			{
-				return _type.IsGenericTypeDefinition;
+				return false;
 			}
 		}
 

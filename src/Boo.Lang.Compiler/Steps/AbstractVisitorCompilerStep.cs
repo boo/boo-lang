@@ -126,6 +126,7 @@ namespace Boo.Lang.Compiler.Steps
 		protected void Error(Expression node)
 		{
 			node.ExpressionType = TypeSystemServices.ErrorEntity;
+			node.Entity = TypeSystemServices.ErrorEntity;
 		}
 
 		protected void Bind(Node node, IEntity tag)

@@ -447,9 +447,23 @@ namespace Boo.Lang.Compiler.Ast.Visitors
 			WriteLine();
 		}
 
+		public override void OnGenericMethodInvocationExpression(GenericMethodInvocationExpression node)
+		{
+			Visit(node.Target);
+			Write("<");
+			WriteCommaSeparatedList(node.TypeParameters);
+			Write(">");
+			WriteMethodInvocationArguments(node);
+		}
+
 		override public void OnMethodInvocationExpression(MethodInvocationExpression e)
 		{
 			Visit(e.Target);
+			WriteMethodInvocationArguments(e);
+		}
+
+		private void WriteMethodInvocationArguments(MethodInvocationExpression e)
+		{
 			Write("(");
 			WriteCommaSeparatedList(e.Arguments);
 			if (e.NamedArguments.Count > 0)
@@ -459,10 +473,10 @@ namespace Boo.Lang.Compiler.Ast.Visitors
 					Write(", ");
 				}
 				WriteCommaSeparatedList(e.NamedArguments);
-			}			
+			}
 			Write(")");
 		}
-		
+
 		override public void OnArrayLiteralExpression(ArrayLiteralExpression node)
 		{
 			WriteArray(node.Items);

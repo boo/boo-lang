@@ -493,11 +493,16 @@ namespace Boo.Lang.Compiler.Steps
 			// if the type of the inner expression is not
 			// void we need to pop its return value to leave
 			// the stack sane
+			DiscardValueOnStack();
+			AssertStackIsEmpty("stack must be empty after a statement!");
+		}
+		
+		void DiscardValueOnStack()
+		{
 			if (PopType() != TypeSystemServices.VoidType)
 			{				
 				_il.Emit(OpCodes.Pop);				
 			}
-			AssertStackIsEmpty("stack must be empty after a statement!");
 		}
 		
 		override public void OnUnlessStatement(UnlessStatement node)
@@ -1344,15 +1349,17 @@ namespace Boo.Lang.Compiler.Steps
 			MethodInfo mi = GetMethodInfo(methodInfo);
 			OpCode code = OpCodes.Call;
 			if (!mi.IsStatic)
-			{				
+			{					
 				Expression target = ((MemberReferenceExpression)node.Target).Target;
 				IType targetType = target.ExpressionType;
 				if (targetType.IsValueType)
-				{				
+				{	
+					
 					if (mi.DeclaringType == Types.Object)
 					{
 						Visit(node.Target); 
 						_il.Emit(OpCodes.Box, GetSystemType(PopType()));
+						code = OpCodes.Callvirt;
 					}
 					else
 					{
@@ -1361,12 +1368,12 @@ namespace Boo.Lang.Compiler.Steps
 				}
 				else
 				{
-					// pushes target reference
-					Visit(node.Target); PopType();
 					if (mi.IsVirtual)
 					{
 						code = OpCodes.Callvirt;
 					}
+					// pushes target reference
+					Visit(node.Target); PopType();					
 				}
 			}
 			PushArguments(methodInfo, node.Arguments);
@@ -1392,11 +1399,59 @@ namespace Boo.Lang.Compiler.Steps
 			PushType(TypeSystemServices.TypeType);
 		}
 		
+		void OnEval(MethodInvocationExpression node)
+		{
+			int allButLast = node.Arguments.Count-1;
+			for (int i=0; i<allButLast; ++i)
+			{
+				Visit(node.Arguments[i]);
+				DiscardValueOnStack();
+			}
+			
+			Visit(node.Arguments[-1]);
+		}
+		
+		void OnAddressOf(MethodInvocationExpression node)
+		{
+			_il.Emit(OpCodes.Ldftn, GetMethodInfo((IMethod)GetEntity(node.Arguments[0])));
+			PushType(TypeSystemServices.IntPtrType);
+		}
+		
+		void OnBuiltinFunction(BuiltinFunction function, MethodInvocationExpression node)
+		{
+			switch (function.FunctionType)
+			{
+				case BuiltinFunctionType.AddressOf:
+				{
+					OnAddressOf(node);
+					break;
+				}
+				
+				case BuiltinFunctionType.Eval:
+				{
+					OnEval(node);
+					break;
+				}
+				
+				default:
+				{
+					NotImplemented(node, "BuiltinFunction: " + function.FunctionType);
+					break;
+				}
+			}
+		}
+		
 		override public void OnMethodInvocationExpression(MethodInvocationExpression node)
 		{				
 			IEntity tag = TypeSystemServices.GetEntity(node.Target);
 			switch (tag.EntityType)
 			{
+				case EntityType.BuiltinFunction:
+				{
+					OnBuiltinFunction((BuiltinFunction)tag, node);
+					break;
+				}
+				
 				case EntityType.Method:
 				{	
 					IMethod methodInfo = (IMethod)tag;

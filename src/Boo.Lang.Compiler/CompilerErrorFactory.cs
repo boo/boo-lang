@@ -206,7 +206,7 @@ namespace Boo.Lang.Compiler
 			return new CompilerError("BCE0033", node.LexicalInfo, attributeType);
 		}
 		
-		public static CompilerError ExpressionStatementMustHaveSideEffect(Node node)
+		public static CompilerError ExpressionMustBeExecutedForItsSideEffects(Node node)
 		{
 			return new CompilerError("BCE0034", node.LexicalInfo);
 		}
@@ -414,6 +414,16 @@ namespace Boo.Lang.Compiler
 		public static CompilerError TypeIsNotCallable(Node node, string name)
 		{
 			return new CompilerError("BCE0077", node.LexicalInfo, name);
+		}
+		
+		public static CompilerError MethodReferenceExpected(Node node)
+		{
+			return new CompilerError("BCE0078", node.LexicalInfo);
+		}
+		
+		public static CompilerError AddressOfOutsideDelegateConstructor(Node node)
+		{
+			return new CompilerError("BCE0079", node.LexicalInfo);
 		}
 		
 		public static string ToStringList(System.Collections.IEnumerable names)

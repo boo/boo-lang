@@ -30,6 +30,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 {
 	using System;
 	using System.Reflection;
+	using System.Text;
 	using Boo.Lang.Compiler;	
 	using Boo.Lang.Compiler.Ast;
 
@@ -101,9 +102,9 @@ namespace Boo.Lang.Compiler.TypeSystem
 		
 		System.Collections.Hashtable _anonymousCallableTypes = new System.Collections.Hashtable();
 		
-		static readonly IEntity _lenInfo = new BuiltinFunction(BuiltinFunctionType.Len);
-		
 		public static readonly IType ErrorEntity = Boo.Lang.Compiler.TypeSystem.Error.Default;
+		
+		StringBuilder _buffer = new StringBuilder();
 		
 		public TypeSystemServices()		
 		{			
@@ -201,6 +202,64 @@ namespace Boo.Lang.Compiler.TypeSystem
 				_anonymousCallableTypes.Add(signature, type);
 			}
 			return type;
+		}		
+		
+		public ParameterDeclaration CreateParameterDeclaration(int index, string name, IType type)
+		{
+			ParameterDeclaration parameter = new ParameterDeclaration(name, CreateTypeReference(type));
+			parameter.Entity = new InternalParameter(parameter, index);
+			return parameter;
+		}
+		
+		public ClassDefinition CreateCallableDefinition(string name)
+		{
+			ClassDefinition cd = new ClassDefinition();
+			cd.BaseTypes.Add(CreateTypeReference(this.MulticastDelegateType));
+			cd.BaseTypes.Add(CreateTypeReference(this.ICallableType));
+			cd.Name = name;
+			cd.Modifiers = TypeMemberModifiers.Final;
+			cd.Members.Add(CreateCallableConstructor());
+			cd.Members.Add(CreateCallMethod());			
+			cd.Entity = new InternalCallableType(this, cd);
+			return cd;
+		}
+		
+		Method CreateCallMethod()
+		{
+			Method method = new Method("Call");
+			method.Modifiers = TypeMemberModifiers.Public|TypeMemberModifiers.Virtual;
+			method.Parameters.Add(CreateParameterDeclaration(0, "args", ObjectArrayType));
+			method.ReturnType = CreateTypeReference(ObjectType);
+			method.Entity = new InternalMethod(this, method);
+			return method;
+		}
+		
+		Constructor CreateCallableConstructor()
+		{
+			Constructor constructor = new Constructor();
+			constructor.Modifiers = TypeMemberModifiers.Public;
+			constructor.ImplementationFlags = MethodImplementationFlags.Runtime;
+			constructor.Parameters.Add(
+						CreateParameterDeclaration(0, "instance", ObjectType));
+			constructor.Parameters.Add(
+						CreateParameterDeclaration(1, "method", IntPtrType));
+			constructor.Entity = new InternalConstructor(this, constructor);						
+			return constructor;
+		}
+		
+		public static bool IsCallableTypeAssignableFrom(ICallableType lhs, IType rhs)
+		{
+			if (lhs == rhs || Null.Default == rhs)
+			{
+				return true;
+			}
+			
+			ICallableType other = rhs as ICallableType;
+			if (null != other)
+			{			
+				return lhs.GetSignature() == other.GetSignature(); 
+			}
+			return false;
 		}
 		
 		public static bool CheckOverrideSignature(IMethod impl, IMethod baseMethod)
@@ -220,35 +279,6 @@ namespace Boo.Lang.Compiler.TypeSystem
 				return true;
 			}
 			return false;
-		}
-		
-		public static string GetSignature(IMethod tag)
-		{			
-			System.Text.StringBuilder sb = new System.Text.StringBuilder(tag.DeclaringType.FullName);
-			sb.Append(".");
-			sb.Append(tag.Name);
-			sb.Append("(");
-			
-			IParameter[] parameters = tag.GetParameters();
-			for (int i=0; i<parameters.Length; ++i)
-			{				
-				if (i>0) 
-				{
-					sb.Append(", ");
-				}
-				sb.Append(parameters[i].Type.FullName);
-			}
-			sb.Append(")");
-			
-			/*
-			IType rt = tag.ReturnType;
-			if (null != rt)
-			{
-				sb.Append(" as ");
-				sb.Append(rt.FullName);
-			}
-			*/
-			return sb.ToString();
 		}
 		
 		public static bool IsUnknown(Expression node)
@@ -398,7 +428,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 		
 		public IEntity Map(System.Reflection.MemberInfo mi)
 		{
-			IEntity tag = (IEntity)_entityCache[mi];
+			IEntity tag = (IEntity)_entityCache[GetCacheKey(mi)];
 			if (null == tag)
 			{			
 				switch (mi.MemberType)
@@ -443,9 +473,30 @@ namespace Boo.Lang.Compiler.TypeSystem
 						throw new NotImplementedException(mi.ToString());
 					}
 				}
-				_entityCache.Add(mi, tag);
+				_entityCache.Add(GetCacheKey(mi), tag);
 			}
 			return tag;
+		}
+		
+		public string GetSignature(IMethod method)
+		{
+			_buffer.Length = 0;
+			_buffer.Append(method.FullName);
+			_buffer.Append("(");
+			
+			IParameter[] parameters = method.GetParameters();
+			for (int i=0; i<parameters.Length; ++i)
+			{
+				if (i > 0) { _buffer.Append(", "); }
+				_buffer.Append(parameters[i].Type.FullName);
+			}
+			_buffer.Append(")");
+			return _buffer.ToString();
+		}
+		
+		public object GetCacheKey(System.Reflection.MemberInfo mi)
+		{
+			return mi;
 		}
 		
 		public IEntity ResolvePrimitive(string name)
@@ -470,7 +521,9 @@ namespace Boo.Lang.Compiler.TypeSystem
 			AddPrimitiveType("long", LongType);
 			AddPrimitiveType("single", SingleType);
 			AddPrimitiveType("double", DoubleType);
-			AddPrimitive("len", _lenInfo);
+			AddPrimitive("len", new BuiltinFunction(BuiltinFunctionType.Len));
+			AddPrimitive("__addressof__", new BuiltinFunction(BuiltinFunctionType.AddressOf));
+			AddPrimitive("__eval__", new BuiltinFunction(BuiltinFunctionType.Eval));
 		}
 		
 		void AddPrimitiveType(string name, ExternalType type)

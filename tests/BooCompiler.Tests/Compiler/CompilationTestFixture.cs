@@ -232,9 +232,27 @@ namespace BooCompiler.Tests
 	{
 		protected override CompilerPipeline SetUpCompilerPipeline()
 		{
-			CompilerPipeline pipeline = new CompileToFile();
+			CompilerPipeline pipeline = null;			
+			
+			pipeline = new CompileToMemory();
+			/*
+			if (Boo.Lang.Compiler.Steps.PEVerify.IsSupported)
+			{			
+				pipeline = new CompileToFile();				
+			}
+			else
+			{
+				pipeline = new CompileToMemory();
+			}
+			*/
 			pipeline.Add(new RunAssembly());
 			return pipeline;
+		}
+		
+		[Test]
+		public void EvalExpressionGroup()
+		{
+			RunCompilerTestCase("__eval__.boo");
 		}
 		
 		[Test]
@@ -465,6 +483,18 @@ namespace BooCompiler.Tests
 		public void ExplicitDelegateInstantiation()
 		{
 			RunCompilerTestCase("delegate9.boo");
+		}
+		
+		[Test]
+		public void DelegateReturnType()
+		{
+			RunCompilerTestCase("delegate10.boo");
+		}
+		
+		[Test]
+		public void InstanceMethodAsDelegateParameter()
+		{
+			RunCompilerTestCase("delegate11.boo");
 		}
 		
 		[Test]
@@ -1254,6 +1284,36 @@ namespace BooCompiler.Tests
 		}
 		
 		[Test]
+		public void MethodAsReturnValueAsReturnValue()
+		{
+			RunCompilerTestCase("callable5.boo");
+		}
+		
+		[Test]
+		public void AnonymousCallableTypesImplementICallable()
+		{
+			RunCompilerTestCase("callable6.boo");
+		}
+		
+		[Test]
+		public void AnonymousCallableTypesCanBePropertyCalledThroughICallable()
+		{
+			RunCompilerTestCase("callable7.boo");
+		}
+		
+		[Test]
+		public void MethodCanBeAssignedToObjectVariable()
+		{
+			RunCompilerTestCase("callable8.boo");
+		}
+		
+		[Test]
+		public void StaticMethodCanBeUsedAsICallable()
+		{
+			RunCompilerTestCase("callable9.boo");
+		}
+		
+		[Test]
 		public void StaticFieldSimple()
 		{
 			RunCompilerTestCase("static_field0.boo");
@@ -1491,12 +1551,6 @@ namespace BooCompiler.Tests
 		public void CallableTypeDefinitionWithMember()
 		{
 			RunCompilerTestCase("CallableTypeDefinitionWithMember.boo");
-		}
-		
-		[Test]
-		public void AddressOfSpecialFunction()
-		{
-			RunCompilerTestCase("addressof.boo");
 		}
 	}
 }

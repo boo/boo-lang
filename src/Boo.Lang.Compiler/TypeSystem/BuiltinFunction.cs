@@ -30,7 +30,9 @@ namespace Boo.Lang.Compiler.TypeSystem
 {
 	public enum BuiltinFunctionType
 	{
-		Len
+		Len,
+		AddressOf,
+		Eval
 	}
 	
 	public class BuiltinFunction : IEntity

@@ -1,24 +1,32 @@
-﻿* usar delegates externos
-	* delegate5.boo
-	* delegate6.boo
-	* delegate7.boo
-	* delegate8.boo
-	
-* fix event handling
+﻿* fix event handling
+	* __eval__
+	* delegate1.boo
+	* delegate2.boo
+	* delegate3.boo
+	* delegate4.boo
+
+* fix ICallable for callable types
+	* callable7.boo
+	* callable8.boo
+	* callable6.boo
+	* callable9.boo
 	
 * software de blogging para a apresentação
 	* modelo de objetos simples com Bamboo.Prevalence
 	* editor web com autenticação forms
 	* editor RichClient
 	* segurança com par chave pública/privada
+
+* callable type adaptation
+
+* addressof cannot be used outside delegate constructors
+
+* anonymous callable type notation
+	def map(fn as callable(object) as object, enumerable)
+	def map(fn as (object)->object, enumerable)
+	def map(fn as object->object, enumerable)
 	
 * rever os exemplos de pipeline
-
-* usar os delegates declarados
-
-* CallableType
-	* para funçoes
-	* para delegates (o tipo de um evento seria o CallableType equivalente ao delegate)
 
 * map(callable, enumerable)
 

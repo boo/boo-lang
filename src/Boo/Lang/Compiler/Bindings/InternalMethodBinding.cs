@@ -166,7 +166,7 @@ namespace Boo.Lang.Compiler.Bindings
 				
 				if (name == local.Name)
 				{
-					return _bindingManager.GetBinding(local);
+					return BindingManager.GetBinding(local);
 				}
 			}
 			
@@ -174,7 +174,7 @@ namespace Boo.Lang.Compiler.Bindings
 			{
 				if (name == parameter.Name)
 				{
-					return _bindingManager.GetBinding(parameter);
+					return BindingManager.GetBinding(parameter);
 				}
 			}
 			return null;

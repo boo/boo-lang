@@ -103,7 +103,7 @@ namespace Boo.Lang.Compiler.Bindings
 			Bind(node, ErrorBinding.Default);
 		}
 		
-		public IBinding GetOptionalBinding(Node node)
+		public static IBinding GetOptionalBinding(Node node)
 		{
 			if (null == node)
 			{
@@ -113,7 +113,7 @@ namespace Boo.Lang.Compiler.Bindings
 			return (IBinding)node[BindingKey];
 		}
 		
-		public IBinding GetBinding(Node node)
+		public static IBinding GetBinding(Node node)
 		{
 			IBinding binding = GetOptionalBinding(node);
 			if (null == binding)

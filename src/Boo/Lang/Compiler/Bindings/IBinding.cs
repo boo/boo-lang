@@ -28,6 +28,8 @@
 #endregion
 
 using System;
+using System.Collections;
+using Boo.Lang.Ast;
 
 namespace Boo.Lang.Compiler.Bindings
 {
@@ -68,14 +70,56 @@ namespace Boo.Lang.Compiler.Bindings
 		}
 		
 		event EventHandler Resolved;
+		
+		void AddDependent(Node node);
+		
+		bool ContainsDependent(Node node);
 	}	
 	
 	public abstract class AbstractInternalBinding
 	{
 		protected EventHandler _resolved;
 		
+		protected ArrayList _dependents;
+		
 		protected AbstractInternalBinding()
 		{
+		}
+		
+		public void AddDependent(Node node)
+		{
+			if (null == node)
+			{
+				throw new ArgumentNullException("node");
+			}
+			
+			if (null == _dependents)
+			{
+				_dependents = new ArrayList();
+			}
+			
+			_dependents.Add(node);
+		}
+		
+		public bool ContainsDependent(Node node)
+		{
+			if (null != _dependents)
+			{
+				foreach (Node item in _dependents)
+				{
+					if (item == node)
+					{
+						return true;
+					}
+					
+					IBinding binding = BindingManager.GetBinding(item);
+					if (binding.ContainsDependent(node))
+					{
+						return true;
+					}
+				}
+			}
+			return false;
 		}
 		
 		public virtual bool IsResolved
@@ -122,16 +166,26 @@ namespace Boo.Lang.Compiler.Bindings
 			}
 		}
 		
+		public void AddDependent(Node node)
+		{
+			throw new NotSupportedException();
+		}
+		
+		public bool ContainsDependent(Node node)
+		{
+			return false;
+		}
+		
 		public event EventHandler Resolved
 		{
 			add
 			{
-				throw new InvalidOperationException("node already resolved!");
+				throw new NotSupportedException();
 			}
 			
 			remove
 			{
-				throw new InvalidOperationException("node already resolved!");
+				throw new NotSupportedException();
 			}
 		}
 	}

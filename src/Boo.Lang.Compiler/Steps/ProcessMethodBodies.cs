@@ -3186,21 +3186,12 @@ namespace Boo.Lang.Compiler.Steps
 			return resolved;
 		}
 
-		void ResolveGenericType(Expression node)
+		public override void LeaveGenericMethodInvocationExpression(GenericMethodInvocationExpression node)
 		{
-			if (NodeType.ReferenceExpression != node.NodeType)
+			if (NodeType.ReferenceExpression != node.Target.NodeType)
 			{
 				NotImplemented(node, "ResolveGenericType on anything but simple type references");
 			}
-		}
-
-		public override void OnGenericMethodInvocationExpression(GenericMethodInvocationExpression node)
-		{
-			Visit(node.Arguments);
-			Visit(node.TypeParameters);
-			Visit(node.NamedArguments);
-
-			ResolveGenericType(node.Target);
 
 			IType type = GetType(node.Target);
 			if (!type.IsGenericTypeDefinition)
@@ -3208,7 +3199,9 @@ namespace Boo.Lang.Compiler.Steps
 				NotImplemented(node, "GenericMethodInvocation on non generic definition.");
 			}
 
-			NotImplemented(node, "GenericMethodInvocation");
+			IType boundType = type.BindGenericParameters(node.TypeParameters.ToTypeArray());
+			node.Target.Entity = boundType;
+			ProcessTypeInvocation(node);
 		}
 
 		override public void OnMethodInvocationExpression(MethodInvocationExpression node)
@@ -3425,7 +3418,7 @@ namespace Boo.Lang.Compiler.Steps
 				// rebind the target now we know
 				// it is a constructor call
 				Bind(node.Target, ctor);
-				BindExpressionType(node, type);
+				BindExpressionType(node, ctor.DeclaringType);
 				
 				if (node.NamedArguments.Count > 0)
 				{

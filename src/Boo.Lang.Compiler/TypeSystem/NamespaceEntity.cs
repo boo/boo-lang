@@ -222,10 +222,14 @@ namespace Boo.Lang.Compiler.TypeSystem
 			{				
 				foreach (Type type in types)
 				{
-					if (name == type.Name)
+					if (type.Name.StartsWith(name))
 					{
-						targetList.Add(_typeSystemServices.Map(type));
-						return true;
+						if (type.Name.Length == name.Length ||
+							(type.IsGenericTypeDefinition && '`' == type.Name[name.Length]))
+						{
+							targetList.Add(_typeSystemServices.Map(type));
+							return true;
+						}
 					}
 				}
 			}

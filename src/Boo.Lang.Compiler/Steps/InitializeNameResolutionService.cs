@@ -38,8 +38,6 @@ namespace Boo.Lang.Compiler.Steps
 	public class InitializeNameResolutionService : AbstractVisitorCompilerStep
 	{
 		Hashtable _namespaces = new Hashtable();
-
-		Boo.Lang.List _buffer = new Boo.Lang.List();
 		
 		public InitializeNameResolutionService()
 		{

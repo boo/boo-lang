@@ -193,6 +193,11 @@ namespace Boo.Lang.Compiler.TypeSystem
 		{
 			return Name;
 		}
+
+		public virtual IType BindGenericParameters(IType[] parameters)
+		{
+			throw new System.NotSupportedException("BindGenericParameters");
+		}
 	}
 	
 	public class Null : AbstractType

@@ -183,6 +183,8 @@ namespace Boo.Lang.Compiler.TypeSystem
 		bool IsSubclassOf(IType other);
 		
 		bool IsAssignableFrom(IType other);
+
+		IType BindGenericParameters(IType[] parameters);
 	}
 	
 	public interface ICallableType : IType

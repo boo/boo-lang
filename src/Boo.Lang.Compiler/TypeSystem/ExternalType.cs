@@ -52,6 +52,16 @@ namespace Boo.Lang.Compiler.TypeSystem
 				return true;
 			}
 		}
+
+		override public IType BindGenericParameters(IType[] parameters)
+		{
+			System.Type[] types = new System.Type[parameters.Length];
+			for (int i = 0; i < types.Length; ++i)
+			{
+				types[i] = ((ExternalType)parameters[i]).ActualType;
+			}
+			return _typeSystemServices.Map(_type.BindGenericParameters(types));
+		}
 	}
 
 	public class ExternalType : IType
@@ -337,7 +347,12 @@ namespace Boo.Lang.Compiler.TypeSystem
 		{
 			return FullName;
 		}
-		
+
+		public virtual IType BindGenericParameters(IType[] parameters)
+		{
+			throw new NotSupportedException("BindGenericParameters");
+		}
+
 		static int GetTypeDepth(Type type)
 		{
 			if (type.IsInterface)

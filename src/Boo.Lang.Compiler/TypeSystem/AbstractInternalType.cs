@@ -326,6 +326,11 @@ namespace Boo.Lang.Compiler.TypeSystem
 		{
 			return FullName;
 		}
+
+		public virtual IType BindGenericParameters(IType[] parameters)
+		{
+			throw new NotSupportedException("BindGenericParameters");
+		}
 	}
 
 }

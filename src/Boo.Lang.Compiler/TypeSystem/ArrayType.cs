@@ -223,7 +223,12 @@ namespace Boo.Lang.Compiler.TypeSystem
 				return _array.ParentNamespace;
 			}
 		}
-		
+
+		public virtual IType BindGenericParameters(IType[] parameters)
+		{
+			throw new NotSupportedException("BindGenericParameters");
+		}
+
 		public bool Resolve(Boo.Lang.List targetList, string name, EntityType flags)
 		{
 			return _array.Resolve(targetList, name, flags);

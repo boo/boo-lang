@@ -1679,7 +1679,12 @@ namespace Boo.Lang.Compiler.Steps
 				}
 			}
 		}
-		
+
+		public override void OnGenericMethodInvocationExpression(GenericMethodInvocationExpression node)
+		{
+			OnMethodInvocationExpression(node);
+		}
+
 		override public void OnMethodInvocationExpression(MethodInvocationExpression node)
 		{				
 			IEntity tag = TypeSystemServices.GetEntity(node.Target);

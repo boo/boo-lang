@@ -8,14 +8,14 @@
 		<nunit2>       
 			<formatter type="Plain" />
 			<test>
-				<assemblies basedir="build">
-					<include name="Boo.AntlrParser.Tests.dll" />
+				<assemblies basedir="build">				
 					<include name="Boo.Tests.dll" />
+					<include name="Boo.Lang.Parser.Tests.dll" />
 					<include name="Boo.Lang.Compiler.Tests.dll" />
+					<include name="Boo.Lang.Interpreter.Tests.dll" />
 					<include name="BooCompiler.Tests.dll" />					
 					<include name="BooCompilerResources.Tests.dll" />					
-					<include name="Regression.Tests.dll" />
-					<include name="Booish.Tests.dll" />
+					<include name="Regression.Tests.dll" />					
 				</assemblies>
 			</test>
 		</nunit2>
@@ -100,24 +100,24 @@
 		
 		<booc
 			target="library"
-			output="build/Booish.Tests.dll">
+			output="build/Boo.Lang.Interpreter.Tests.dll">
 			
-			<sources basedir="Booish.Tests">
+			<sources basedir="Boo.Lang.Interpreter.Tests">
 				<include name="**/*.boo" />
 			</sources>
 			
 			<references basedir="build">
-				<include name="booish.exe" />
+				<include name="Boo.Lang.Interpreter.dll" />
 				<include name="${nunit.framework.dll}" />
 			</references>
 		</booc>
 		
 		<csc
 			target="library"
-			output="build/Boo.AntlrParser.Tests.dll">
+			output="build/Boo.Lang.Parser.Tests.dll">
 			
 			<sources>
-				<include name="Boo.AntlrParser.Tests/**/*.cs" />
+				<include name="Boo.Lang.Parser.Tests/**/*.cs" />
 				<include name="build/ParserRoundtripTestFixture.cs" />
 			</sources>
 			
@@ -125,8 +125,7 @@
 				<include name="${nunit.framework.dll}" />
 				<include name="BooCompiler.Tests.dll" />
 				<include name="Boo.Lang.Compiler.dll" />				
-				<include name="Boo.AntlrParser.dll" />
-				<include name="antlr.runtime.dll" />
+				<include name="Boo.Lang.Parser.dll" />
 			</references>			
 		</csc>
 	</target>
@@ -136,7 +135,6 @@
 		<mkdir dir="build" />
 		<copy todir="build">
 			<fileset basedir="../build">
-				<include name="booish.exe" />
 				<include name="*.dll" />
 				<include name="*.pdb" />
 				<include name="pt/*.dll" />

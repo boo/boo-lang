@@ -2,8 +2,8 @@
 <project name="BooDevelop" default="compile">
 	<!-- run this using NAnt nightly, but you have to force NAnt to run under .NET 1.1 (otherwise you get a BadImageFormatException) -->
 	
-	<property name="sharpdevelop.dir" value = "D:\Fidalgo\SharpDevelop" />
-	<property name="boo.dir" value="../../../bin" />
+	<property name="extras.dir" value="${path::get-full-path('../..')}" />
+	<include buildfile="${extras.dir}/common-properties.build" />
 	
 	<!-- Adjust these properties to point to your sharpdevelop directory / boo binary directory -->
 	<include buildfile="build.properties" if="${file::exists('build.properties')}" />	
@@ -30,8 +30,29 @@
 		<exec program="icons/ResAsm.exe" commandline="*.txtres" workingdir="icons"/>
 	</target>
 	
+	<target name="run" depends="compile">
+		<exec program="${sharpdevelop.dir}bin/SharpDevelop.exe">
+		</exec>
+	</target>
+	
 	<target name="compile" depends="init, resources">
 		<mkdir dir="${addin.dir}"/>
+		
+		<nant buildfile="../../booish.gui/default.build" target="build" />
+		
+		<copy todir="${addin.dir}" file="../../booish.gui/build/booish.gui.exe" />
+		
+		<copy todir="${addin.dir}">
+			<fileset basedir="${boo.dir}">
+				<include name="Boo.dll" />
+				<include name="Boo.Lang.Compiler.dll" />
+				<include name="Boo.Lang.Parser.dll" />
+				<include name="Boo.Lang.Interpreter.dll" />
+				<include name="booc.exe" />
+				<include name="booc.rsp" />
+			</fileset>
+		</copy>
+		
 		<booc target="library" output="${addin.dir}/BooBinding.dll">
 			<references>
 				<include name="${sharp.dir}/ICSharpCode.Core.Dll" />
@@ -41,11 +62,13 @@
 				<include name="System.Windows.Forms.dll" />
 				<include name="System.Drawing.dll" />
 				<include name="System.Xml.dll" />
-				<include name="${boo.dir}/booish.exe" />
+				<include name="${addin.dir}/Boo.Lang.Compiler.dll" />
+				<include name="${addin.dir}/Boo.Lang.Parser.dll" />
+				<include name="${addin.dir}/Boo.Lang.Interpreter.dll" />
+				<include name="${addin.dir}/booish.gui.exe" />
 			</references>
 			<sources basedir=".">
 				<include name = "src/**/*.boo" />
-				<include name = "../../booish.gui/src/PromptBox.boo" />
 			</sources>
 			<resources>
 				<include name = "icons/*.resources" />
@@ -61,15 +84,6 @@
 		<copy todir="${sharpdevelop.dir}/data/templates/file/Boo">
 			<fileset basedir=".">
 				<include name="*.xft"/>
-			</fileset>
-		</copy>
-		<copy todir="${addin.dir}">
-			<fileset basedir="${boo.dir}">
-				<include name="Boo.dll" />
-				<include name="Boo.Lang.Compiler.dll" />
-				<include name="Boo.AntlrParser.dll" />
-				<include name="antlr.runtime.dll" />
-				<include name="booish.exe" />
 			</fileset>
 		</copy>
 		<copy file="Boo.xshd" todir="${sharpdevelop.dir}/data/modes" />
@@ -88,9 +102,10 @@
 				<include name="data/templates/project/Boo/**"/>
 				<include name="${reladdin.dir}/*.addin"/>
 				<include name="${reladdin.dir}/*.dll"/>
+				<include name="${reladdin.dir}/*.exe"/>
+				<include name="${reladdin.dir}/*.rsp"/>
 			</fileset>
 		</zip>
-		<copy file="../../booish.gui/src/PromptBox.boo" todir="src" />
 		<zip zipfile="BooBindingSource.zip" ziplevel="9" includeemptydirs="false">
 			<fileset basedir=".">
 				<include name="**/*.xft"/>
@@ -105,6 +120,5 @@
 				<include name="**/*.png"/>
 			</fileset>
 		</zip>
-		<delete file="src/PromptBox.boo" />
 	</target>
 </project>

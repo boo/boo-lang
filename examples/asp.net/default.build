@@ -1,12 +1,13 @@
 <?xml version="1.0"?>
 <project name="Boo asp.net examples" default="build">
 
-	<property name="booc" value="../../build/booc.exe" />
-	<property name="Boo.dll" value="../../build/Boo.dll" />
-	<property name="Boo.Lang.Compiler.dll" value="../../build/Boo.Lang.Compiler.dll" />
-	<property name="Boo.AntlrParser.dll" value="../../build/Boo.AntlrParser.dll" />
-	<property name="antlr.runtime.dll" value="../../build/antlr.runtime.dll" />
-	<property name="Boo.NAnt.Tasks.dll" value="../../build/Boo.NAnt.Tasks.dll" />
+	<property name="boo.dir" value="${path::get-full-path('../../bin')}" />
+	
+	<property name="Boo.dll" value="${boo.dir}/Boo.dll" />
+	<property name="Boo.Lang.Compiler.dll" value="${boo.dir}/Boo.Lang.Compiler.dll" />
+	<property name="Boo.CodeDom.dll" value="${boo.dir}/Boo.CodeDom.dll" />
+	<property name="Boo.Lang.Parser.dll" value="${boo.dir}/Boo.Lang.Parser.dll" />
+	<property name="Boo.NAnt.Tasks.dll" value="${boo.dir}/Boo.NAnt.Tasks.dll" />
 	
 	<target name="rebuild" depends="clean, build" />
 	
@@ -17,11 +18,11 @@
 	<target name="build">
 		<mkdir dir="output" />
 		<mkdir dir="output/bin" />
-		
+		<copy todir="output" file="web.config" />
 		<copy todir="output/bin" file="${Boo.dll}" />
 		<copy todir="output/bin" file="${Boo.Lang.Compiler.dll}" />
-		<copy todir="output/bin" file="${Boo.AntlrParser.dll}" />
-		<copy todir="output/bin" file="${antlr.runtime.dll}" />
+		<copy todir="output/bin" file="${Boo.Lang.Parser.dll}" />
+		<copy todir="output/bin" file="${Boo.CodeDom.dll}" />
 		
 		<loadtasks assembly="${Boo.NAnt.Tasks.dll}" />
 		
@@ -34,7 +35,7 @@
 			<references>
 				<include name="System.Web.dll" />
 				<include name="System.Web.Services.dll" />
-				<include name="${Boo.AntlrParser.dll}" />
+				<include name="${Boo.Lang.Parser.dll}" />
 			</references>
 			
 		</booc>
@@ -49,7 +50,7 @@
 	</target>
 	
 	<target name="run" depends="build">
-		<exec program="cassiniwebserver.exe">
+		<exec program="CassiniWebserver.exe">
 			<arg file="output" />
 			<arg value="8088" />
 		</exec>

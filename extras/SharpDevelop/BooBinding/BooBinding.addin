@@ -11,7 +11,13 @@
 	
 	<Extension path = "/SharpDevelop/Workbench/Views">
 		<Class id = "booish"
-			class = "BooBinding.BooishView" />
+			class = "BooBinding.BooishView"
+			icon = "BooPrj" />
+	</Extension>
+	
+	<Extension path = "/Workspace/Parser">
+		<Class id    = "BooParser"
+		       class = "BooBinding.CodeCompletion.BooParser"/>
 	</Extension>
 	
 	<Extension path = "/SharpDevelop/Workbench/FileFilter">
@@ -19,6 +25,11 @@
 		            insertbefore = "AllFiles"
 		            name = "Boo files (*.boo)"
 			    extensions = "*.boo"/>
+	</Extension>
+	
+	<Extension path = "/SharpDevelop/Workbench/Ambiences">
+		<Class id    = "Boo"
+		       class = "BooBinding.BooAmbience"/>
 	</Extension>
 	
 	<Extension path = "/SharpDevelop/Workbench/ProjectOptions/ConfigurationProperties">

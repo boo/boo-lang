@@ -3,14 +3,11 @@
 
 	<property name="debug" value="true" />
 	<property name="optimize" value="false" />
-	
-	<property name="skip.satellites" value="false" />
 
 	<property name="antlr.home" value="lib/antlr-2.7.4" />
 	<property name="java" value="java" />
 	
-	<property name="antlr.jar" value="${antlr.home}/antlr.jar" />
-	<property name="antlr.runtime.dll" value="${antlr.home}/lib/csharp/src/bin/antlr.runtime.dll" />	
+	<property name="antlr.jar" value="${antlr.home}/antlr.jar" />	
 	<property name="NAnt.Core.dll" value="${nant.location}/NAnt.Core.dll" />
 	
 	<property name="ngen.exe" value="${nant.settings.currentframework.frameworkdirectory}/ngen.exe" />
@@ -33,7 +30,7 @@
 		<nant buildfile="tests/default.build" target="compile" />
 	</target>
 	
-	<target name="booish" depends="Boo.NAnt.Tasks">
+	<target name="booish" depends="Boo.Lang.Interpreter">
 		<booc
 			target="exe"
 			output="build/booish.exe">
@@ -41,6 +38,10 @@
 			<sources basedir="src/booish">
 				<include name="*.boo" />
 			</sources>
+			
+			<references basedir="build">
+				<include name="Boo.Lang.Interpreter.dll" />
+			</references>
 		</booc>
 	</target>
 	
@@ -70,6 +71,31 @@
 		</boo>
 	</target>
 	
+	<target name="Boo.Lang.Interpreter" depends="Boo.NAnt.Tasks">
+		<exec program="build/booc.exe" useruntimeengine="true">
+			<arg value="-noconfig" />
+			<arg value="-t:library" />
+			<arg value="-v" />
+			<arg value="-out:build/Boo.Lang.Interpreter.dll" />
+			<arg value="src/Boo.Lang.Interpreter/AssemblyInfo.boo" />
+			<arg value="src/Boo.Lang.Interpreter/InteractiveInterpreter.boo" />
+		</exec>
+		<!--
+		* mono doesn't seem to be able to load Boo.Lang.Interpreter.dll
+		that was just built, either we must wait mono to implement
+		the ms.net behavior or change booc to delegate to the command
+		line utility
+		<booc 
+			target="library"
+			output="build/Boo.Lang.Interpreter.dll">
+			
+			<sources basedir="src/Boo.Lang.Interpreter">
+				<include name="*.boo" />
+			</sources>
+		</booc>
+		-->
+	</target>
+	
 	<target name="Boo.NAnt.Tasks" depends="booc">
 		<copy file="${NAnt.Core.dll}" todir="build" />
 		
@@ -90,6 +116,7 @@
 			<arg value="-out:build/Boo.NAnt.Tasks.dll" />
 			<arg value="-target:library" />
 			<arg value="-r:${NAnt.Core.dll}" />
+			<arg value="src/Boo.NAnt.Tasks/InsertLicenseTask.boo" />
 			<arg value="src/Boo.NAnt.Tasks/BoocTask.boo" />
 			<arg value="src/Boo.NAnt.Tasks/BooTask.boo" />
 			<arg value="src/Boo.NAnt.Tasks/AbstractBooTask.boo" />			
@@ -115,13 +142,12 @@
 		<exec program='${ngen.exe}' if="${file::exists(ngen.exe)}" unless="${skip.ngen}">
 			<arg file='build/Boo.dll' />
 			<arg file='build/Boo.Lang.Compiler.dll' />			
-			<arg file='build/Boo.AntlrParser.dll' />
+			<arg file='build/Boo.Lang.Parser.dll' />
 			<arg file='build/booc.exe' />
-			<arg file='build/antlr.runtime.dll' />
 		</exec>
 	</target>
 	
-	<target name="core" depends="Boo, Boo.Lang.Compiler, Boo.AntlrParser">
+	<target name="core" depends="Boo, Boo.Lang.Compiler, Boo.Lang.Parser, Boo.CodeDom">
 	</target>
 	
 	<target name="update-bin" depends="all">
@@ -130,16 +156,35 @@
 			<fileset basedir="build">
 				<include name="pt/Boo.resources.dll" />
 				<include name="Boo.dll" />
+				<include name="Boo.Lang.Parser.dll" />
 				<include name="Boo.Lang.Compiler.dll" />
+				<include name="Boo.Lang.Interpreter.dll" />
 				<include name="Boo.NAnt.Tasks.dll" />
-				<include name="Boo.AntlrParser.dll" />
-				<include name="antlr.runtime.dll" />
+				<include name="Boo.CodeDom.dll" />
 				<include name="booc.exe" />
 				<include name="booc.rsp" />
 				<include name="booi.exe" />
 				<include name="booish.exe" />	
 			</fileset>
 		</copy>
+	</target>
+	
+	<target name="Boo.CodeDom" depends="Boo.Lang.Compiler">
+		<csc target="library"
+			output="build/Boo.CodeDom.dll"
+			debug="${debug}"
+			optimize="${optimize}">
+			
+			<sources basedir="src/Boo.CodeDom">
+				<include name="**/*.cs" />
+			</sources>
+			
+			<references>
+				<include name="System.Data.dll" />
+				<include name="System.Xml.dll" />
+				<include name="build/Boo.Lang.Compiler.dll" />
+			</references>
+		</csc>
 	</target>
 	
 	<target name="Boo.Lang.Compiler" depends="Boo, generate-ast">
@@ -158,17 +203,35 @@
 		</csc>
 	</target>
 
-	<target name="Boo" depends="compile-grammar, satellites">
-
-		<resgen
-			input="src/Boo/Resources/strings.txt"
-			output="build/strings.resources" />
-
+	<target name="Boo" depends="resources">
 		<csc
 			target="library"
 			output="build/Boo.dll"
 			debug="${debug}"
-			optimize="${optimize}">
+			optimize="${optimize}"
+			if="${nant.platform.win32}">
+
+			<sources basedir="src/Boo">
+				<include name="**/*.cs" />
+			</sources>
+			
+			<resources basedir="build">
+				<include name="strings.resources" />
+			</resources>
+			<resources basedir="build/pt">
+				<include name="strings.pt.resources" />
+			</resources>
+			<resources basedir="build/it">
+				<include name="strings.it.resources" />
+			</resources>
+		</csc>
+		
+		<csc
+			target="library"
+			output="build/Boo.dll"
+			debug="${debug}"
+			optimize="${optimize}"
+			unless="${nant.platform.win32}">
 
 			<sources basedir="src/Boo">
 				<include name="**/*.cs" />
@@ -180,24 +243,30 @@
 		</csc>
 	</target>
 	
-	<target name="Boo.AntlrParser" depends="Boo.Lang.Compiler, compile-grammar">
-		<csc target="library" output="build/Boo.AntlrParser.dll"
+	<target name="Boo.Lang.Parser" depends="Boo.Lang.Compiler, compile-grammar">
+		<csc target="library" output="build/Boo.Lang.Parser.dll"
 			debug="${debug}" optimize="${optimize}">
-			<sources basedir="src/Boo.AntlrParser">
+			<sources basedir="src/Boo.Lang.Parser">
 				<include name="**/*.cs" />
 			</sources>
 			<references>
 				<include name="build/Boo.dll" />
 				<include name="build/Boo.Lang.Compiler.dll" />
-				<include name="build/antlr.runtime.dll" />
 			</references>
 		</csc>
 	</target>
 	
-	<target name="insert-notice">
-		<exec program="bin/booi.exe" useruntimeengine="true">
-			<arg file="scripts/insertnotice.boo" />
-		</exec>
+	<target name="insert-license" depends="Boo.NAnt.Tasks">
+		<insertLicense license="notice.txt">
+			<fileset basedir="src">
+				<include name="**/*.cs" />
+				<include name="**/*.boo" />
+				<exclude name="Boo.Lang.Parser/antlr/**" />
+			</fileset>
+			<fileset basedir="examples">
+				<include name="**/*.boo" />
+			</fileset>
+		</insertLicense>
 	</target>
 	
 	<target name="update-stable-branch" depends="SVNUtil">
@@ -233,15 +302,20 @@
 		</exec>
 	</target>
 	
-	<target name="distro" depends="check-distro-version, src-distro, bin-distro">
+	<target name="distro" depends="check-distro-version, src-distro">
 	</target>
 	
 	<target name="check-distro-version" unless="${property::exists('distro-version')}">
 		<fail>You must specify the distro-version property!</fail>
 	</target>
 	
-	<target name="bin-distro">
-		<zip zipfile="boo-${distro-version}-bin.zip" ziplevel="9">
+	<target name="prepare-bin-distro" depends="insert-license">
+		<property name="distro.dir" value="build/distro" />
+		
+		<delete dir="${distro.dir}" if="${directory::exists(distro.dir)}" />
+		<mkdir dir="${distro.dir}" />
+		
+		<copy todir="${distro.dir}">
 			<fileset>
 				<include name="readme.txt" />
 				<include name="license.txt" />
@@ -253,14 +327,20 @@
 				<include name="bin/*.exe" />
 				<include name="bin/*.rsp" />
 				
-				<include name="extras/boo.lang" />
+				<include name="extras/**/*.boo" />
+				<include name="extras/**/*.cs" />
+				<include name="extras/**/*.png" />
+				<include name="extras/**/*.ico" />
+				<include name="extras/**/*.prjx" />
+				<include name="extras/**/*.xml" />
+				<include name="extras/**/*.build" />
+				<include name="extras/**/*.lang" />
 				<include name="extras/install-gtksourceview-mode" />
-				<include name="extras/boo*.xml" />
-				<include name="extras/SharpDevelop/boo.xshd" />
-				<include name="extras/boox/**/*.boo" />
-				<include name="extras/boox/**/*.build" />
-				<include name="extras/boox/resources/**/*.png" />
-				<include name="extras/boox/resources/**/*.ico" />
+				<include name="extras/SharpDevelop/**/*.xshd" />
+				<include name="extras/SharpDevelop/**/*.xft" />
+				<include name="extras/SharpDevelop/**/*.xpt" />
+				<include name="extras/SharpDevelop/**/*.txtres" />
+				<include name="extras/SharpDevelop/**/*.addin" />
 				
 				<include name="examples/**/*.boo" />
 				<include name="examples/**/*.xml" />
@@ -268,92 +348,86 @@
 				<include name="examples/**/*.build" />
 				<include name="examples/**/*.config" />
 			</fileset>
+		</copy>
+	</target>
+	
+	<target name="bin-distro" depends="prepare-bin-distro">
+		<zip zipfile="boo-${distro-version}-bin.zip" ziplevel="9">
+			<fileset basedir="${distro.dir}">
+				<include name="**" />
+			</fileset>
 		</zip>
 	</target>
 	
-	<target name="src-distro" depends="insert-notice">
-		<zip zipfile="boo-${distro-version}-src.zip" ziplevel="9">
-			<fileset>
-				<include name="readme.txt" />
-				<include name="license.txt" />
-				<include name="notice.txt" />
-				<include name="ast.model.boo" />
-				<include name="docs/**/*.boo" />
-				<include name="docs/**/*.build" />
-				<include name="docs/**/*.sxw" />
-				<include name="bin/**/*.dll" />
-				<include name="bin/*.exe" />
-				<include name="bin/*.rsp" />
-				
-				<include name="extras/boo.lang" />
-				<include name="extras/install-gtksourceview-mode" />
-				<include name="extras/boo*.xml" />
-				<include name="extras/SharpDevelop/boo.xshd" />
-				<include name="extras/boox/**/*.boo" />
-				<include name="extras/boox/**/*.build" />
-				<include name="extras/boox/resources/**/*.png" />
-				<include name="extras/boox/resources/**/*.ico" />
-				
-				<include name="examples/**/*.boo" />
-				<include name="examples/**/*.xml" />
-				<include name="examples/**/*.aspx" />
-				<include name="examples/**/*.build" />
-				<include name="examples/**/*.config" />
-				
+	<target name="prepare-src-distro" depends="bin-distro">
+		<copy todir="${distro.dir}">
+			<fileset>				
 				<include name="default.build" />
+				<include name="notice.txt" />
 				<include name="scripts/*.boo" />				
 				<include name="lib/**/*.jar" />
 				<include name="lib/**/*.dll" />
+				<include name="lib/**/*.txt" />
 				
+				<include name="src/boo.snk" />
 				<include name="src/**/*.cs" />
 				<include name="src/**/*.boo" />
 				<include name="src/**/*.rsp" />
 				<include name="src/**/*.g" />
 				<include name="src/**/*.prjx" />
-				<include name="src/Boo/Resources/strings.txt" />
-				<include name="src/Boo/Resources/pt/strings.txt" />
+				<include name="src/**/*.cmbx" />
+				<include name="src/Boo/Resources/**/*.txt" />
 				
+				<include name="tests/nunit.inc" />
+				<include name="tests/test.snk" />
 				<include name="tests/**/*.boo" />
 				<include name="tests/**/*.cs" />
 				<include name="tests/**/*.txt" />
 				<include name="tests/**/*.build" />
 				<include name="tests/**/*.prjx" />
 			</fileset>
+		</copy>
+	</target>
+	
+	<target name="src-distro" depends="prepare-src-distro">
+		<zip zipfile="boo-${distro-version}-src.zip" ziplevel="9">
+			<fileset basedir="${distro.dir}">
+				<include name="**" />
+			</fileset>
 		</zip>
 	</target>
 	
-	<target name="satellites" depends="init" unless="${skip.satellites}">
-		<mkdir dir="${build.dir}/pt" />
-
+	<target name="resources" depends="init">
+	
 		<resgen
-			input="src/Boo/Resources/pt/strings.txt"
-			output="build/pt/strings.pt.resources" />
-
-		<al target="lib"
-			culture="pt"
-			output="build/pt/Boo.resources.dll"
-			if="${nant.platform.win32}">
-			<sources basedir="build/pt">
-				<include name="strings.pt.resources" />
-			</sources>
-		</al>
+			input="src/Boo/Resources/strings.txt"
+			output="build/strings.resources" />
+	
+		<property name="locale" value="pt" />
+		<call target="build-resource" />
 		
-		<exec program="${path::combine(nant.settings.currentframework.sdkdirectory, 'al')}" if="${nant.platform.unix}">
-			<arg value="/target:lib" />
-			<arg value="/culture:pt" />
-			<arg value="/out:build/pt/Boo.resources.dll" />
-			<arg value="/embed:build/pt/strings.pt.resources" />
-		</exec>
+		<property name="locale" value="it" />
+		<call target="build-resource" />
+		
+	</target>
+	
+	<target name="build-resource">
+	
+		<mkdir dir="${build.dir}/${locale}" />
+		<resgen
+			input="src/Boo/Resources/${locale}/strings.txt"
+			output="build/${locale}/strings.${locale}.resources" />
+			
 	</target>
 
 	<target name="compile-grammar" depends="init" unless="${skip.antlr}">
 	
 		<uptodate property="parser-is-uptodate">
-			<sourcefiles basedir="src/Boo.AntlrParser">
+			<sourcefiles basedir="src/Boo.Lang.Parser">
 				<include name="boo.g" />
 				<include name="booel.g" />
 			</sourcefiles>
-			<targetfiles basedir="src/Boo.AntlrParser">
+			<targetfiles basedir="src/Boo.Lang.Parser">
 				<include name="BooParserBase.cs" />
 				<include name="BooExpressionLexer.cs" />
 			</targetfiles>
@@ -362,7 +436,7 @@
 		<if test="${not parser-is-uptodate}">
 		
 			<delete>
-				<fileset basedir="src/Boo.AntlrParser">
+				<fileset basedir="src/Boo.Lang.Parser">
 					<include name="*TokenTypes.*" />
 				</fileset>
 			</delete>			 
@@ -373,8 +447,8 @@
 				<arg value="antlr.Tool" />
 				<!-- <arg value="-traceParser" /> -->
 				<arg value="-o" />
-				<arg value="src/Boo.AntlrParser/" />
-				<arg value="src/Boo.AntlrParser/boo.g" />
+				<arg value="src/Boo.Lang.Parser/" />
+				<arg value="src/Boo.Lang.Parser/boo.g" />
 			</exec>
 			
 			<exec program="${java}" failonerror="true">
@@ -382,11 +456,11 @@
 				<arg value="${antlr.jar}" />
 				<arg value="antlr.Tool" />
 				<arg value="-o" />
-				<arg value="src/Boo.AntlrParser/" />
-				<arg value="src/Boo.AntlrParser/booel.g" />
+				<arg value="src/Boo.Lang.Parser/" />
+				<arg value="src/Boo.Lang.Parser/booel.g" />
 			</exec>
 			
-			<touch file="src/Boo.AntlrParser/BooParserBase.cs" />
+			<touch file="src/Boo.Lang.Parser/BooParserBase.cs" />
 		</if>
 	</target>
 	
@@ -403,7 +477,6 @@
 		</uptodate>
 				
 		<if test="${not ast-is-uptodate}">
-		
 			<delete dir="src/Boo.Lang.Compiler/Ast/Impl"
 					if="${directory::exists('src/Boo.Lang.Compiler/Ast/Impl')}" />
 			<mkdir dir="src/Boo.Lang.Compiler/Ast/Impl" />
@@ -416,8 +489,8 @@
 	<target name="rebuild" depends="clean">
 		
 		<touch file="ast.model.boo" />
-		<touch file="src/Boo.AntlrParser/boo.g" />
-		<touch file="src/Boo.AntlrParser/booel.g" />
+		<touch file="src/Boo.Lang.Parser/boo.g" />
+		<touch file="src/Boo.Lang.Parser/booel.g" />
 		
 		<call target="all" />		
 	</target>
@@ -428,7 +501,6 @@
 
 	<target name="init">
 		<mkdir dir="build" />
-		<copy file="${antlr.runtime.dll}" todir="build" />
 	</target>
 
 </project>

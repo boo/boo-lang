@@ -7,36 +7,37 @@
 // the Free Software Foundation; either version 2 of the License, or
 // (at your option) any later version.
 // 
-// Boo Explorer is distributed in the hope that it will be useful,
+// BooBinding is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 // 
 // You should have received a copy of the GNU General Public License
-// along with Foobar; if not, write to the Free Software
+// along with BooBinding; if not, write to the Free Software
 // Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #endregion
 
 namespace BooBinding
 
-import System;
-import System.Reflection;
-import System.CodeDom;
-import System.Text;
-import System.Collections;
+import System
+import System.Reflection
+import System.CodeDom
+import System.Text
+import System.Collections
 
-import ICSharpCode.SharpRefactory.Parser;
-import ICSharpCode.SharpRefactory.Parser.AST;
-import ICSharpCode.SharpRefactory.PrettyPrinter;
+import ICSharpCode.SharpRefactory.Parser
+import ICSharpCode.SharpRefactory.Parser.AST
+import ICSharpCode.SharpRefactory.PrettyPrinter
 
 class BooVisitor(AbstractASTVisitor):
-	_newLineSep = Environment.NewLine;
+	_newLineSep = Environment.NewLine
+	
 	[Getter(SourceText)]
-	_sourceText = StringBuilder();
-	_indentLevel = 0;
-	_indentOpenPosition = 0;
-	_errors      = Errors();
-	_currentType as TypeDeclaration = null;
+	_sourceText = StringBuilder()
+	_indentLevel = 0
+	_indentOpenPosition = 0
+	_errors      = Errors()
+	_currentType as TypeDeclaration = null
 	_debugOutput = false
 	
 	#region IASTVisitor interface implementation
@@ -255,17 +256,12 @@ class BooVisitor(AbstractASTVisitor):
 		AppendAttributes(propertyDeclaration.Attributes);
 		AppendIndentation();
 		_sourceText.Append(GetModifier(propertyDeclaration.Modifier, Modifier.Public));
-		/*if (propertyDeclaration.IsReadOnly):
-			_sourceText.Append("ReadOnly ");
-		if (propertyDeclaration.IsWriteOnly):
-			_sourceText.Append("WriteOnly ");*/
 		_sourceText.Append(propertyDeclaration.Name);
 		_sourceText.Append(" as ");
 		_sourceText.Append(GetTypeString(propertyDeclaration.TypeReference));
 		_sourceText.Append(":");
 		AppendNewLine();
 		
-		isAbstract as bool = (propertyDeclaration.Modifier & Modifier.Abstract) == Modifier.Abstract;
 		AddIndentLevel();
 		if (propertyDeclaration.GetRegion != null):
 			propertyDeclaration.GetRegion.AcceptVisitor(self, data);
@@ -332,36 +328,36 @@ class BooVisitor(AbstractASTVisitor):
 			_sourceText.Append(GetTypeString(eventDeclaration.TypeReference))
 			_sourceText.Append(":")
 			AppendNewLine()
-			AddIndentLevel();
+			AddIndentLevel()
 			if (eventDeclaration.HasAddRegion):
 				eventDeclaration.AddRegion.AcceptVisitor(self, data)
 			
 			if (eventDeclaration.HasRemoveRegion):
 				eventDeclaration.RemoveRegion.AcceptVisitor(self, data)
-			RemoveIndentLevel();
+			RemoveIndentLevel()
 			AppendIndentation()
 			AppendNewLine()
 		
 		return data
 	
 	override def Visit(eventAddRegion as EventAddRegion, data):
-		AddIndentLevel();
+		AddIndentLevel()
 		_sourceText.Append("add:")
 		AppendNewLine()
 		AddIndentLevel()
 		eventAddRegion.Block.AcceptVisitor(self, data) if eventAddRegion.Block != null
 		RemoveIndentLevel()
-		_errors.Error(-1, -1, "Event add region can't be converted");
+		_errors.Error(-1, -1, "Event add region can't be converted")
 		return null
 	
 	override def Visit(eventRemoveRegion as EventRemoveRegion, data):
-		AddIndentLevel();
+		AddIndentLevel()
 		_sourceText.Append("remove:")
 		AppendNewLine()
 		AddIndentLevel()
 		eventRemoveRegion.Block.AcceptVisitor(self, data) if eventRemoveRegion.Block != null
 		RemoveIndentLevel()
-		_errors.Error(-1, -1, "Event remove region can't be converted");
+		_errors.Error(-1, -1, "Event remove region can't be converted")
 		return null
 	
 	override def Visit(constructorDeclaration as ConstructorDeclaration, data):
@@ -381,7 +377,7 @@ class BooVisitor(AbstractASTVisitor):
 			if (ci.ConstructorInitializerType == ConstructorInitializerType.Base):
 				_sourceText.Append("super");
 			else:
-				_sourceText.Append("MyClass.New");
+				_sourceText.Append("self");
 			_sourceText.Append(GetParameters(ci.Arguments));
 			AppendNewLine();
 		
@@ -394,21 +390,64 @@ class BooVisitor(AbstractASTVisitor):
 		return null;
 	
 	override def Visit(destructorDeclaration as DestructorDeclaration, data):
-		DebugOutput(destructorDeclaration);
-		AppendNewLine();
-		AppendIndentation();
-		_sourceText.Append("def destructor():");
-		AppendNewLine();
+		DebugOutput(destructorDeclaration)
+		AppendNewLine()
+		AppendIndentation()
+		_sourceText.Append("def destructor():")
+		AppendNewLine()
 		
-		AddIndentLevel();
-		destructorDeclaration.Body.AcceptChildren(self, data);
-		RemoveIndentLevel();
+		AddIndentLevel()
+		destructorDeclaration.Body.AcceptChildren(self, data)
+		RemoveIndentLevel()
 		
-		return null;
+		return null
+	
+	def GetOperatorName(token as int, opType as OperatorType):
+		if opType == OperatorType.Binary:
+			return "op_Addition"           if token == Tokens.Plus
+			return "op_Subtraction"        if token == Tokens.Minus
+			return "op_Multiply"           if token == Tokens.Times
+			return "op_Division"           if token == Tokens.Div
+			return "op_Modulus"            if token == Tokens.Mod
+			return "op_Equality"           if token == Tokens.Equal
+			return "op_Inequality"           if token == Tokens.NotEqual
+			return "op_LessThan"           if token == Tokens.LessThan
+			return "op_LessThanOrEqual"    if token == Tokens.LessEqual
+			return "op_GreaterThan"        if token == Tokens.GreaterThan
+			return "op_GreaterThanOrEqual" if token == Tokens.GreaterEqual
+			return "op_BitwiseOr"          if token == Tokens.BitwiseOr
+			return "op_BitwiseAnd"         if token == Tokens.BitwiseAnd
+		return "op_<unknown:${Tokens.GetTokenString(token)}>"
 	
 	override def Visit(operatorDeclaration as OperatorDeclaration, data):
-		_errors.Error(-1, -1, "Operator overloading cannot be performed");
-		return null;
+		declarator = operatorDeclaration.OpratorDeclarator
+		DebugOutput(operatorDeclaration)
+		AppendAttributes(operatorDeclaration.Attributes)
+		AppendIndentation()
+		_sourceText.Append(GetModifier(operatorDeclaration.Modifier, Modifier.Public))
+		_sourceText.Append("def ")
+		_sourceText.Append(GetOperatorName(declarator.OverloadOperatorToken, declarator.OperatorType))
+		_sourceText.Append("(")
+		_sourceText.Append(declarator.FirstParameterName)
+		_sourceText.Append(" as ")
+		_sourceText.Append(GetTypeString(declarator.FirstParameterType))
+		if (declarator.OperatorType == OperatorType.Binary):
+			_sourceText.Append(", ")
+			_sourceText.Append(declarator.FirstParameterName)
+			_sourceText.Append(" as ")
+			_sourceText.Append(GetTypeString(declarator.FirstParameterType))
+		_sourceText.Append(") as ")
+		_sourceText.Append(GetTypeString(declarator.TypeReference))
+		
+		if (operatorDeclaration.Body != null):
+			_sourceText.Append(":")
+			AppendNewLine()
+			AddIndentLevel()
+			operatorDeclaration.Body.AcceptChildren(self, data)
+			RemoveIndentLevel()
+			AppendIndentation()
+		AppendNewLine()
+		return null
 	
 	override def Visit(indexerDeclaration as IndexerDeclaration, data):
 		DebugOutput(indexerDeclaration);
@@ -743,7 +782,6 @@ class BooVisitor(AbstractASTVisitor):
 	
 	override def Visit(usingStatement as UsingStatement, data):
 		DebugOutput(usingStatement);
-		AppendIndentation();
 		AppendIndentation();
 		_sourceText.Append("using ");
 		_sourceText.Append(usingStatement.UsingStmnt.AcceptVisitor(self, data));
@@ -1121,7 +1159,9 @@ class BooVisitor(AbstractASTVisitor):
 	def ConvertTypeString(typeString as string):
 		return "Char"   if typeString == "char"
 		return "single" if typeString == "float"
-		return "date"   if typeString == "DateTime" or typeString == "String.DateTime"
+		return "date"   if typeString == "DateTime"
+		convertedType = BooAmbience.TypeConversionTable[typeString]
+		return convertedType if convertedType != null
 		return typeString
 	
 	def GetTypeString(typeRef as TypeReference):
@@ -1150,9 +1190,6 @@ class BooVisitor(AbstractASTVisitor):
 				b.Append("*");
 			_errors.Error(-1, -1, "Pointer types are not supported by Boo");
 		return b.ToString();
-	
-	/*def GetModifier(modifier as Modifier):
-		return GetModifier(modifier, Modifier.None);*/
 	
 	def GetModifier(modifier as Modifier, default as Modifier):
 		builder = StringBuilder()

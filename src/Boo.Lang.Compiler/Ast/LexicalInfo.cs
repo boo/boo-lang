@@ -29,43 +29,70 @@
 using System;
 
 namespace Boo.Lang.Compiler.Ast
-{
-	public class LexicalInfo
+{	 
+	public class SourceLocation
 	{
-		public static readonly LexicalInfo Empty = new LexicalInfo(null, -1, -1, -1);
-
 		protected int _line;
 
-		protected int _startColumn;
+		protected int _column;
 		
-		protected int _endColumn;
-
-		protected string _filename;
-		
-		public LexicalInfo(string filename, int line, int startColumn, int endColumn)
+		public SourceLocation(int line, int column)
 		{
-			if (endColumn < startColumn)
-			{
-				throw new ArgumentException("endColum must be >= startColumn", "endColumn");
-			}
-			_filename = filename;
 			_line = line;
-			_startColumn = startColumn;
-			_endColumn = endColumn;
-		}
-
-		public LexicalInfo(string filename) : this(filename, -1, -1, -1)
-		{
+			_column = column;
 		}
 		
-		public bool IsValid
+		public int Line
 		{
 			get
 			{
-				return null != _filename &&
-						(_line > 0) &&
-						(_startColumn > 0) &&
-						(_endColumn > 0);
+				return _line;
+			}
+		}
+
+		public int Column
+		{
+			get
+			{
+				return _column;
+			}
+		}
+		
+		public virtual bool IsValid
+		{
+			get
+			{
+				return (_line > 0) && (_column > 0);
+			}
+		}
+		
+		override public string ToString()
+		{
+			return string.Format("({0},{1})", _line, _column);
+		}
+	}
+	
+	public class LexicalInfo : SourceLocation
+	{
+		public static readonly LexicalInfo Empty = new LexicalInfo(null, -1, -1);
+		
+		protected string _filename;
+		
+		public LexicalInfo(string filename, int line, int column)
+			: base(line, column)
+		{
+			_filename = filename;			
+		}
+
+		public LexicalInfo(string filename) : this(filename, -1, -1)
+		{
+		}
+		
+		override public bool IsValid
+		{
+			get
+			{
+				return null != _filename && base.IsValid;					
 			}
 		}
 
@@ -77,33 +104,9 @@ namespace Boo.Lang.Compiler.Ast
 			}
 		}
 
-		public int Line
-		{
-			get
-			{
-				return _line;
-			}
-		}
-
-		public int StartColumn
-		{
-			get
-			{
-				return _startColumn;
-			}
-		}
-		
-		public int EndColumn
-		{
-			get
-			{
-				return _endColumn;
-			}
-		}
-
 		override public string ToString()
 		{
-			return string.Format("{0}({1},{2})", _filename, _line, _startColumn);
+			return string.Format("{0}({1},{2})", _filename, _line, _column);
 		}
 	}
 }

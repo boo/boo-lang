@@ -1,4 +1,4 @@
-﻿#region license
+#region license
 // Copyright (c) 2004, Rodrigo B. de Oliveira (rbo@acm.org)
 // All rights reserved.
 // 
@@ -58,6 +58,10 @@ namespace Boo.Lang.Compiler.TypeSystem
 		
 		public static readonly Type Object = typeof(object);
 		
+		public static readonly Type Regex = typeof(System.Text.RegularExpressions.Regex);
+		
+		public static readonly Type ValueType = typeof(System.ValueType);
+		
 		public static readonly Type Array = typeof(Array);
 		
 		public static readonly Type ObjectArray = Type.GetType("System.Object[]");
@@ -91,6 +95,8 @@ namespace Boo.Lang.Compiler.TypeSystem
 		public static readonly Type Single = typeof(float);
 		
 		public static readonly Type Double = typeof(double);
+		
+		public static readonly Type Decimal = typeof(decimal);
 		
 		public static readonly Type Date = typeof(System.DateTime);
 		

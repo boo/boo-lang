@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <project name="TracePipeline Example" default="run">
 
-	<property name="boo.dir" value="../../../build" />
+	<property name="boo.dir" value="../../../bin" />
 	
 	<target name="compile-pipeline" depends="init">	
 		<booc target="library"
@@ -40,9 +40,8 @@
 			<fileset basedir="${boo.dir}">
 				<include name="Boo.dll" />
 				<include name="Boo.Lang.Compiler.dll" />
-				<include name="Boo.AntlrParser.dll" />
+				<include name="Boo.Lang.Parser.dll" />
 				<include name="Boo.NAnt.Tasks.dll" />
-				<include name="antlr.runtime.dll" />
 				<include name="*.pdb" />
 			</fileset>
 		</copy>

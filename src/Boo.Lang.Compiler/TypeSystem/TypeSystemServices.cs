@@ -55,6 +55,8 @@ namespace Boo.Lang.Compiler.TypeSystem
 		
 		public ExternalType EnumType;
 		
+		public ExternalType RegexType;
+		
 		public ExternalType ArrayType;
 		
 		public ExternalType TypeType;
@@ -88,6 +90,8 @@ namespace Boo.Lang.Compiler.TypeSystem
 		public ExternalType SingleType;
 		
 		public ExternalType DoubleType;
+		
+		public ExternalType DecimalType;
 		
 		public ExternalType TimeSpanType;
 		
@@ -149,6 +153,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 			Cache(typeof(Boo.Lang.Builtins.duck), DuckType = new DuckTypeImpl(this));
 			Cache(VoidType = new VoidTypeImpl(this));
 			Cache(ObjectType = new ExternalType(this, Types.Object));
+			Cache(RegexType = new ExternalType(this, Types.Regex));
 			Cache(ValueTypeType = new ExternalType(this, typeof(System.ValueType)));
 			Cache(EnumType = new ExternalType(this, typeof(System.Enum)));
 			Cache(ArrayType = new ExternalType(this, Types.Array));
@@ -166,6 +171,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 			Cache(ULongType = new ExternalType(this, Types.ULong));
 			Cache(SingleType = new ExternalType(this, Types.Single));
 			Cache(DoubleType = new ExternalType(this, Types.Double));
+			Cache(DecimalType = new ExternalType(this, Types.Decimal));
 			Cache(TimeSpanType = new ExternalType(this, Types.TimeSpan));
 			Cache(DateTimeType = new ExternalType(this, Types.DateTime));
 			Cache(RuntimeServicesType = new ExternalType(this, Types.RuntimeServices));
@@ -237,27 +243,11 @@ namespace Boo.Lang.Compiler.TypeSystem
 		
 		public IType GetPromotedNumberType(IType left, IType right)
 		{
-/* Don't know if we ever want to support decimals
- * If so, the arg exception will have to be handled properly
-			if (left == DecimalType)
+			if (left == DecimalType ||
+				right == DecimalType)
 			{
-				if (right == DoubleType ||
-				    right == SingleType)
-				{
-					throw new ArgumentException("decimal <op> " + right);
-				}
 				return DecimalType;
 			}
-			if (right == DecimalType)
-			{
-				if (left == DoubleType ||
-				    left == SingleType)
-				{
-					throw new ArgumentException(left + " <op> decimal");
-				}
-				return DecimalType;
-			}
-*/
 			if (left == DoubleType ||
 				right == DoubleType)
 			{
@@ -589,19 +579,15 @@ namespace Boo.Lang.Compiler.TypeSystem
 				type == this.IntType ||
 				type == this.LongType ||
 				type == this.SByteType ||
-				type == this.ByteType;	// Rodrigo shouldn't all unsigneds be
-										// IntegerNumbers too?
-										// Then unsigneds can do: uint & uint
+				type == this.UShortType ||
+				type == this.UIntType ||				
+				type == this.ULongType ||
+				type == this.ByteType;
 		}
 		
-		public bool IsUnsignedNumber(IType type)
+		public bool IsIntegerOrBool(IType type)	
 		{
-			return
-				type == this.UShortType ||
-				type == this.UIntType ||
-//Rodrigo should ByteType be added as its unsigned?
-//				type == this.ByteType ||
-				type == this.ULongType;
+			return BoolType == type || IsIntegerNumber(type);
 		}
 		
 		public bool IsNumberOrBool(IType type)
@@ -612,8 +598,14 @@ namespace Boo.Lang.Compiler.TypeSystem
 		public bool IsNumber(IType type)
 		{
 			return
+				IsPrimitiveNumber(type) ||
+				type == this.DecimalType;
+		}
+		
+		public bool IsPrimitiveNumber(IType type)
+		{
+			return
 				IsIntegerNumber(type) ||
-				IsUnsignedNumber(type) ||
 				type == this.DoubleType ||
 				type == this.SingleType;
 		}
@@ -913,7 +905,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 		/// <summary>
 		/// checks if the passed type will be equivalente to
 		/// System.Object in runtime (accounting for the presence
-		/// of duck typing.
+		/// of duck typing).
 		/// </summary>
 		public bool IsSystemObject(IType type)
 		{
@@ -926,8 +918,10 @@ namespace Boo.Lang.Compiler.TypeSystem
 			AddPrimitiveType("void", VoidType);
 			AddPrimitiveType("bool", BoolType);
 			AddPrimitiveType("date", DateTimeType);
+			AddPrimitiveType("timespan", TimeSpanType);
 			AddPrimitiveType("string", StringType);
 			AddPrimitiveType("object", ObjectType);
+			AddPrimitiveType("regex", RegexType);
 			AddPrimitiveType("sbyte", SByteType);
 			AddPrimitiveType("byte", ByteType);
 			AddPrimitiveType("short", ShortType);
@@ -938,6 +932,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 			AddPrimitiveType("ulong", ULongType);
 			AddPrimitiveType("single", SingleType);
 			AddPrimitiveType("double", DoubleType);
+			AddPrimitiveType("decimal", DecimalType);
 			AddPrimitiveType("callable", ICallableType);
 			AddBuiltin(BuiltinFunction.Len);
 			AddBuiltin(BuiltinFunction.AddressOf);

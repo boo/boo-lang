@@ -67,6 +67,8 @@ class MainForm(Form):
 	_parser = BooCompiler()
 	
 	_resourceManager = System.Resources.ResourceManager(MainForm)	
+	
+	_container = System.ComponentModel.Container()
 
 	def constructor(argv as (string)):
 		_argv = argv
@@ -80,7 +82,8 @@ class MainForm(Form):
 		_status = StatusBar(ShowPanels: true, TabIndex: 2)
 		_status.Panels.Add(_statusPanel1)
 		
-		_parser.Parameters.Pipeline = Boo.Lang.Compiler.Pipelines.Parse()		
+		_parser.Parameters.Pipeline = Boo.Lang.Compiler.Pipelines.Parse()
+		(_parser.Parameters.Pipeline[0] as duck).TabSize = 1		
 
 		SuspendLayout()
 
@@ -90,6 +93,9 @@ class MainForm(Form):
 		self.Text = "Boo Explorer"
 		self.IsMdiContainer = true
 
+		_container.Add(_dockPanel)
+		_container.Add(_status)
+		
 		Controls.AddRange((
 					_dockPanel,
 					_status))
@@ -99,6 +105,10 @@ class MainForm(Form):
 		
 		_timer = Timer(Tick: _timer_Tick, Interval: 50ms.TotalMilliseconds)
 		_timer.Enabled = true
+		
+	override def Dispose(flag as bool):
+		_container.Dispose()
+		super(flag)
 		
 	private def GetSettingsFileName():
 		return Path.Combine(GetApplicationDataFolder(), "settings.xml")

@@ -1,4 +1,4 @@
-﻿#region license
+#region license
 // Copyright (c) 2004, Rodrigo B. de Oliveira (rbo@acm.org)
 // All rights reserved.
 // 
@@ -57,8 +57,11 @@ namespace Boo.Lang.Compiler.Steps
 		}
 		
 		override public void OnClassDefinition(ClassDefinition node)
-		{			
+		{				
+			EnterNamespace((INamespace)GetEntity(node));
 			Visit(node.Members);
+			LeaveNamespace();
+			
 			ResolveBaseTypes(new Boo.Lang.List(), node);
 			CheckBaseTypes(node);
 			

@@ -51,7 +51,7 @@ class Task:
 	override def ToString():
 		return "'${_name}' (${_project})"
 	
-class Activity:
+class Activity(IComparable):
 	
 	[property(Task)]
 	_task as Task
@@ -71,6 +71,9 @@ class Activity:
 			
 	override def ToString():
 		return "${Elapsed} on ${_task}"
+		
+	def CompareTo(other) as int:
+		return _started.CompareTo((other as Activity).Started)
 			
 class TimeTrackerSystem(IDisposable):
 	
@@ -133,19 +136,30 @@ class TimeTrackerSystem(IDisposable):
 		return QueryActivities(q)
 		
 	def QueryDayActivities(day as date):
+		d = day.Date
+		return QueryActivitiesBetween(d, d+1d)
+		
+	def QueryActivitiesBetween(from_ as date, to as date):
 		q = _container.query()
 		q.constrain(Activity)
-		
-		d = day.Date 
-		q.descend("_started").constrain(d).greater()
-		q.descend("_started").constrain(d+1d).smaller()
+		q.descend("_started").constrain(from_).greater()
+		q.descend("_started").constrain(to).smaller()
 		return QueryActivities(q)
+		
+	def QueryMonthActivities(month as date):
+		firstDay = date(month.Year, month.Month, 1)
+		started = firstDay-1ms
+		finished = firstDay.AddMonths(1)
+		return QueryActivitiesBetween(started, finished)
 		
 	def QueryTotalProjectActivity([required] p as Project):
 		return CalcTotalActivity(QueryProjectActivities(p))
 		
 	def QueryTotalDayActivity(day as date):
 		return CalcTotalActivity(QueryDayActivities(day))
+		
+	def QueryTotalMonthActivity(month as date):
+		return CalcTotalActivity(QueryMonthActivities(month))
 		
 	def CalcTotalActivity(activities as (Activity)):
 		elapsed = TimeSpan.Zero

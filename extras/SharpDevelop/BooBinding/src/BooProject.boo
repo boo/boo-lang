@@ -7,13 +7,13 @@
 // the Free Software Foundation; either version 2 of the License, or
 // (at your option) any later version.
 // 
-// Boo Explorer is distributed in the hope that it will be useful,
+// BooBinding is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 // 
 // You should have received a copy of the GNU General Public License
-// along with Foobar; if not, write to the Free Software
+// along with BooBinding; if not, write to the Free Software
 // Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #endregion
 
@@ -23,12 +23,14 @@ import System
 import System.IO
 import System.Collections
 import System.Diagnostics
-import System.ComponentModel
+import System.Reflection
 import System.Xml
+import ICSharpCode.Core.Services
+import ICSharpCode.SharpDevelop.Services
 import ICSharpCode.SharpDevelop.Internal.Project
 import ICSharpCode.SharpDevelop.Internal.Templates
 
-// Describes a Boo Project and it compilation options.
+// Describes a Boo Project and its compilation options.
 class BooProject(AbstractProject):
 	override ProjectType:
 		get:
@@ -38,6 +40,9 @@ class BooProject(AbstractProject):
 		return BooCompilerParameters()
 	
 	def constructor(info as ProjectCreateInformation, projectOptions as XmlElement):
+		parserService as IParserService = ServiceManager.Services.GetService(typeof(IParserService))
+		booDir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location)
+		parserService.AddReferenceToCompletionLookup(self, ProjectReference(ReferenceType.Assembly, Path.Combine(booDir, "Boo.dll")))
 		if info != null:
 			Name = info.ProjectName;
 			debugConf as BooCompilerParameters = CreateConfiguration("Debug")

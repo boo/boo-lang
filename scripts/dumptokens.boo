@@ -28,8 +28,8 @@
 
 import System
 import System.IO
-import antlr from antlr.runtime
-import Boo.AntlrParser from Boo.AntlrParser
+import Boo.Lang.Parser from Boo.Lang.Parser
+import antlr
 
 def Consume(reader as TextReader):
 	writer = StringWriter()

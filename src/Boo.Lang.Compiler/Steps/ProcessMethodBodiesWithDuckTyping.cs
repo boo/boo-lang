@@ -1,4 +1,4 @@
-﻿#region license
+#region license
 // Copyright (c) 2004, Rodrigo B. de Oliveira (rbo@acm.org)
 // All rights reserved.
 // 
@@ -37,6 +37,7 @@ namespace Boo.Lang.Compiler.Steps
 		protected IType _runtimeServices;
 		protected IMethod RuntimeServices_Invoke;
 		protected IMethod RuntimeServices_InvokeBinaryOperator;
+		protected IMethod RuntimeServices_InvokeUnaryOperator;
 		protected IMethod RuntimeServices_SetProperty;
 		protected IMethod RuntimeServices_GetProperty;
 		
@@ -46,6 +47,7 @@ namespace Boo.Lang.Compiler.Steps
 			_runtimeServices = TypeSystemServices.Map(typeof(Boo.Lang.RuntimeServices));
 			RuntimeServices_Invoke = ResolveMethod(_runtimeServices, "Invoke");
 			RuntimeServices_InvokeBinaryOperator = ResolveMethod(_runtimeServices, "InvokeBinaryOperator");
+			RuntimeServices_InvokeUnaryOperator = ResolveMethod(_runtimeServices, "InvokeUnaryOperator");
 			RuntimeServices_SetProperty = ResolveMethod(_runtimeServices, "SetProperty");
 			RuntimeServices_GetProperty = ResolveMethod(_runtimeServices, "GetProperty");
 		}
@@ -94,21 +96,54 @@ namespace Boo.Lang.Compiler.Steps
 			}
 		}
 		
-		override protected void BindBinaryExpression(BinaryExpression node)
+		override public void LeaveUnaryExpression(UnaryExpression node)
 		{
-			if ((IsDuckTyped(node.Left) || IsDuckTyped(node.Right)) &&
-				IsOverloadableOperator(node.Operator))
+			if (IsDuckTyped(node.Operand) &&
+			   node.Operator == UnaryOperatorType.UnaryNegation)
 			{
 				MethodInvocationExpression mie = CodeBuilder.CreateMethodInvocation(
-						RuntimeServices_InvokeBinaryOperator,
+						RuntimeServices_InvokeUnaryOperator,
 						CodeBuilder.CreateStringLiteral(
 							GetMethodNameForOperator(node.Operator)),
-							node.Left, node.Right);							
+							node.Operand);							
 				BindExpressionType(mie, TypeSystemServices.DuckType);
-				
+			
 				node.ParentNode.Replace(
-					node, 
+					node,
 					mie);
+			}
+			else
+			{
+				base.LeaveUnaryExpression(node);
+			}
+		}
+		
+		override protected void BindBinaryExpression(BinaryExpression node)
+		{
+			if ((IsDuckTyped(node.Left) || IsDuckTyped(node.Right)))
+			{
+				if (IsOverloadableOperator(node.Operator))
+				{
+					MethodInvocationExpression mie = CodeBuilder.CreateMethodInvocation(
+							RuntimeServices_InvokeBinaryOperator,
+							CodeBuilder.CreateStringLiteral(
+								GetMethodNameForOperator(node.Operator)),
+								node.Left, node.Right);							
+					BindExpressionType(mie, TypeSystemServices.DuckType);
+				
+					node.ParentNode.Replace(
+						node, 
+						mie);
+				}
+				else if (BinaryOperatorType.Or == node.Operator ||
+				         BinaryOperatorType.And == node.Operator)
+				{
+					BindExpressionType(node, TypeSystemServices.DuckType);
+				}
+				else
+				{
+					base.BindBinaryExpression(node);
+				}
 			}
 			else
 			{
@@ -120,7 +155,7 @@ namespace Boo.Lang.Compiler.Steps
 		{
 			switch (op)
 			{
-				case BinaryOperatorType.	Addition:
+				case BinaryOperatorType.Addition:
 				case BinaryOperatorType.Subtraction:
 				case BinaryOperatorType.Multiply:
 				case BinaryOperatorType.Division:
@@ -134,8 +169,6 @@ namespace Boo.Lang.Compiler.Steps
 				case BinaryOperatorType.NotMatch:
 				case BinaryOperatorType.Member:
 				case BinaryOperatorType.NotMember:
-				case BinaryOperatorType.Or:
-				case BinaryOperatorType.And:
 				case BinaryOperatorType.BitwiseOr:
 				case BinaryOperatorType.BitwiseAnd:
 				{

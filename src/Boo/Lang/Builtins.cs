@@ -31,6 +31,7 @@ namespace Boo.Lang
 	using System;
 	using System.Collections;
 	using System.Diagnostics;
+	using System.IO;
 	using System.Text;
 	using System.Reflection;
 
@@ -62,13 +63,15 @@ namespace Boo.Lang
 		public static string join(IEnumerable enumerable, string separator)
 		{
 			StringBuilder sb = new StringBuilder();
-			foreach (object item in enumerable)
+			IEnumerator enumerator = enumerable.GetEnumerator();
+			if (enumerator.MoveNext())
 			{
-				if (sb.Length>0)
+				sb.Append(enumerator.Current);
+				while (enumerator.MoveNext())
 				{
 					sb.Append(separator);
+					sb.Append(enumerator.Current);
 				}
-				sb.Append(item);
 			}
 			return sb.ToString();
 		}
@@ -76,13 +79,15 @@ namespace Boo.Lang
 		public static string join(IEnumerable enumerable, char separator)
 		{
 			StringBuilder sb = new StringBuilder();
-			foreach (object item in enumerable)
+			IEnumerator enumerator = enumerable.GetEnumerator();
+			if (enumerator.MoveNext())
 			{
-				if (sb.Length>0)
+				sb.Append(enumerator.Current);
+				while (enumerator.MoveNext())
 				{
 					sb.Append(separator);
+					sb.Append(enumerator.Current);
 				}
-				sb.Append(item);
 			}
 			return sb.ToString();
 		}
@@ -92,17 +97,17 @@ namespace Boo.Lang
 			return join(enumerable, ' ');
 		}
 
-		public static IEnumerable map(ICallable function, object enumerable)
-		{
-			if (null == function)
-			{
-				throw new ArgumentNullException("function");
-			}
+		public static IEnumerable map(object enumerable, ICallable function)
+		{			
 			if (null == enumerable)
 			{
 				throw new ArgumentNullException("enumerable");
 			}
-			return new MapEnumerator(function, GetEnumerator(enumerable));
+			if (null == function)
+			{
+				throw new ArgumentNullException("function");
+			}
+			return new MapEnumerable(RuntimeServices.GetEnumerable(enumerable), function);
 		}
 
 		public static object[] array(IEnumerable enumerable)
@@ -204,6 +209,68 @@ namespace Boo.Lang
 			p.WaitForExit();
 			return output;
 		}
+		
+		internal class AssemblyExecutor : MarshalByRefObject
+		{
+			string _filename;
+			string[] _arguments;
+			string _capturedOutput = "";
+			
+			public AssemblyExecutor(string filename, string[] arguments)
+			{
+				_filename = filename;
+				_arguments = arguments;
+			}
+			
+			public string CapturedOutput
+			{
+				get
+				{
+					return _capturedOutput;
+				}
+			}
+			
+			public void Execute()
+			{
+				StringWriter output = new System.IO.StringWriter();
+				TextWriter saved = Console.Out;
+				try
+				{
+					Console.SetOut(output);
+					//AppDomain.CurrentDomain.ExecuteAssembly(_filename, null, _arguments);
+					Assembly.LoadFrom(_filename).EntryPoint.Invoke(null, new object[1] { _arguments });
+				}
+				finally
+				{					
+					Console.SetOut(saved);
+					_capturedOutput = output.ToString();
+				}
+			}
+		}
+		
+		/// <summary>
+		/// Execute the specified MANAGED application in a new AppDomain.
+		///
+		/// The base directory for the new application domain will be set to
+		/// directory containing filename (Path.GetDirectoryName(Path.GetFullPath(filename))).
+		/// </summary>
+		public static string shellm(string filename, string[] arguments)
+		{
+			AppDomainSetup setup = new AppDomainSetup();
+			setup.ApplicationBase = Path.GetDirectoryName(Path.GetFullPath(filename)); 
+				
+			AppDomain domain = AppDomain.CreateDomain("shellm", null, setup);
+			try
+			{					
+				AssemblyExecutor executor = new AssemblyExecutor(filename, arguments);
+				domain.DoCallBack(new CrossAppDomainDelegate(executor.Execute));
+				return executor.CapturedOutput;
+			}
+			finally
+			{
+				AppDomain.Unload(domain);
+			}			
+		}
 
 		public static EnumerateEnumerator enumerate(object enumerable)
 		{
@@ -254,8 +321,25 @@ namespace Boo.Lang
 			return new ZipEnumerator(GetEnumerator(first),
 									GetEnumerator(second));
 		}
+		
+		private class MapEnumerable : IEnumerable
+		{
+			IEnumerable _enumerable;
+			ICallable _function;
+			
+			public MapEnumerable(IEnumerable enumerable, ICallable function)
+			{
+				_enumerable = enumerable;
+				_function = function;
+			}
+			
+			public IEnumerator GetEnumerator()
+			{
+				return new MapEnumerator(_enumerable.GetEnumerator(), _function);
+			}
+		}
 
-		private class MapEnumerator : IEnumerator, IEnumerable
+		private class MapEnumerator : IEnumerator
 		{
 			IEnumerator _enumerator;
 
@@ -265,10 +349,10 @@ namespace Boo.Lang
 
 			object[] _arguments = new object[1];
 
-			public MapEnumerator(ICallable function, IEnumerator enumerator)
+			public MapEnumerator(IEnumerator enumerator, ICallable function)
 			{
-				_function = function;
 				_enumerator = enumerator;
+				_function = function;
 			}
 
 			public void Reset()
@@ -293,11 +377,6 @@ namespace Boo.Lang
 				{
 					return _current;
 				}
-			}
-
-			public IEnumerator GetEnumerator()
-			{
-				return this;
 			}
 		}
 

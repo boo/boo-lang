@@ -1,10 +1,10 @@
 <?xml version="1.0"?>
 <project name="booxw" default="compile">
 
-	<property name="boo.dir" value="${path::get-full-path('../../../bin')}" />
-	<property name="build.dir" value="${path::get-full-path('../build')}" />
+	<property name="extras.dir" value="${path::get-full-path('../..')}" />
+	<include buildfile="${extras.dir}/common-properties.build" />
 	
-	<include buildfile="../build.properties" if="${file::exists('../build.properties')}" />
+	<property name="build.dir" value="${path::get-full-path('../build')}" />
 
 	<target name="run" depends="compile">
 		<exec program="${build.dir}/booxw.exe" useruntimeengine="true">
@@ -37,7 +37,7 @@
 				<include name="*.dll" />
 				<include name="boo.xshd" />
 				<include name="booxw.exe" />
-				<include name="booish.exe" />
+				<include name="booish.gui.exe" />
 				<include name="scripts/*.int" />
 			</fileset>
 		</zip>
@@ -53,7 +53,15 @@
 	
 	<target name="compile" depends="create-resources, copy-scripts">
 	
-		<property name="booish.gui" value="${path::get-full-path('../../booish.gui')}" />	
+		<property name="booish.gui" value="${path::get-full-path('../../booish.gui')}" />
+		
+		<nant buildfile="${booish.gui}/default.build" target="build" />
+		
+		<copy todir="${build.dir}">
+			<fileset basedir="${booish.gui}/build">
+				<include name="booish.gui.exe" />
+			</fileset>
+		</copy>
 	
 		<booc
 			output="${build.dir}/booxw.exe"
@@ -61,7 +69,6 @@
 			tracelevel="Info">
 			<sources basedir="src">
 				<include name="*.boo" />
-				<include name="${booish.gui}/src/PromptBox.boo" />
 			</sources> 
 			
 			<resources basedir="${build.dir}">
@@ -69,7 +76,8 @@
 			</resources>
 			
 			<references basedir="${build.dir}">
-				<include name="booish.exe" />
+				<include name="Boo.Lang.Interpreter.dll" />
+				<include name="booish.gui.exe" />
 				<include name="ICSharpCode.TextEditor.dll" />
 				<include name="WeifenLuo.WinFormsUI.dll" />
 				<include name="System.Windows.Forms.dll" />
@@ -117,7 +125,8 @@
 					"privateenum.png",
 					"privatefield.png",
 					"privateproperty.png",
-					"privatemethod.png"
+					"privatemethod.png",
+					"event.png"
 				)
 			for image in images:
 				fname = MapPath("../resources/ClassBrowserIcons/${image}")
@@ -138,7 +147,7 @@
 		<mkdir dir="${build.dir}/scripts" />
 		<copy todir="${build.dir}" file="../../SharpDevelop/BooBinding/boo.xshd" />
 		<copy todir="${build.dir}">
-			<fileset basedir="lib">
+			<fileset basedir="${sharpdevelop.dir}/bin">
 				<include name="ICSharpCode.TextEditor.dll" />				
 				<include name="WeifenLuo.WinFormsUI.dll" />
 			</fileset>

@@ -32,17 +32,8 @@ using System.Text;
 
 namespace Boo.IO
 {
-	public class TextFile : StreamReader, System.Collections.IEnumerable
-	{
-		public TextFile(string fname) : base(fname, Encoding.Default, true)
-		{			
-		}
-		
-		public System.Collections.IEnumerator GetEnumerator()
-		{
-			return new TextReaderEnumerator(this);
-		}
-		
+	public class TextFile
+	{		
 		public static string ReadFile(string fname)
 		{
 			if (null == fname)
@@ -50,7 +41,7 @@ namespace Boo.IO
 				throw new ArgumentNullException("fname");
 			}
 			
-			using (TextFile reader=new TextFile(fname))
+			using (StreamReader reader=new StreamReader(fname, Encoding.Default, true))
 			{
 				return reader.ReadToEnd(); 
 			}

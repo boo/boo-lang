@@ -30,5 +30,3 @@ description as AssemblyDescriptionAttribute = Attribute.GetCustomAttribute(asm, 
 Assert.IsNotNull(description, "AssemblyDescriptionAttribute")
 Assert.AreEqual("bar", description.Description)
 
-Assert.IsNull(asm.GetName().GetPublicKeyToken())
-

@@ -28,6 +28,7 @@
 
 using System.Reflection;
 using System.Runtime.CompilerServices;
+using System.Resources;
 
 [assembly: AssemblyTitle("boo - an extensible programming language for the CLI")]
 [assembly: AssemblyDescription("")]
@@ -39,5 +40,5 @@ using System.Runtime.CompilerServices;
 [assembly: AssemblyCulture("")]
 [assembly: AssemblyVersion("1.0.0.0")]
 [assembly: AssemblyDelaySign(false)]
-[assembly: AssemblyKeyFile("../src/boo.snk")]
 [assembly: AssemblyKeyName("")]
+[assembly: NeutralResourcesLanguage("en", UltimateResourceFallbackLocation.MainAssembly)]

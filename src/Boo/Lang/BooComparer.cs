@@ -36,9 +36,9 @@ namespace Boo.Lang
 	/// they don't implement IComparable.
 	/// </summary>
 	[Serializable]
-	public class BooComparer : IComparer
+	public class BooComparer : IKeyComparer
 	{
-		public static readonly IComparer Default = new BooComparer();
+		public static readonly IKeyComparer Default = new BooComparer();
 		
 		private BooComparer()
 		{
@@ -110,5 +110,43 @@ namespace Boo.Lang
 			
 			return 0;
 		}
-	}
+
+        #region IKeyComparer Members
+
+        bool IKeyComparer.Equals(object x, object y)
+        {
+            return RuntimeServices.op_Equality(x, y);
+        }
+
+        #endregion
+
+        #region IHashCodeProvider Members
+
+        public int GetHashCode(object o)
+        {
+            if (null != o)
+            {
+                Array array = o as Array;
+                if (null != array)
+                {
+                    return GetArrayHashCode(array);
+                }
+                return o.GetHashCode();
+            }
+            return 0;
+        }
+
+        public int GetArrayHashCode(Array array)
+        {
+            int code = 1;
+            int position = 0;
+            foreach (object item in array)
+            {
+                code ^= GetHashCode(item) * (++position);
+            }
+            return code;
+        }
+
+        #endregion
+    }
 }

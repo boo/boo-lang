@@ -67,7 +67,7 @@ namespace Boo.Lang.Compiler
 			_assemblyReferences.Add(typeof(Boo.Lang.Builtins).Assembly);
 			_assemblyReferences.Add(GetType().Assembly);
 			_assemblyReferences.Add(typeof(object).Assembly); // corlib
-			_assemblyReferences.Add(System.Reflection.Assembly.LoadWithPartialName("System")); // System
+			_assemblyReferences.Add(typeof(System.Diagnostics.Debug).Assembly); // System
 			_maxAttributeSteps = 2;
 			_outputAssembly = string.Empty;
 			_outputType = CompilerOutputType.ConsoleApplication;

@@ -43,14 +43,14 @@ namespace Boo
 
 		public static string GetString(string name)
 		{
-			return _rm.GetString(name);
+			return _rm.GetString(name, System.Threading.Thread.CurrentThread.CurrentUICulture);
 		}
 
 		public static string Format(string name, params object[] args)
 		{
 			return string.Format(GetString(name), args);
 		}
-		
+
 		public static string Format(string name, object param)
 		{
 			return string.Format(GetString(name), param);

@@ -62,24 +62,20 @@ namespace Boo.Lang
 
 		public static string join(IEnumerable enumerable, string separator)
 		{
-			StringBuilder sb = new StringBuilder();
-			foreach (object item in enumerable)
-			{
-				if (sb.Length>0)
-				{
-					sb.Append(separator);
-				}
-				sb.Append(item);
-			}
-			return sb.ToString();
+			return join<string>(enumerable, separator);
 		}
 		
 		public static string join(IEnumerable enumerable, char separator)
 		{
+			return join<char>(enumerable, separator);
+		}
+
+		private static string join<T>(IEnumerable enumerable, T separator)
+		{
 			StringBuilder sb = new StringBuilder();
 			foreach (object item in enumerable)
 			{
-				if (sb.Length>0)
+				if (sb.Length > 0)
 				{
 					sb.Append(separator);
 				}

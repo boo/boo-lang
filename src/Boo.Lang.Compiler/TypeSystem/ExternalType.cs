@@ -176,7 +176,15 @@ namespace Boo.Lang.Compiler.TypeSystem
 				return _type;
 			}
 		}
-		
+
+		public bool IsGenericTypeDefinition
+		{
+			get
+			{
+				return _type.IsGenericTypeDefinition;
+			}
+		}
+
 		public virtual bool IsSubclassOf(IType other)
 		{
 			ExternalType external = other as ExternalType;

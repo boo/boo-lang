@@ -517,7 +517,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 			{
 				return true;
 			}
-			
+
 			ICallableType other = rhs as ICallableType;
 			if (null != other)
 			{			

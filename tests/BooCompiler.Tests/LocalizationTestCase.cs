@@ -57,7 +57,7 @@ namespace BooCompiler.Tests
 		[Test]
 		public void TestPtBrCulture()
 		{
-			AssertCultureDependentMessage("Token inesperado: foo.", CultureInfo.CreateSpecificCulture("pt-BR"));
+			AssertCultureDependentMessage("Token inesperado: foo.", CultureInfo.CreateSpecificCulture("pt"));
 		}
 
 		void AssertCultureDependentMessage(string message, CultureInfo culture)

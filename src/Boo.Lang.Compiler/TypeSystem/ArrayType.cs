@@ -92,7 +92,15 @@ namespace Boo.Lang.Compiler.TypeSystem
 				return false;
 			}
 		}
-		
+
+		public bool IsGenericTypeDefinition
+		{
+			get
+			{
+				return false;
+			}
+		}
+
 		public bool IsClass
 		{
 			get

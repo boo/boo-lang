@@ -39,11 +39,15 @@ namespace Boo.Lang
 	[EnumeratorItemType(typeof(DictionaryEntry))]
 	public class Hash : Hashtable
 	{
-		public Hash() : base(BooHashCodeProvider.Default, BooComparer.Default)
+		public Hash() : this(BooComparer.Default)
 		{
 		}
-		
-		public Hash(IEnumerable enumerable) : base(BooHashCodeProvider.Default, BooComparer.Default)
+
+		public Hash(IKeyComparer comparer) : base(comparer)
+		{
+		}
+
+		public Hash(IEnumerable enumerable) : base(BooComparer.Default)
 		{
 			if (null == enumerable)
 			{
@@ -54,10 +58,6 @@ namespace Boo.Lang
 			{
 				Add(tuple.GetValue(0), tuple.GetValue(1));
 			}
-		}
-		
-		public Hash(bool caseInsensitive) : base(CaseInsensitiveHashCodeProvider.Default, CaseInsensitiveComparer.Default)
-		{
 		}
 		
 		public Hash(SerializationInfo info, StreamingContext context) : base(info, context)

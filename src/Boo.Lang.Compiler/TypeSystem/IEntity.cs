@@ -119,7 +119,12 @@ namespace Boo.Lang.Compiler.TypeSystem
 	}
 	
 	public interface IType : ITypedEntity, INamespace
-	{	
+	{
+		bool IsGenericTypeDefinition
+		{
+			get;
+		}
+
 		bool IsClass
 		{
 			get;

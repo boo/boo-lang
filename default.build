@@ -189,6 +189,8 @@
 			debug="${debug}"
 			optimize="${optimize}">
 			
+			<arg value="/keyfile:../src/boo.snk" />
+			
 			<sources basedir="src/Boo.Lang.Compiler">
 				<include name="**/*.cs" />
 			</sources>
@@ -204,8 +206,9 @@
 			target="library"
 			output="build/Boo.dll"
 			debug="${debug}"
-			optimize="${optimize}"
-			if="${nant.platform.win32}">
+			optimize="${optimize}">
+			
+			<arg value="/keyfile:../src/boo.snk" />
 
 			<sources basedir="src/Boo">
 				<include name="**/*.cs" />
@@ -213,35 +216,34 @@
 			
 			<resources basedir="build">
 				<include name="strings.resources" />
-			</resources>
-			<resources basedir="build/pt">
-				<include name="strings.pt.resources" />
-			</resources>
-			<resources basedir="build/it">
-				<include name="strings.it.resources" />
 			</resources>
 		</csc>
 		
-		<csc
-			target="library"
-			output="build/Boo.dll"
-			debug="${debug}"
-			optimize="${optimize}"
-			unless="${nant.platform.win32}">
-
-			<sources basedir="src/Boo">
-				<include name="**/*.cs" />
+		<property name="culture" value="pt" />
+		<call target="create-satellite" />
+		
+		<property name="culture" value="it" />
+		<call target="create-satellite" />
+	</target>
+	
+	<target name="create-satellite">
+		<al target="library"
+			output="build/${culture}/Boo.resources.dll"
+			keyfile="src/boo.snk"
+			culture="${culture}"
+			template="build/Boo.dll">
+			<sources basedir="build/${culture}">
+				<include name="strings.${culture}.resources" />
 			</sources>
-			
-			<resources basedir="build">
-				<include name="strings.resources" />
-			</resources>
-		</csc>
+		</al>
 	</target>
 	
 	<target name="Boo.Lang.Parser" depends="Boo.Lang.Compiler, compile-grammar">
 		<csc target="library" output="build/Boo.Lang.Parser.dll"
 			debug="${debug}" optimize="${optimize}">
+			
+			<arg value="/keyfile:../src/boo.snk" />
+			
 			<sources basedir="src/Boo.Lang.Parser">
 				<include name="**/*.cs" />
 			</sources>

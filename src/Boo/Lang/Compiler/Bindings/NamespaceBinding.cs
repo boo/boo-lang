@@ -1,4 +1,4 @@
-﻿#region license
+#region license
 // boo - an extensible programming language for the CLI
 // Copyright (C) 2004 Rodrigo B. de Oliveira
 //
@@ -33,7 +33,7 @@ using System.Collections;
 
 namespace Boo.Lang.Compiler.Bindings
 {
-	public class NamespaceBinding : IBinding, INamespace
+	public class NamespaceBinding : AbstractExternalBinding, IBinding, INamespace
 	{		
 		BindingManager _bindingManager;
 		
@@ -140,7 +140,7 @@ namespace Boo.Lang.Compiler.Bindings
 		}
 	}
 	
-	public class AssemblyQualifiedNamespaceBinding : IBinding, INamespace
+	public class AssemblyQualifiedNamespaceBinding : AbstractExternalBinding, IBinding, INamespace
 	{
 		Assembly _assembly;
 		NamespaceBinding _subject;
@@ -173,7 +173,7 @@ namespace Boo.Lang.Compiler.Bindings
 		}
 	}
 	
-	public class AliasedNamespaceBinding : IBinding, INamespace
+	public class AliasedNamespaceBinding : AbstractExternalBinding, IBinding, INamespace
 	{
 		string _alias;
 		IBinding _subject;

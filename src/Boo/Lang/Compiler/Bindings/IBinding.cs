@@ -46,9 +46,9 @@ namespace Boo.Lang.Compiler.Bindings
 		Assembly = 0x400,
 		Namespace = 0x800,
 		Ambiguous = 0x1000,
-		Error,
-		Unresolved
-	}
+		Deferred = 0x2000,
+		Error
+	}	
 	
 	public interface IBinding
 	{	
@@ -61,7 +61,80 @@ namespace Boo.Lang.Compiler.Bindings
 		{
 			get;
 		}
+		
+		bool IsResolved
+		{
+			get;
+		}
+		
+		event EventHandler Resolved;
 	}	
+	
+	public abstract class AbstractInternalBinding
+	{
+		protected EventHandler _resolved;
+		
+		protected AbstractInternalBinding()
+		{
+		}
+		
+		public virtual bool IsResolved
+		{
+			get
+			{
+				return true;
+			}
+		}
+		
+		public virtual event EventHandler Resolved
+		{
+			add
+			{
+				_resolved += value;
+			}
+			
+			remove
+			{
+				_resolved -= value;
+			}
+		}
+		
+		public virtual void OnResolved()
+		{
+			if (null != _resolved)
+			{
+				_resolved(this, EventArgs.Empty);
+			}
+		}
+	}
+	
+	public abstract class AbstractExternalBinding
+	{
+		protected AbstractExternalBinding()
+		{
+		}
+		
+		public bool IsResolved
+		{
+			get
+			{
+				return true; // external bindings are always resolved...
+			}
+		}
+		
+		public event EventHandler Resolved
+		{
+			add
+			{
+				throw new InvalidOperationException("node already resolved!");
+			}
+			
+			remove
+			{
+				throw new InvalidOperationException("node already resolved!");
+			}
+		}
+	}
 	
 	public interface ITypedBinding : IBinding
 	{

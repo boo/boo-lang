@@ -1,4 +1,4 @@
-﻿#region license
+#region license
 // boo - an extensible programming language for the CLI
 // Copyright (C) 2004 Rodrigo B. de Oliveira
 //
@@ -29,7 +29,7 @@
 
 namespace Boo.Lang.Compiler.Bindings
 {
-	public class AssemblyBinding : IBinding
+	public class AssemblyBinding : AbstractExternalBinding, IBinding
 	{
 		System.Reflection.Assembly _assembly;
 		

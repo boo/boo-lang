@@ -32,7 +32,7 @@ namespace Boo.Lang.Compiler.Bindings
 	using System;
 	using Boo.Lang.Ast;
 	
-	public abstract class AbstractInternalTypeBinding : ITypeBinding, INamespace
+	public abstract class AbstractInternalTypeBinding : AbstractInternalBinding, ITypeBinding, INamespace
 	{		
 		protected BindingManager _bindingManager;
 		

@@ -31,7 +31,7 @@ using Boo.Lang.Ast;
 
 namespace Boo.Lang.Compiler.Bindings
 {
-	public class LocalBinding : ITypedBinding
+	public class LocalBinding : AbstractInternalBinding, ITypedBinding
 	{		
 		Local _local;
 		

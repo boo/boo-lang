@@ -31,7 +31,7 @@ using Boo.Lang.Ast;
 
 namespace Boo.Lang.Compiler.Bindings
 {
-	public class ParameterBinding : ITypedBinding
+	public class ParameterBinding : AbstractExternalBinding, ITypedBinding
 	{
 		ParameterDeclaration _parameter;
 		

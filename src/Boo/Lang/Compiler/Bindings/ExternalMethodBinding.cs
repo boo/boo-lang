@@ -32,7 +32,7 @@ using System.Reflection;
 
 namespace Boo.Lang.Compiler.Bindings
 {
-	public class ExternalMethodBinding : IMethodBinding
+	public class ExternalMethodBinding : AbstractExternalBinding, IMethodBinding
 	{
 		BindingManager _bindingManager;
 		

@@ -38,29 +38,15 @@ using Boo.Lang.Compiler.Bindings;
 using List=Boo.Lang.List;
 
 namespace Boo.Lang.Compiler.Pipeline
-{		
-	class SemanticMethodInfo
-	{
-		public static readonly SemanticMethodInfo Null = new SemanticMethodInfo(null, null);
-		
-		public Method Method;
-		public ArrayList ReturnStatements;
-		
-		public SemanticMethodInfo(Method method, ArrayList returnStatements)
-		{
-			Method = method;
-			ReturnStatements = returnStatements;
-		}
-	}
-	
+{	
 	/// <summary>
 	/// Step 4.
 	/// </summary>
 	public class SemanticStep : AbstractNamespaceSensitiveCompilerStep
 	{
-		Stack _methodInfoStack;
+		Stack _memberResolutionStack;
 		
-		SemanticMethodInfo _currentMethodInfo;
+		InternalMethodBinding _currentMethodInfo;
 		
 		IMethodBinding RuntimeServices_IsMatchBinding;
 		
@@ -80,8 +66,7 @@ namespace Boo.Lang.Compiler.Pipeline
 		
 		public override void Run()
 		{					
-			_currentMethodInfo = SemanticMethodInfo.Null;
-			_methodInfoStack = new Stack();			
+			_memberResolutionStack = new Stack();			
 			
 			RuntimeServices_IsMatchBinding = (IMethodBinding)BindingManager.RuntimeServicesBinding.Resolve("IsMatch");
 			RuntimeServices_Contains = (IMethodBinding)BindingManager.RuntimeServicesBinding.Resolve("Contains");
@@ -96,8 +81,7 @@ namespace Boo.Lang.Compiler.Pipeline
 		{
 			base.Dispose();
 			
-			_currentMethodInfo = null;
-			_methodInfoStack = null;
+			_memberResolutionStack = null;
 		}
 		
 		public override void OnModule(Boo.Lang.Ast.Module module, ref Boo.Lang.Ast.Module resultingNode)
@@ -231,7 +215,7 @@ namespace Boo.Lang.Compiler.Pipeline
 		{
 			InternalConstructorBinding binding = new InternalConstructorBinding(BindingManager, node);
 			BindingManager.Bind(node, binding);
-			PushMethod(node);
+			PushMember(node);
 			PushNamespace(binding);
 			return true;
 		}
@@ -239,7 +223,7 @@ namespace Boo.Lang.Compiler.Pipeline
 		public override void LeaveConstructor(Constructor node, ref Constructor resultingNode)
 		{
 			PopNamespace();
-			PopMethod();
+			PopMember();
 			BindParameterIndexes(node);
 		}
 		
@@ -269,16 +253,46 @@ namespace Boo.Lang.Compiler.Pipeline
 				}
 			}
 			
-			PushMethod(method);
+			PushMember(method);
 			PushNamespace(binding);
 			return true;
 		}
 		
 		public override void OnSuperLiteralExpression(SuperLiteralExpression node, ref Expression resultingNode)
 		{		
-			InternalMethodBinding binding = (InternalMethodBinding)GetBinding(_currentMethodInfo.Method);
-			//BindingManager.Bind(node, binding.ReturnType);
-			//_currentMethodInfo.AddSuperExpression(node);
+			Method current = _currentMethodInfo.Method;
+			if (current.IsStatic)
+			{
+				Errors.MemberNeedsInstance(node, current.Name);
+				BindingManager.Error(node);
+			}
+			else
+			{				
+				Defer(_currentMethodInfo, node, new DeferredBindingResolvedHandler(OnSuperMethodResolved));				
+			}
+		}
+		
+		void Defer(IBinding dependency, Node node, DeferredBindingResolvedHandler handler)
+		{
+			DeferredBinding deferred = new DeferredBinding(node, handler);			
+			dependency.Resolved += new EventHandler(deferred.OnDependencyResolved);
+			BindingManager.Bind(node, deferred);
+		}
+		
+		void OnSuperMethodResolved(object sender, DeferredBindingResolvedArgs args)
+		{			
+			Node node = args.Node;
+			InternalMethodBinding binding = (InternalMethodBinding)args.Binding;
+			if (null == binding.Override)
+			{
+				Errors.InvalidSuper(node);
+				BindingManager.Error(node);
+			}
+			else
+			{
+				_context.TraceVerbose("{0}: super reference resolved to {1}", node.LexicalInfo, binding.Override); 
+				BindingManager.Bind(node, binding);
+			}
 		}
 		
 		public override void LeaveMethod(Method method, ref Method resultingNode)
@@ -291,10 +305,10 @@ namespace Boo.Lang.Compiler.Pipeline
 			
 			InternalMethodBinding binding = (InternalMethodBinding)GetBinding(method);
 			ResolveMethodOverride(method, binding);
-			binding.Resolved();
+			binding.OnResolved();
 			
 			PopNamespace();
-			PopMethod();
+			PopMember();
 			BindParameterIndexes(method);
 		}
 		
@@ -779,10 +793,29 @@ namespace Boo.Lang.Compiler.Pipeline
 		
 		public override void OnMethodInvocationExpression(MethodInvocationExpression node, ref Expression resultingNode)
 		{			
-			node.Target = Switch(node.Target);
-			Switch(node.Arguments);
+			node.Target = Switch(node.Target);			
 			
 			IBinding targetBinding = BindingManager.GetBinding(node.Target);
+			if (BindingType.Deferred == targetBinding.BindingType)
+			{
+				Defer(targetBinding, node, new DeferredBindingResolvedHandler(OnMieTargetResolved));
+			}
+			else
+			{
+				OnMieTargetResolved(targetBinding, node);
+			}
+		}
+		
+		void OnMieTargetResolved(object sender, DeferredBindingResolvedArgs args)
+		{
+			MethodInvocationExpression mie = (MethodInvocationExpression)args.Node;
+			OnMieTargetResolved(GetBinding(mie.Target), mie);
+		}
+		
+		void OnMieTargetResolved(IBinding targetBinding, MethodInvocationExpression node)
+		{	
+			Switch(node.Arguments);
+			
 			if (BindingType.Ambiguous == targetBinding.BindingType)
 			{		
 				IBinding[] bindings = ((AmbiguousBinding)targetBinding).Bindings;
@@ -811,7 +844,7 @@ namespace Boo.Lang.Compiler.Pipeline
 						{			
 							if (CheckTargetContext(node.Target, targetMethod))
 							{
-								nodeBinding = targetMethod.ReturnType;
+								nodeBinding = targetMethod;
 							}
 						}
 					}
@@ -1165,7 +1198,7 @@ namespace Boo.Lang.Compiler.Pipeline
 				if (!internalMethod.IsResolved)
 				{
 					_context.TraceVerbose("Method {0} needs resolving.", binding.Name);
-					if (!IsInMethodInfoStack(internalMethod.Method))
+					if (!IsBeingResolved(internalMethod.Method))
 					{
 						Switch(internalMethod.Method);
 					}
@@ -1293,24 +1326,42 @@ namespace Boo.Lang.Compiler.Pipeline
 			return binding;
 		}
 		
-		void PushMethod(Method method)
+		void PushMember(Node node)
 		{
-			_methodInfoStack.Push(_currentMethodInfo);
+			_context.TraceVerbose("PushMember({0})", node);
 			
-			// todo: alloc ArrayList from a pool
-			_currentMethodInfo = new SemanticMethodInfo(method, new ArrayList());
+			if (node is Method)
+			{
+				_currentMethodInfo = (InternalMethodBinding)GetBinding(node);
+			}
+			_memberResolutionStack.Push(node);
 		}
 		
-		void PopMethod()
+		void PopMember()
 		{
-			_currentMethodInfo = (SemanticMethodInfo)_methodInfoStack.Pop();
+			Node node = (Node)_memberResolutionStack.Pop();
+			if (node is Method)
+			{
+				_currentMethodInfo = null;
+			}
+			
+			_context.TraceVerbose("PopMember() => {0}", node);
+			
+			if (_memberResolutionStack.Count > 0)
+			{
+				node = (Node)_memberResolutionStack.Peek();
+				if (node is Method)
+				{
+					_currentMethodInfo = (InternalMethodBinding)GetBinding(node);
+				}
+			}
 		}
 		
-		bool IsInMethodInfoStack(Method method)
-		{			
-			foreach (SemanticMethodInfo info in _methodInfoStack)
-			{				
-				if (method == info.Method)
+		bool IsBeingResolved(Node member)
+		{				
+			foreach (Node node in _memberResolutionStack)
+			{
+				if (node == member)
 				{
 					return true;
 				}

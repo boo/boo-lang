@@ -107,15 +107,14 @@ done * criar um nó Unless
 
 done * booc nant task (em boo, obviamente)
 
-* super
+done * super
+	done * DeferredBinding
 
 * type
 
 * field initializers
 
 * null
-
-* transformação de acesso de propriedade em invocaçao de método passa para SemanticStep
 
 * AstAttribute vira IAstAttribute que implementa ICompilerStep
 

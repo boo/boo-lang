@@ -31,7 +31,7 @@ namespace Boo.Lang.Compiler.Bindings
 {
 	using Boo.Lang.Ast;
 	
-	public class InternalPropertyBinding : IPropertyBinding
+	public class InternalPropertyBinding : AbstractInternalBinding, IPropertyBinding
 	{
 		BindingManager _bindingManager;
 		

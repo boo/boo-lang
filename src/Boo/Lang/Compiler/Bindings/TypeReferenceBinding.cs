@@ -1,4 +1,4 @@
-﻿#region license
+#region license
 // boo - an extensible programming language for the CLI
 // Copyright (C) 2004 Rodrigo B. de Oliveira
 //
@@ -29,7 +29,7 @@
 
 namespace Boo.Lang.Compiler.Bindings
 {
-	public class TypeReferenceBinding : ITypedBinding, INamespace
+	public class TypeReferenceBinding : AbstractExternalBinding, ITypedBinding, INamespace
 	{
 		ITypeBinding _type;
 		

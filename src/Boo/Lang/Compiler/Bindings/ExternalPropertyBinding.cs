@@ -29,7 +29,7 @@
 
 namespace Boo.Lang.Compiler.Bindings
 {
-	public class ExternalPropertyBinding : IPropertyBinding
+	public class ExternalPropertyBinding : AbstractExternalBinding, IPropertyBinding
 	{
 		BindingManager _bindingManager;
 		

@@ -29,7 +29,7 @@
 
 namespace Boo.Lang.Compiler.Bindings
 {
-	public abstract class NullBinding : ITypeBinding, INamespace
+	public abstract class NullBinding : AbstractExternalBinding, ITypeBinding, INamespace
 	{	
 		public abstract string Name
 		{

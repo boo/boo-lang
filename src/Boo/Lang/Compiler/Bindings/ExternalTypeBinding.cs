@@ -55,6 +55,25 @@ namespace Boo.Lang.Compiler.Bindings
 			_type = type;
 		}
 		
+		public bool IsResolved
+		{
+			get
+			{
+				return true;
+			}
+		}
+		
+		public event EventHandler Resolved
+		{
+			add
+			{
+			}
+			
+			remove
+			{
+			}
+		}
+		
 		public string FullName
 		{
 			get

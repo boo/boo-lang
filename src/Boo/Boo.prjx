@@ -1,3 +1,4 @@
+
 <Project name="Boo" description="" newfilesearch="None" enableviewstate="True" version="1.1" projecttype="C#">
   <Contents>
     <File name=".\AssemblyInfo.cs" subtype="Code" buildaction="Compile" dependson="" data="" />
@@ -201,6 +202,7 @@
     <File name=".\Lang\Compiler\Bindings\AmbiguousBinding.cs" subtype="Code" buildaction="Compile" dependson="" data="" />
     <File name=".\Lang\Compiler\Bindings\AssemblyBinding.cs" subtype="Code" buildaction="Compile" dependson="" data="" />
     <File name=".\Lang\Compiler\Bindings\BindingManager.cs" subtype="Code" buildaction="Compile" dependson="" data="" />
+    <File name=".\Lang\Compiler\Bindings\DeferredBinding.cs" subtype="Code" buildaction="Compile" dependson="" data="" />
     <File name=".\Lang\Compiler\Bindings\ErrorBinding.cs" subtype="Code" buildaction="Compile" dependson="" data="" />
     <File name=".\Lang\Compiler\Bindings\ExternalEventBinding.cs" subtype="Code" buildaction="Compile" dependson="" data="" />
     <File name=".\Lang\Compiler\Bindings\ExternalFieldBinding.cs" subtype="Code" buildaction="Compile" dependson="" data="" />
@@ -220,7 +222,6 @@
     <File name=".\Lang\Compiler\Bindings\ParameterBinding.cs" subtype="Code" buildaction="Compile" dependson="" data="" />
     <File name=".\Lang\Compiler\Bindings\TypeReferenceBinding.cs" subtype="Code" buildaction="Compile" dependson="" data="" />
     <File name=".\Lang\Compiler\Bindings\Types.cs" subtype="Code" buildaction="Compile" dependson="" data="" />
-    <File name=".\Lang\Compiler\Bindings\UnresolvedBinding.cs" subtype="Code" buildaction="Compile" dependson="" data="" />
     <File name=".\Lang\Compiler\IO\FileInput.cs" subtype="Code" buildaction="Compile" dependson="" data="" />
     <File name=".\Lang\Compiler\IO\ReaderInput.cs" subtype="Code" buildaction="Compile" dependson="" data="" />
     <File name=".\Lang\Compiler\IO\StringInput.cs" subtype="Code" buildaction="Compile" dependson="" data="" />

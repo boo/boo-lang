@@ -29,7 +29,7 @@
 
 namespace Boo.Lang.Compiler.Bindings
 {
-	public class ExternalFieldBinding : IFieldBinding
+	public class ExternalFieldBinding : AbstractExternalBinding, IFieldBinding
 	{
 		BindingManager _bindingManager;
 		

@@ -34,7 +34,7 @@ namespace Boo.Lang.Compiler.Bindings
 {
 	public delegate bool BindingFilter(IBinding binding);
 	
-	public class AmbiguousBinding : IBinding
+	public class AmbiguousBinding : AbstractInternalBinding, IBinding
 	{
 		IBinding[] _bindings;
 		

@@ -120,18 +120,6 @@ namespace Boo.Lang.Compiler.Bindings
 			{
 				NodeNotBound(node);
 			}
-			else
-			{
-				if (BindingType.Unresolved == binding.BindingType)
-				{
-					UnresolvedBinding unresolved = (UnresolvedBinding)binding;
-					if (null != unresolved.Resolved)
-					{
-						binding = unresolved.Resolved;
-						Bind(node, binding);
-					}
-				}
-			}
 			return binding;
 		}	
 		

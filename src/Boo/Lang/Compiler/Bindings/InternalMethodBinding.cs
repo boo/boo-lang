@@ -28,30 +28,27 @@
 #endregion
 
 using System;
+using System.Collections;
 using Boo.Lang.Ast;
 
 namespace Boo.Lang.Compiler.Bindings
 {
-	public class InternalMethodBinding : IMethodBinding, INamespace
+	public class InternalMethodBinding : AbstractInternalBinding, IMethodBinding, INamespace
 	{
 		BindingManager _bindingManager;
 		
 		Boo.Lang.Ast.Method _method;
 		
-		bool _resolved;
-		
-		ITypeBinding _returnType;
+		bool _isResolved = false;
 		
 		IMethodBinding _override;
+		
+		public ArrayList ReturnStatements = new ArrayList();
 		
 		internal InternalMethodBinding(BindingManager manager, Boo.Lang.Ast.Method method)
 		{
 			_bindingManager = manager;
 			_method = method;
-			if (null == _method.ReturnType)
-			{
-				_returnType = new UnresolvedBinding();
-			}
 		}
 		
 		public ITypeBinding DeclaringType
@@ -62,11 +59,11 @@ namespace Boo.Lang.Compiler.Bindings
 			}
 		}
 		
-		public bool IsResolved
+		public override bool IsResolved
 		{
 			get
 			{
-				return _resolved;
+				return _isResolved;
 			}
 		}
 		
@@ -135,7 +132,7 @@ namespace Boo.Lang.Compiler.Bindings
 			
 			set
 			{
-				_override = null;
+				_override = value;
 			}
 		}
 		
@@ -148,27 +145,14 @@ namespace Boo.Lang.Compiler.Bindings
 		{
 			get
 			{				
-				if (null == _returnType)
-				{
-					_returnType = _bindingManager.GetBoundType(_method.ReturnType);
-				}
-				return _returnType;
+				return _bindingManager.GetBoundType(_method.ReturnType);
 			}
 		}
 		
-		public void Resolved()
-		{
-			ITypeBinding resolvedReturnType = _bindingManager.GetBoundType(_method.ReturnType);
-			_resolved = true;
-			
-			if (null != _returnType)
-			{
-				if (BindingType.Unresolved == _returnType.BindingType)
-				{
-					((UnresolvedBinding)_returnType).Resolved = resolvedReturnType;
-				}
-			}
-			_returnType = resolvedReturnType;
+		public override void OnResolved()
+		{			
+			_isResolved = true;			
+			base.OnResolved();
 		}
 		
 		public IBinding Resolve(string name)

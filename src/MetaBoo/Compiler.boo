@@ -41,7 +41,7 @@ class CompilerPipeline:
 		pass
 		
 class CompilerContext:
-	CompileUnit as Boo.Lang.Compiler.Ast.CompileUnit:
+	CompileUnit as MetaBoo.Ast.CompileUnit:
 		get:
 			return null
 

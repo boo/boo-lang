@@ -33,67 +33,43 @@ import Boo.AntlrParser from Boo.AntlrParser
 import Boo.Lang.Compiler.Ast
 
 def WriteNodeTypeEnum(module as Module):
-	using writer=OpenFile(GetPath("NodeType.cs")):
+	using writer=OpenFile(GetPath("NodeType.boo")):
 		WriteLicense(writer)
 		WriteWarning(writer)
 		writer.WriteLine("""
-namespace Boo.Lang.Compiler.Ast
-{
-	using System;
-	
-	[Serializable]
-	public enum NodeType
-	{""")
+namespace MetaBoo.Ast
+
+enum NodeType:
+	""")
 	
 		nodes = GetConcreteAstNodes(module)
-		last = nodes[-1]
 		for item as TypeDefinition in nodes:
-			writer.Write("\t\t${item.Name}")
-			if item is not last:
-				writer.WriteLine(", ")
-	
-		writer.Write("""
-	}
-}""")
+			writer.Write("\t${item.Name}")
+			
+		writer.Write("""	
+""")
 
 def WriteEnum(node as EnumDefinition):
 	using writer=OpenFile(GetPathFromNode(node)):
 		WriteLicense(writer)
 		writer.Write("""
-namespace Boo.Lang.Compiler.Ast
-{
-	using System;
+namespace MetaBoo.Ast
 
-	[Serializable]
-	public enum ${node.Name}
-	{	
-""")
-		last = node.Members[-1]
+enum ${node.Name}:
+""")		
 		for field as EnumMember in node.Members:
-			writer.Write("\t\t${field.Name}")
+			writer.Write("\t${field.Name}")
 			if field.Initializer:
 				writer.Write(" = ${field.Initializer.Value}")
-			if field is not last:
-				writer.Write(",")
 			writer.WriteLine()
-
-		writer.Write("""
-	}
-}
+		writer.Write("""	
 """)
 
 def FormatParameterList(fields as List):
-	buffer = System.Text.StringBuilder()
-	last = fields[-1]
-	
-	for field as Field in fields:
-		buffer.Append(field.Type)
-		buffer.Append(" ")
-		buffer.Append(GetParameterName(field))
-		if field is not last:
-			buffer.Append(", ")
-			
-	return buffer.ToString()
+	return [
+			"${GetParameterName(f)} as ${f.Type}"
+			for f as Field in fields
+			].Join(", ")
 	
 def GetParameterName(field as Field):
 	name = field.Name
@@ -105,92 +81,62 @@ def GetParameterName(field as Field):
 def WriteAssignmentsFromParameters(writer as TextWriter, fields as List):
 	for field as Field in fields:
 		writer.Write("""
-			${field.Name} = ${GetParameterName(field)};""")
+		self.${field.Name} = ${GetParameterName(field)}""")
 	
 def WriteClassImpl(node as ClassDefinition):
 	
 	allFields = GetAllFields(node)
 	
-	using writer=OpenFile(GetPath("Impl/${node.Name}Impl.cs")):
+	using writer=OpenFile(GetPath("Impl/${node.Name}Impl.boo")):
 		WriteLicense(writer)
 		WriteWarning(writer)
 		writer.WriteLine("""
-namespace Boo.Lang.Compiler.Ast.Impl
-{	
-	using Boo.Lang.Compiler.Ast;
-	using System.Collections;
-	using System.Runtime.Serialization;
-	
-	[System.Serializable]
-	public abstract class ${node.Name}Impl : ${join(node.BaseTypes, ', ')}
-	{
+namespace MetaBoo.Ast.Impl
+
+import Boo.Lang.Compiler.Ast
+import System.Collections
+import System.Runtime.Serialization
+
+abstract class ${node.Name}Impl(${join(node.BaseTypes, ', ')}):
 """)
 	
 		for field as Field in node.Members:
-			writer.WriteLine("\t\tprotected ${field.Type} ${GetPrivateName(field)};");
+			writer.WriteLine("\t${GetPrivateName(field)} as ${field.Type} ")
 	
 		writer.WriteLine("""
-		protected ${node.Name}Impl()
-		{
-			InitializeFields();
-		}
+	protected def constructor():
+		InitializeFields()
 		
-		protected ${node.Name}Impl(LexicalInfo info) : base(info)
-		{
-			InitializeFields();
-		}
+	protected def constructor(info as LexicalInfo):
+		super(info)
+		InitializeFields()
 		""")
 		
 		simpleFields = GetSimpleFields(node)
 		if len(simpleFields):
 			writer.Write("""
-		protected ${node.Name}Impl(${FormatParameterList(simpleFields)})
-		{
-			InitializeFields();""")
+	protected def constructor(${FormatParameterList(simpleFields)}):
+		InitializeFields()""")
 				
 			WriteAssignmentsFromParameters(writer, simpleFields)
 			writer.Write("""
-		}
 			
-		protected ${node.Name}Impl(LexicalInfo lexicalInfo, ${FormatParameterList(simpleFields)}) : base(lexicalInfo)
-		{
-			InitializeFields();""")
-			WriteAssignmentsFromParameters(writer, simpleFields)	
-			writer.Write("""
-		}
-			""")
+	protected def constructor(lexicalInfo as LexicalInfo, ${FormatParameterList(simpleFields)}):
+		super(lexicalInfo)
+		InitializeFields()""")
+			WriteAssignmentsFromParameters(writer, simpleFields)
 			
-		writer.WriteLine("""
-		new public ${node.Name} CloneNode()
-		{
-			return Clone() as ${node.Name};
-		}""")
-		
 		unless IsAbstract(node):
 			writer.WriteLine("""
-		override public NodeType NodeType
-		{
-			get
-			{
-				return NodeType.${node.Name};
-			}
-		}
-		
-		override public void Switch(IAstTransformer transformer, out Node resultingNode)
-		{
-			${node.Name} thisNode = (${node.Name})this;
-			${GetResultingTransformerNode(node)} resultingTypedNode = thisNode;
-			transformer.On${node.Name}(thisNode, ref resultingTypedNode);
-			resultingNode = resultingTypedNode;
-		}""")
+	override NodeType:
+		get:
+			return NodeType.${node.Name}
+			""")
 		
 			writer.WriteLine("""
-		override public bool Replace(Node existing, Node newNode)
-		{
-			if (base.Replace(existing, newNode))
-			{
-				return true;
-			}""")
+	override def Replace(existing as Node, newNode as Node):
+		return true if super(existing, newNode)
+		""")
 			
 			for field as Field in allFields:				
 				fieldType=ResolveFieldType(field)
@@ -201,119 +147,89 @@ namespace Boo.Lang.Compiler.Ast.Impl
 				if IsCollection(fieldType):
 					collectionItemType = GetCollectionItemType(fieldType)
 					writer.WriteLine("""
-			if (${fieldName} != null)
-			{
-				${collectionItemType} item = existing as ${collectionItemType};
-				if (null != item)
-				{
-					${collectionItemType} newItem = (${collectionItemType})newNode;
-					if (${fieldName}.Replace(item, newItem))
-					{
-						return true;
-					}
-				}
-			}""")
+		if ${fieldName} is not null:
+			item = existing as ${collectionItemType};
+			if item is not null:
+				if ${fieldName}.Replace(item, newNode):
+					return true
+		""")
 				else:
 					unless IsEnum(fieldType):
 						writer.WriteLine("""
-			if (${fieldName} == existing)
-			{
-				this.${field.Name} = (${field.Type})newNode;
-				return true;
-			}""")
+		if ${fieldName} == existing:
+			this.${field.Name} = newNode
+			return true
+		""")
 			
 			writer.WriteLine("""
-			return false;
-		}""")
+		return false
+		""")
 		
 			writer.WriteLine("""
-		override public object Clone()
-		{
-			${node.Name} clone = FormatterServices.GetUninitializedObject(typeof(${node.Name})) as ${node.Name};
-			clone._lexicalInfo = _lexicalInfo;
-			clone._documentation = _documentation;
-			clone._properties = _properties.Clone() as Hashtable;
-			""")
+	override def Clone():
+			
+		clone = FormatterServices.GetUninitializedObject(${node.Name}) as ${node.Name}
+		clone._lexicalInfo = _lexicalInfo
+		clone._documentation = _documentation
+		clone._properties = _properties.Clone()
+		""")
 			
 			for field as Field in allFields:
 				fieldType = ResolveFieldType(field)
 				fieldName = GetPrivateName(field)
 				if fieldType and not IsEnum(fieldType):
 					writer.WriteLine("""
-			if (null != ${fieldName})
-			{
-				clone.${fieldName} = ${fieldName}.Clone() as ${field.Type};
-				clone.${fieldName}.InitializeParent(clone);
-			}""")
+		if ${fieldName} is not null:
+			clone.${fieldName} = ${fieldName}.Clone()
+			clone.${fieldName}.InitializeParent(clone)
+		""")
 				else:
 					writer.WriteLine("""
-			clone.${fieldName} = ${fieldName};""")
+		clone.${fieldName} = ${fieldName}""")
 			
 			writer.Write("""			
-			return clone;
-		}
+		return clone
 			""")
 		
 		for field as Field in node.Members:
 			writer.WriteLine("""
-		public ${field.Type} ${field.Name}
-		{
-			get
-			{
-				return ${GetPrivateName(field)};
-			}
-			""")
+	${field.Name} as ${field.Type}:
+		get:
+			return ${GetPrivateName(field)}
+	""")
 			
 			fieldType = ResolveFieldType(field)
 			if fieldType and not IsEnum(fieldType):
 				writer.WriteLine("""
-			set
-			{
-				if (${GetPrivateName(field)} != value)
-				{
-					${GetPrivateName(field)} = value;
-					if (null != ${GetPrivateName(field)})
-					{
-						${GetPrivateName(field)}.InitializeParent(this);""")
+		set:
+			if ${GetPrivateName(field)} != value:
+				${GetPrivateName(field)} = value
+				if ${GetPrivateName(field)} is not null:
+					${GetPrivateName(field)}.InitializeParent(self)""")
 						
 				if field.Attributes.Contains("LexicalInfo"):
 					writer.WriteLine("""
-						LexicalInfo = value.LexicalInfo;""")
-						
-				writer.WriteLine("""
-					}
-				}
-			}
+						self.LexicalInfo = value.LexicalInfo
 			""")
 			else:
 				writer.WriteLine("""
-			set
-			{
-				${GetPrivateName(field)} = value;
-			}""")
-			
-			writer.WriteLine("""
-		}
+		set:
+			${GetPrivateName(field)} = value
 		""")
 		
 		writer.WriteLine("""
-		private void InitializeFields()
-		{""")
+	private def InitializeFields():
+	""")
 		
 		for field as Field in node.Members:
 			if IsCollectionField(field):
-				writer.WriteLine("\t\t\t${GetPrivateName(field)} = new ${field.Type}(this);")
+				writer.WriteLine("\t\t${GetPrivateName(field)} = ${field.Type}(self)")
 			else:
 				if field.Attributes.Contains("auto"):
 					writer.WriteLine("""
-			${GetPrivateName(field)} = new ${field.Type}();
-			${GetPrivateName(field)}.InitializeParent(this);
+		${GetPrivateName(field)} = ${field.Type}()
+		${GetPrivateName(field)}.InitializeParent(this)
 			""")
-		
-		writer.WriteLine("""
-		}
-	}
-}""")
 		
 
 def WriteClass(node as ClassDefinition):
@@ -323,22 +239,14 @@ def WriteClass(node as ClassDefinition):
 	using writer=OpenFile(path):
 		WriteLicense(writer)
 		writer.Write("""
-namespace Boo.Lang.Compiler.Ast
-{
-	using System;
+namespace MetaBoo.Ast	
 	
-	[Serializable]
-	public class ${node.Name} : Boo.Lang.Compiler.Ast.Impl.${node.Name}Impl
-	{
-		public ${node.Name}()
-		{
-		}
+class ${node.Name}(MetaBoo.Ast.Impl.${node.Name}Impl):
+	def constructor():
+		super()
 		
-		public ${node.Name}(LexicalInfo lexicalInfo) : base(lexicalInfo)
-		{
-		}
-	}
-}
+	def constructor(lexicalInfo as LexicalInfo):
+		super(lexicalInfo)
 """)
 	
 def WriteCollection(node as ClassDefinition):
@@ -470,10 +378,10 @@ def OpenFile(fname as string):
 	return StreamWriter(fname, false, System.Text.Encoding.UTF8)
 	
 def GetPath(fname as string):
-	return Path.Combine("src/Boo.Lang.Compiler/Ast", fname)
+	return Path.Combine("src/MetaBoo/Ast", fname)
 	
 def GetPathFromNode(node as TypeMember):
-	return GetPath("${node.Name}.cs")
+	return GetPath("${node.Name}.boo")
 	
 def IsCollection(node as TypeMember):
 	return node.Attributes.Contains("collection")
@@ -503,7 +411,7 @@ def WriteWarning(writer as TextWriter):
 // DO NOT EDIT THIS FILE!
 //
 // This file was generated automatically by
-// astgenerator.boo on ${date.Now}
+// astgen.boo on ${date.Now}
 //
 """)
 	
@@ -538,176 +446,23 @@ def WriteLicense(writer as TextWriter):
 #endregion
 """)
 
-def WriteTransformer(module as Module):
-	using writer=OpenFile(GetPath("IAstTransformer.cs")):
-		WriteLicense(writer)
-		WriteWarning(writer)
-		writer.Write("""
-namespace Boo.Lang.Compiler.Ast
-{
-	public interface IAstTransformer
-	{""")
-		for member as TypeMember in module.Members:
-			if IsConcreteAstNode(member):
-				writer.WriteLine("""			
-		void On${member.Name}(Boo.Lang.Compiler.Ast.${member.Name} node, ref Boo.Lang.Compiler.Ast.${GetResultingTransformerNode(member)} newNode);""")
-			
-		writer.Write("""
-	}
-}""")
-
-def WriteDepthFirstTransformer(module as Module):
-	
-	using writer=OpenFile(GetPath("DepthFirstTransformer.cs")):
-		WriteLicense(writer)
-		WriteWarning(writer)
-		writer.Write("""
-namespace Boo.Lang.Compiler.Ast
-{
-	using System;
-	
-	public class DepthFirstTransformer : IAstTransformer
-	{""")
-	
-		for item as TypeMember in module.Members:
-			continue unless IsConcreteAstNode(item)
-			
-			switchableFields = GetSwitchableFields(item)
-			resultingNodeType = GetResultingTransformerNode(item)
-			
-			writer.WriteLine("""
-		public virtual void On${item.Name}(Boo.Lang.Compiler.Ast.${item.Name} node, ref Boo.Lang.Compiler.Ast.${resultingNodeType} resultingNode)
-		{""")
-		
-			if len(switchableFields):
-				writer.WriteLine("""
-			if (Enter${item.Name}(node, ref resultingNode))
-			{""")
-				for field as Field in switchableFields:
-					if IsCollectionField(field):
-						writer.WriteLine("""
-				Switch(node.${field.Name});""")
-					else:
-						writer.WriteLine("""
-				${field.Type} current${field.Name}Value = node.${field.Name};
-				if (null != current${field.Name}Value)
-				{	
-					Node resulting${field.Name}Value;				
-					current${field.Name}Value.Switch(this, out resulting${field.Name}Value);					
-					node.${field.Name} = resulting${field.Name}Value as ${field.Type};
-				}""")
-				
-				writer.WriteLine("""
-				Leave${item.Name}(node, ref resultingNode);
-			}""")
-			
-			writer.WriteLine("""
-		}""")
-		
-			if len(switchableFields):
-				writer.WriteLine("""				
-		public virtual bool Enter${item.Name}(Boo.Lang.Compiler.Ast.${item.Name} node, ref Boo.Lang.Compiler.Ast.${resultingNodeType} resultingNode)
-		{
-			return true;
-		}
-		
-		public virtual void Leave${item.Name}(Boo.Lang.Compiler.Ast.${item.Name} node, ref Boo.Lang.Compiler.Ast.${resultingNodeType} resultingNode)
-		{
-		}""")
-		
-		writer.WriteLine("""
-		public bool Switch(Node node, out Node resultingNode)
-		{			
-			if (null != node)
-			{			
-				node.Switch(this, out resultingNode);
-				return true;
-			}
-			resultingNode = node;
-			return false;
-		}
-		
-		public Node SwitchNode(Node node)
-		{
-			if (null != node)
-			{
-				Node resultingNode;
-				node.Switch(this, out resultingNode);
-				return resultingNode;
-			}
-			return null;
-		}
-		
-		public Node Switch(Node node)
-		{
-			return SwitchNode(node);
-		}
-		
-		public Expression Switch(Expression node)
-		{
-			return (Expression)SwitchNode(node);
-		}
-		
-		public Statement Switch(Statement node)
-		{
-			return (Statement)SwitchNode(node);
-		}
-		
-		public bool Switch(NodeCollection collection)
-		{
-			if (null != collection)
-			{
-				int removed = 0;
-				
-				Node[] nodes = collection.ToArray();
-				for (int i=0; i<nodes.Length; ++i)
-				{
-					Node resultingNode;
-					Node currentNode = nodes[i];
-					currentNode.Switch(this, out resultingNode);
-					if (currentNode != resultingNode)
-					{
-						int actualIndex = i-removed;
-						if (null == resultingNode)
-						{
-							collection.RemoveAt(actualIndex);
-						}
-						else
-						{
-							collection.ReplaceAt(actualIndex, resultingNode);
-						}
-					}
-				}
-				return true;
-			}
-			return false;
-		}
-	}
-}
-""")
-
-def WriteSwitcher(module as Module):
-	using writer=OpenFile(GetPath("IAstSwitcher.cs")):
+def WriteVisitor(module as Module):
+	using writer=OpenFile(GetPath("INodeVisitor.boo")):
 		WriteLicense(writer)
 		WriteWarning(writer)
 		writer.Write(
 """
-namespace Boo.Lang.Compiler.Ast
-{
-	using System;
+namespace MetaBoo.Ast
+
+
+import System
 	
-	public interface IAstSwitcher
-	{
+interface INodeVisitor:
 """)
 		for member as TypeMember in module.Members:
 			if IsConcreteAstNode(member):
-				writer.WriteLine("\t\tvoid On${member.Name}(${member.Name} node);")
+				writer.WriteLine("\tdef On${member.Name}(node as ${member.Name} )")
 
-		writer.Write(
-"""
-	}
-}
-""")
 
 def GetTypeHierarchy(item as ClassDefinition):
 	types = []
@@ -743,7 +498,7 @@ def GetAllFields(node as ClassDefinition):
 			fields.Add(field)
 	return fields
 
-def GetSwitchableFields(item as ClassDefinition):
+def GetVisitableFields(item as ClassDefinition):
 	fields = []
 	
 	module as Module = item.ParentNode
@@ -757,8 +512,8 @@ def GetSwitchableFields(item as ClassDefinition):
 	
 	return fields
 
-def WriteDepthFirstSwitch(writer as TextWriter, item as ClassDefinition):
-	fields = GetSwitchableFields(item)
+def WriteDepthFirstVisitor(writer as TextWriter, item as ClassDefinition):
+	fields = GetVisitableFields(item)
 	
 	if len(fields):
 		writer.WriteLine("""
@@ -791,8 +546,8 @@ def WriteDepthFirstSwitch(writer as TextWriter, item as ClassDefinition):
 		}
 			""")
 
-def WriteDepthFirstSwitcher(module as Module):
-	using writer=OpenFile(GetPath("DepthFirstSwitcher.cs")):
+def WriteDepthFirstVisitor(module as Module):
+	using writer=OpenFile(GetPath("DepthFirstVisitor.boo")):
 		WriteLicense(writer)
 		WriteWarning(writer)
 		writer.Write(
@@ -866,7 +621,7 @@ namespace Boo.Lang.Compiler.Ast
 		
 		for member as TypeMember in module.Members:
 			if IsConcreteAstNode(member):
-				WriteDepthFirstSwitch(writer, member)
+				WriteDepthFirstVisitor(writer, member)
 		
 		writer.Write("""
 	}
@@ -877,10 +632,8 @@ start = date.Now
 
 module = BooParser.ParseFile("ast.model.boo").Modules[0]
 
-WriteSwitcher(module)
-WriteDepthFirstSwitcher(module)
-WriteTransformer(module)
-WriteDepthFirstTransformer(module)
+WriteVisitor(module)
+WriteDepthFirstVisitor(module)
 WriteNodeTypeEnum(module)
 for member as TypeMember in module.Members:
 

@@ -1,8 +1,8 @@
 namespace MetaBoo.PipelineSteps
 
 import MetaBoo
-import Boo.Lang.Compiler.Ast
-import Boo.Lang.Compiler.Ast.Visitors
+import MetaBoo.Ast
+import MetaBoo.Ast.Visitors
 
 class PrintBoo(AbstractCompilerPipelineStep):
 	

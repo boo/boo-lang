@@ -45,23 +45,21 @@ namespace Boo.Lang.Compiler.Steps
 	{	
 		static readonly ExpressionCollection EmptyExpressionCollection = new ExpressionCollection();
 		
-		Stack _methodStack;
+		protected Stack _methodStack;
 		
-		InternalMethod _currentMethod;
+		protected InternalMethod _currentMethod;
 		
 		Hash _visited;
 		
 		List _newAbstractClasses;
-		
-		int _loopDepth;
-		
-		int _exceptionHandlerDepth;
 		
 		IMethod RuntimeServices_Len;
 		
 		IMethod RuntimeServices_Mid;
 		
 		IMethod RuntimeServices_NormalizeStringIndex;
+		
+		IMethod RuntimeServices_AddArrays;
 		
 		IMethod RuntimeServices_GetRange1;
 		
@@ -113,6 +111,17 @@ namespace Boo.Lang.Compiler.Steps
 		
 		InfoFilter IsPublicFieldPropertyEventFilter;
 		
+		protected MethodBodyState _methodBodyState;
+		
+		protected struct MethodBodyState
+		{
+			public int LoopDepth;
+		
+			public int TryBlockDepth;
+		
+			public int ExceptionHandlerDepth;
+		};
+		
 		public ProcessMethodBodies()
 		{
 			IsPublicFieldPropertyEventFilter = new InfoFilter(IsPublicFieldPropertyEvent);
@@ -132,8 +141,7 @@ namespace Boo.Lang.Compiler.Steps
 			_methodStack = new Stack();
 			_visited = new Hash();
 			_newAbstractClasses = new List();
-			_loopDepth = 0;
-			_exceptionHandlerDepth = 0;
+			_methodBodyState = new MethodBodyState();
 						
 			InitializeMemberCache();
 			
@@ -156,6 +164,7 @@ namespace Boo.Lang.Compiler.Steps
 		{
 			List_GetRange1 = (IMethod)TypeSystemServices.Map(Types.List.GetMethod("GetRange", new Type[] { typeof(int) }));
 			List_GetRange2 = (IMethod)TypeSystemServices.Map(Types.List.GetMethod("GetRange", new Type[] { typeof(int), typeof(int) }));
+			RuntimeServices_AddArrays = ResolveMethod(TypeSystemServices.RuntimeServicesType, "AddArrays");
 			RuntimeServices_GetRange1 = ResolveMethod(TypeSystemServices.RuntimeServicesType, "GetRange1");
 			RuntimeServices_GetRange2 = ResolveMethod(TypeSystemServices.RuntimeServicesType, "GetRange2"); 			
 			RuntimeServices_Len = ResolveMethod(TypeSystemServices.RuntimeServicesType, "Len");
@@ -199,38 +208,62 @@ namespace Boo.Lang.Compiler.Steps
 			_newAbstractClasses = null;
 		}
 		
+		void EnterTryBlock()
+		{
+			++_methodBodyState.TryBlockDepth;
+		}
+		
+		void LeaveTryBlock()
+		{
+			--_methodBodyState.TryBlockDepth;
+		}
+		
+		int CurrentTryBlockDepth
+		{
+			get
+			{
+				return _methodBodyState.TryBlockDepth;
+			}
+		}
+		
 		void EnterLoop()
 		{
-			++_loopDepth;
+			++_methodBodyState.LoopDepth;
 		}
 		
 		bool InLoop()
 		{
-			return _loopDepth > 0;
+			return _methodBodyState.LoopDepth > 0;
 		}
 		
 		void LeaveLoop()
 		{
-			--_loopDepth;
+			--_methodBodyState.LoopDepth;
 		}
 		
 		void EnterExceptionHandler()
 		{
-			++_exceptionHandlerDepth;
+			++_methodBodyState.ExceptionHandlerDepth;
 		}
 		
 		bool InExceptionHandler()
 		{
-			return _exceptionHandlerDepth > 0;
+			return _methodBodyState.ExceptionHandlerDepth > 0;
 		}
 		
 		void LeaveExceptionHandler()
 		{
-			--_exceptionHandlerDepth;
+			--_methodBodyState.ExceptionHandlerDepth;
 		}
 		
 		override public void OnModule(Boo.Lang.Compiler.Ast.Module module)
 		{				
+			if (Visited(module))
+			{
+				return;
+			}
+			MarkVisited(module);
+			
 			EnterNamespace((INamespace)TypeSystemServices.GetEntity(module));			
 			
 			Visit(module.Members);
@@ -265,9 +298,9 @@ namespace Boo.Lang.Compiler.Steps
 			
 			InternalClass tag = (InternalClass)GetEntity(node);			
 			EnterNamespace(tag);
-			Visit(node.Attributes);		
-			ProcessFields(node);
-			Visit(node.Members);
+			Visit(node.Attributes);
+			//Visit(node.Members, NodeType.Field);
+			Visit(node.Members);			
 			LeaveNamespace();
 			
 			ProcessInheritedAbstractMembers(node);
@@ -395,6 +428,10 @@ namespace Boo.Lang.Compiler.Steps
 			}
 			
 			Field backingField = CodeBuilder.CreateField("___" + node.Name, type);
+			if (node.IsTransient)
+			{
+				backingField.Modifiers |= TypeMemberModifiers.Transient;
+			}
 			node.DeclaringType.Members.Add(backingField);
 			
 			((InternalEvent)node.Entity).BackingField = (InternalField)backingField.Entity;
@@ -539,102 +576,142 @@ namespace Boo.Lang.Compiler.Steps
 			
 			InternalField tag = (InternalField)GetEntity(node);
 			
-			Visit(node.Attributes);			
+			Visit(node.Attributes);
+			Visit(node.Type);			
 			
-			IType initializerType = InferFieldInitializerType(node);			
-			
-			if (null == node.Type)
+			if (null != node.Initializer)
 			{
-				if (null == node.Initializer)
+				ProcessFieldInitializer(node);
+			}
+			else
+			{			
+				if (null == node.Type)
 				{
 					node.Type = CodeBuilder.CreateTypeReference(TypeSystemServices.ObjectType);
 				}
-				else
-				{
-					node.Type = CodeBuilder.CreateTypeReference(initializerType);
-				}
 			}
-			else
-			{
-				Visit(node.Type);
-				
-				if (null != node.Initializer)
-				{
-					CheckTypeCompatibility(node.Initializer, GetType(node.Type), initializerType);
-				}
-			}
-		}
+		}	
 		
-		void ProcessFields(ClassDefinition node)
-		{
-			Node[] fields = node.Members.Select(NodeType.Field);
-			if (0 == fields.Length)
-			{
-				return;
-			}
-			
-			Visit(fields);
-			
-			int staticFieldIndex = 0;
-			int instanceFieldIndex = 0;
-			
-			foreach (Field f in fields)
-			{
-				if (null == f.Initializer)
-				{
-					continue;
-				}
-				
-				if (f.IsStatic)
-				{
-					AddFieldInitializerToStaticConstructor(staticFieldIndex, f);
-					++staticFieldIndex;
-				}
-				else
-				{
-					AddFieldInitializerToInstanceConstructors(instanceFieldIndex, f);
-					++instanceFieldIndex;
-				}
-			}
-		}		
-		
-		IType InferFieldInitializerType(Field node)
-		{
-			IType initializerType = null;
+		void ProcessFieldInitializer(Field node)
+		{			
 			Expression initializer = node.Initializer;
-			if (null != initializer)
-			{
-				Method method = new Method();
-				method.LexicalInfo = node.LexicalInfo;
-				method.Name = "___initializer";
-				method.Modifiers = node.Modifiers;
+			
+			Method method = GetFieldsInitializerMethod(node);
+			InternalMethod entity = (InternalMethod)method.Entity;
 				
-				BinaryExpression assignment = new BinaryExpression(
+			ReferenceExpression temp = new ReferenceExpression("___temp_initializer");
+			BinaryExpression assignment = new BinaryExpression(
 						node.LexicalInfo,
 						BinaryOperatorType.Assign,
-						new ReferenceExpression("___temp"),
-						initializer.CloneNode());
+						temp,
+						initializer);
 						
-				method.Body.Add(assignment);
+			method.Body.Add(assignment);
+			ProcessNodeInMethodContext(entity, entity, assignment);
+			method.Locals.RemoveByEntity(temp.Entity);
 				
-				TypeDefinition type = node.DeclaringType;
-				try
-				{
-					type.Members.Add(method);
-					method.Entity = new InternalMethod(TypeSystemServices, method);
-					Visit(method);
-				}
-				finally
-				{
-					//node.Initializer = assignment.Right;
-					initializerType = GetConcreteExpressionType(assignment.Right);
-					type.Members.Remove(method);
-				}
+			IType initializerType = ((ITypedEntity)temp.Entity).Type;
+			if (null == node.Type)
+			{
+				node.Type = CodeBuilder.CreateTypeReference(initializerType);
 			}
-			return initializerType;
+			else
+			{			
+				CheckTypeCompatibility(node.Initializer, GetType(node.Type), initializerType);
+			}
+			assignment.Left = CodeBuilder.CreateReference(node);
+			node.Initializer = null;			
 		}
 		
-		Constructor GetStaticConstructor(TypeDefinition type)
+		Method CreateInitializerMethod(TypeDefinition type, string name, TypeMemberModifiers modifiers)
+		{
+			Method method = new Method(name);
+			method.Modifiers |= modifiers;
+			method.ReturnType = CodeBuilder.CreateTypeReference(TypeSystemServices.VoidType);
+				
+			InternalMethod entity = new InternalMethod(TypeSystemServices, method);
+			method.Entity = entity;
+			type.Members.Add(method);
+			MarkVisited(method);
+			return method;
+		}
+		
+		Method GetFieldsInitializerMethod(Field node)
+		{
+			TypeDefinition type = node.DeclaringType;
+			string methodName = node.IsStatic ? "___static_initializer" : "___initializer";			
+			Method method = (Method)type[methodName];
+			if (null == method)
+			{				
+				if (node.IsStatic)
+				{
+					if (null == FindStaticConstructor(type))
+					{
+						// when the class doesnt have a static constructor
+						// yet, create one and use it as the static
+						// field initializer method
+						method = CreateStaticConstructor(type);
+					}
+					else
+					{
+						method = CreateInitializerMethod(type, methodName, TypeMemberModifiers.Static);
+						AddInitializerToStaticConstructor(type, (InternalMethod)method.Entity);
+					}					
+				}			
+				else
+				{
+					method = CreateInitializerMethod(type, methodName, TypeMemberModifiers.None);
+					AddInitializerToInstanceConstructors(type, (InternalMethod)method.Entity);
+				}
+				
+				type[methodName] = method;
+			}
+			return method;
+		}
+		
+		void AddInitializerToStaticConstructor(TypeDefinition type, InternalMethod initializer)
+		{
+			GetStaticConstructor(type).Body.Add(
+						CodeBuilder.CreateMethodInvocation(initializer));
+		}
+		
+		void AddInitializerToInstanceConstructors(TypeDefinition type, InternalMethod initializer)
+		{
+			foreach (TypeMember node in type.Members)
+			{
+				if (NodeType.Constructor == node.NodeType && !node.IsStatic)
+				{
+					Constructor constructor = (Constructor)node;
+					constructor.Body.Insert(GetIndexAfterSuperInvocation(constructor.Body),
+						CodeBuilder.CreateMethodInvocation(
+							CodeBuilder.CreateSelfReference((IType)type.Entity),
+							initializer));
+				}
+			}
+		}
+		
+		int GetIndexAfterSuperInvocation(Block body)
+		{			
+			int index = 0;
+			foreach (Statement s in body.Statements)
+			{
+				if (NodeType.ExpressionStatement == s.NodeType)
+				{
+					Expression expression = ((ExpressionStatement)s).Expression;
+					if (NodeType.MethodInvocationExpression == expression.NodeType)
+					{
+						if (NodeType.SuperLiteralExpression == ((MethodInvocationExpression)expression).Target.NodeType)
+						{
+							return index + 1;
+						}
+					}
+				}
+				++index;
+			}
+			return 0;
+		}
+		
+		Constructor FindStaticConstructor(TypeDefinition type)
 		{
 			foreach (TypeMember member in type.Members)
 			{
@@ -646,38 +723,32 @@ namespace Boo.Lang.Compiler.Steps
 			return null;
 		}
 		
+		Constructor GetStaticConstructor(TypeDefinition type)
+		{
+			Constructor constructor = FindStaticConstructor(type);
+			if (null == constructor)
+			{
+				constructor = CreateStaticConstructor(type);
+			}
+			return constructor;
+		}
+		
+		Constructor CreateStaticConstructor(TypeDefinition type)
+		{
+			Constructor constructor = new Constructor();
+			constructor.Entity = new InternalConstructor(TypeSystemServices, constructor);
+			constructor.Modifiers = TypeMemberModifiers.Public|TypeMemberModifiers.Static;
+			type.Members.Add(constructor);
+			MarkVisited(constructor);
+			return constructor;
+		}
+		
 		void AddFieldInitializerToStaticConstructor(int index, Field node)
 		{
 			Constructor constructor = GetStaticConstructor(node.DeclaringType);
-			if (null == constructor)
-			{
-				constructor = new Constructor(node.LexicalInfo);
-				constructor.Modifiers = TypeMemberModifiers.Public|TypeMemberModifiers.Static;
-				node.DeclaringType.Members.Add(constructor);				
-				Bind(constructor, new InternalConstructor(TypeSystemServices, constructor));
-				//MarkVisited(constructor);
-			}
-			
 			Statement stmt = CreateFieldAssignment(node);
 			constructor.Body.Statements.Insert(index, stmt);
-			node.Initializer = null;
-		}
-		
-		void AddFieldInitializerToInstanceConstructors(int index, Field node)
-		{
-			foreach (TypeMember member in node.DeclaringType.Members)
-			{
-				if (NodeType.Constructor == member.NodeType)
-				{
-					Constructor constructor = (Constructor)member;
-					if (!constructor.IsStatic)
-					{
-						Statement stmt = CreateFieldAssignment(node);
-						constructor.Body.Statements.Insert(index, stmt);
-					}
-				}
-			}
-			node.Initializer = null;
+			node.Initializer = null;			
 		}
 		
 		Statement CreateFieldAssignment(Field node)
@@ -705,20 +776,6 @@ namespace Boo.Lang.Compiler.Steps
 			return stmt;
 		}
 		
-		override public bool EnterConstructor(Constructor node)
-		{			
-			if (Visited(node))
-			{
-				return false;
-			}			
-			MarkVisited(node);
-			
-			InternalConstructor tag = (InternalConstructor)GetEntity(node);
-			PushMethodInfo(tag);
-			EnterNamespace(tag);
-			return true;
-		}
-		
 		void CheckRuntimeMethod(Method method)
 		{
 			if (method.Body.Statements.Count > 0)
@@ -727,18 +784,31 @@ namespace Boo.Lang.Compiler.Steps
 			}
 		}
 		
-		override public void LeaveConstructor(Constructor node)
-		{
+		override public void OnConstructor(Constructor node)
+		{			
+			if (Visited(node))
+			{
+				return;
+			}			
+			MarkVisited(node);
+			
+			Visit(node.Attributes);
+			Visit(node.Parameters);
+			
+			InternalConstructor entity = (InternalConstructor)node.Entity;
+			ProcessMethodBody(entity);
+			
 			if (node.IsRuntime)
 			{
 				CheckRuntimeMethod(node);
 			}
 			else
-			{
-				InternalConstructor tag = (InternalConstructor)_currentMethod;
-				if (!tag.HasSuperCall && !node.IsStatic)
+			{				
+				if (!entity.HasSuperCall &&
+					!entity.IsStatic &&
+					!entity.DeclaringType.IsValueType)
 				{
-					IType baseType = tag.DeclaringType.BaseType;
+					IType baseType = entity.DeclaringType.BaseType;
 					IConstructor super = FindCorrectConstructor(node, baseType, EmptyExpressionCollection);
 					if (null != super)
 					{
@@ -747,8 +817,6 @@ namespace Boo.Lang.Compiler.Steps
 					}
 				}
 			}
-			LeaveNamespace();
-			PopMethodInfo();
 		}
 		
 		override public void LeaveParameterDeclaration(ParameterDeclaration node)
@@ -850,7 +918,7 @@ namespace Boo.Lang.Compiler.Steps
 			ProcessMethodBody(tag);
 			
 			if (parentIsClass)
-			{
+			{				
 				if (TypeSystemServices.IsUnknown(tag.ReturnType))
 				{
 					TryToResolveReturnType(tag);					
@@ -861,6 +929,49 @@ namespace Boo.Lang.Compiler.Steps
 					{
 						CheckMethodOverride(tag);
 					}
+					
+					if (tag.IsGenerator)
+					{
+						CheckGeneratorReturnType(method, tag.ReturnType);
+					}
+				}
+				CheckGeneratorCantReturnValues(tag);
+			}
+		}
+		
+		void CheckGeneratorCantReturnValues(InternalMethod entity)
+		{
+			if (entity.IsGenerator && null != entity.ReturnExpressions)
+			{
+				foreach (Expression e in entity.ReturnExpressions)
+				{
+					Error(CompilerErrorFactory.GeneratorCantReturnValue(e));
+				}
+			}
+		}
+		
+		void CheckGeneratorReturnType(Method method, IType returnType)
+		{
+			if (TypeSystemServices.IEnumerableType != returnType &&
+				!TypeSystemServices.IsSystemObject(returnType))
+			{
+				Error(CompilerErrorFactory.InvalidGeneratorReturnType(method.ReturnType));
+			}
+		}
+		
+		void ResolveLabelReferences(InternalMethod entity)
+		{
+			foreach (ReferenceExpression reference in entity.LabelReferences)
+			{
+				InternalLabel label = entity.ResolveLabel(reference.Name);
+				if (null == label)
+				{
+					Error(reference,
+						CompilerErrorFactory.NoSuchLabel(reference, reference.Name));
+				}
+				else
+				{
+					reference.Entity = label;
 				}
 			}
 		}
@@ -872,30 +983,56 @@ namespace Boo.Lang.Compiler.Steps
 		
 		void ProcessMethodBody(InternalMethod tag, INamespace ns)
 		{
+			ProcessNodeInMethodContext(tag, ns, tag.Method.Body);
+			ResolveLabelReferences(tag);
+		}
+		
+		void ProcessNodeInMethodContext(InternalMethod tag, INamespace ns, Node node)
+		{
 			PushMethodInfo(tag);
 			EnterNamespace(ns);
 			
+			MethodBodyState saved = _methodBodyState;			
+			_methodBodyState = new MethodBodyState();
 			try
 			{
-				Visit(tag.Method.Body);
+				Visit(node);
 			}
 			finally
-			{			
+			{
+				_methodBodyState = saved;
 				LeaveNamespace();
 				PopMethodInfo();
 			}
 		}
 		
+		void ResolveGeneratorReturnType(InternalMethod entity)
+		{
+			Method method = entity.Method;
+			
+			IType itemType = GetMostGenericType(entity.YieldExpressions);
+			BooClassBuilder generatorType = CreateGeneratorSkeleton(method.DeclaringType, method, itemType);
+			
+			method.ReturnType = CodeBuilder.CreateTypeReference(generatorType.Entity);
+		}
+		
 		void TryToResolveReturnType(InternalMethod tag)
 		{
-			if (CanResolveReturnType(tag))
+			if (tag.IsGenerator)
 			{
-				ResolveReturnType(tag);
-				CheckMethodOverride(tag);
+				ResolveGeneratorReturnType(tag);
 			}
 			else
 			{
-				Error(CompilerErrorFactory.RecursiveMethodWithoutReturnType(tag.Method));
+				if (CanResolveReturnType(tag))
+				{
+					ResolveReturnType(tag);
+					CheckMethodOverride(tag);
+				}
+				else
+				{
+					Error(CompilerErrorFactory.RecursiveMethodWithoutReturnType(tag.Method));
+				}
 			}
 		}
 		
@@ -905,7 +1042,7 @@ namespace Boo.Lang.Compiler.Steps
 			node.ExpressionType = _currentMethod.DeclaringType.BaseType;
 			if (EntityType.Constructor != _currentMethod.EntityType)
 			{
-				_currentMethod.SuperExpressions.Add(node);
+				_currentMethod.AddSuperExpression(node);
 			}
 		}
 		
@@ -918,9 +1055,12 @@ namespace Boo.Lang.Compiler.Steps
 			IMethod baseMethod = FindMethodOverride(tag);
 			if (null == baseMethod || tag.ReturnType != baseMethod.ReturnType)
 			{
-				foreach (Expression super in tag.SuperExpressions)
+				if (null != tag.SuperExpressions)
 				{
-					Error(CompilerErrorFactory.MethodIsNotOverride(super, GetSignature(tag)));
+					foreach (Expression super in tag.SuperExpressions)
+					{
+						Error(CompilerErrorFactory.MethodIsNotOverride(super, GetSignature(tag)));
+					}
 				}
 			}
 			else
@@ -1075,31 +1215,39 @@ namespace Boo.Lang.Compiler.Steps
 		
 		bool CanResolveReturnType(InternalMethod tag)
 		{
-			foreach (Expression rsExpression in tag.ReturnExpressions)
+			ExpressionCollection expressions = tag.ReturnExpressions;			
+			if (null != expressions)
 			{
-				IType type = rsExpression.ExpressionType;
-				if (null == type || TypeSystemServices.IsUnknown(type))
+				foreach (Expression expression in expressions)
 				{
-					return false;
+					IType type = expression.ExpressionType;
+					if (null == type || TypeSystemServices.IsUnknown(type))
+					{
+						return false;
+					}
 				}
 			}
 			return true;
 		}
 		
-		void ResolveReturnType(InternalMethod tag)
+		TypeReference GetMostGenericTypeReference(ExpressionCollection expressions)
+		{
+			IType type = MapNullToObject(GetMostGenericType(expressions));
+			return CodeBuilder.CreateTypeReference(type);
+		}
+		
+		void ResolveReturnType(InternalMethod entity)
 		{				
-			Method method = tag.Method;
-			ExpressionCollection returnExpressions = tag.ReturnExpressions;
-			if (0 == returnExpressions.Count)
+			Method method = entity.Method;			
+			if (null == entity.ReturnExpressions)
 			{					
 				method.ReturnType = CodeBuilder.CreateTypeReference(TypeSystemServices.VoidType);
 			}		
 			else
-			{					
-				IType type = MapNullToObject(GetMostGenericType(returnExpressions));
-				method.ReturnType = CodeBuilder.CreateTypeReference(type);
+			{				
+				method.ReturnType = GetMostGenericTypeReference(entity.ReturnExpressions);
 			}
-			TraceReturnType(method, tag);	
+			TraceReturnType(method, entity);	
 		}
 		
 		IType MapNullToObject(IType type)
@@ -1361,7 +1509,7 @@ namespace Boo.Lang.Compiler.Steps
 						mie = CodeBuilder.CreateEvalInvocation(node.LexicalInfo);
 						mie.ExpressionType = TypeSystemServices.StringType;
 						
-						LocalVariable temp = DeclareTempLocal(TypeSystemServices.StringType);
+						InternalLocal temp = DeclareTempLocal(TypeSystemServices.StringType);
 						mie.Arguments.Add(
 							CodeBuilder.CreateAssignment(
 								CodeBuilder.CreateReference(temp),
@@ -1548,17 +1696,16 @@ namespace Boo.Lang.Compiler.Steps
 			Visit(node.Expression);
 			LeaveNamespace();
 			
-			if (!AstUtil.IsListGenerator(node.ParentNode))
-			{
-				CreateGeneratorSkeleton(node);
-			}
-			else
-			{
-				BindExpressionType(node, TypeSystemServices.IEnumerableType);
-			}
+			BooClassBuilder generatorType = CreateGeneratorSkeleton(node);
+			BindExpressionType(node, generatorType.Entity);
 		}
 		
-		void CreateGeneratorSkeleton(GeneratorExpression node)
+		BooClassBuilder CreateGeneratorSkeleton(GeneratorExpression node)
+		{
+			return CreateGeneratorSkeleton(_currentMethod.Method.DeclaringType, node, GetConcreteExpressionType(node.Expression));
+		}
+		
+		BooClassBuilder CreateGeneratorSkeleton(TypeDefinition parentType, Node node, IType generatorItemType)
 		{
 			// create the class skeleton for type inference to work
 			BooClassBuilder builder = CodeBuilder.CreateClass(
@@ -1567,14 +1714,14 @@ namespace Boo.Lang.Compiler.Steps
 			builder.AddBaseType(TypeSystemServices.Map(typeof(Boo.Lang.AbstractGenerator)));
 			builder.AddAttribute(CodeBuilder.CreateAttribute(
 												EnumeratorItemType_Constructor,
-												CodeBuilder.CreateTypeofExpression(GetConcreteExpressionType(node.Expression))));
+												CodeBuilder.CreateTypeofExpression(generatorItemType)));
 			builder.LexicalInfo = node.LexicalInfo;
-			node["ClassBuilder"] = builder;
+			parentType.Members.Add(builder.ClassDefinition);
+			
+			node["GeneratorClassBuilder"] = builder;
 			node["GetEnumeratorBuilder"] = builder.AddVirtualMethod("GetEnumerator", TypeSystemServices.IEnumeratorType);
 			
-			_currentMethod.Method.DeclaringType.Members.Add(builder.ClassDefinition);
-			
-			BindExpressionType(node, builder.Entity);
+			return builder;
 		}
 		
 		override public void LeaveHashLiteralExpression(HashLiteralExpression node)
@@ -1595,7 +1742,8 @@ namespace Boo.Lang.Compiler.Steps
 				BindExpressionType(node, TypeSystemServices.ObjectArrayType);
 			}
 			else
-			{				
+			{		
+				TypeSystemServices.MapToConcreteExpressionTypes(node.Items);
 				BindExpressionType(node, TypeSystemServices.GetArrayType(GetMostGenericType(items)));
 			}
 		}
@@ -1610,7 +1758,7 @@ namespace Boo.Lang.Compiler.Steps
 			
 			CheckDeclarationName(node.Declaration);
 			
-			LocalVariable localInfo = DeclareLocal(node, new Local(node.Declaration, false), type);
+			IEntity localInfo = DeclareLocal(node.Declaration.Name, type);
 			if (null != node.Initializer)
 			{
 				CheckTypeCompatibility(node.Initializer, type, GetExpressionType(node.Initializer));
@@ -1666,13 +1814,23 @@ namespace Boo.Lang.Compiler.Steps
 		}
 		
 		override public void LeaveTypeofExpression(TypeofExpression node)
-		{
+		{			
 			BindExpressionType(node, TypeSystemServices.TypeType);
 		}
 		
 		override public void LeaveCastExpression(CastExpression node)
 		{
-			IType toType = GetType(node.Type);
+			IType fromType = GetExpressionType(node.Target);
+			IType toType = GetType(node.Type);			
+			if (!TypeSystemServices.AreTypesRelated(toType, fromType) &&
+				!(fromType.IsEnum && TypeSystemServices.IsIntegerNumber(toType)))
+			{
+				Error(
+					CompilerErrorFactory.IncompatibleExpressionType(
+						node,
+						toType.FullName,
+						fromType.FullName));
+			}
 			BindExpressionType(node, toType);
 		}
 		
@@ -1700,8 +1858,7 @@ namespace Boo.Lang.Compiler.Steps
 			if (member.IsStatic)
 			{
 				memberRef.Target = new ReferenceExpression(node.LexicalInfo, member.DeclaringType.FullName);
-				Bind(memberRef.Target, member.DeclaringType);				
-				BindExpressionType(memberRef, member.Type);
+				Bind(memberRef.Target, member.DeclaringType);
 			}
 			else
 			{
@@ -1822,6 +1979,15 @@ namespace Boo.Lang.Compiler.Steps
 					{
 						Error(node, CompilerErrorFactory.NamespaceIsNotAnExpression(node, tag.Name));
 					}
+					break;
+				}
+				
+				case EntityType.Parameter:
+				case EntityType.Local:
+				{
+					ILocalEntity local = (ILocalEntity)node.Entity;
+					local.IsUsed = true;
+					BindExpressionType(node, local.Type);
 					break;
 				}
 				
@@ -1959,6 +2125,30 @@ namespace Boo.Lang.Compiler.Steps
 			CheckBoolContext(node.Condition);			
 		}
 		
+		override public void OnLabelStatement(LabelStatement node)
+		{
+			ContextAnnotations.SetTryBlockDepth(node, CurrentTryBlockDepth);
+			
+			if (null == _currentMethod.ResolveLabel(node.Name))
+			{
+				_currentMethod.AddLabel(new InternalLabel(node));
+			}
+			else
+			{				
+				Error(
+					CompilerErrorFactory.LabelAlreadyDefined(node,
+											_currentMethod.FullName,
+											node.Name));
+			}
+		}
+		
+		override public void OnGotoStatement(GotoStatement node)
+		{
+			ContextAnnotations.SetTryBlockDepth(node, CurrentTryBlockDepth);
+			
+			_currentMethod.AddLabelReference(node.Label);
+		}
+		
 		override public void OnBreakStatement(BreakStatement node)
 		{
 			if (!InLoop())
@@ -1987,6 +2177,23 @@ namespace Boo.Lang.Compiler.Steps
 			LeaveLoop();
 		}
 		
+		override public void LeaveYieldStatement(YieldStatement node)
+		{
+			if (EntityType.Constructor == _currentMethod.EntityType)
+			{
+				Error(CompilerErrorFactory.YieldInsideConstructor(node));
+			}
+			else
+			{			
+				_currentMethod.AddYieldExpression(node.Expression);
+			
+				if (CurrentTryBlockDepth > 0)
+				{
+					Error(CompilerErrorFactory.YieldInsideTryBlock(node));
+				}
+			}
+		}
+		
 		override public void LeaveReturnStatement(ReturnStatement node)
 		{
 			if (null != node.Expression)
@@ -1999,7 +2206,7 @@ namespace Boo.Lang.Compiler.Steps
 				
 				if (TypeSystemServices.IsUnknown(returnType))
 				{
-					_currentMethod.ReturnExpressions.Add(node.Expression);
+					_currentMethod.AddReturnExpression(node.Expression);
 				}
 				else
 				{
@@ -2075,10 +2282,11 @@ namespace Boo.Lang.Compiler.Steps
 				}
 				else
 				{
-					IEntity tag = NameResolutionService.Resolve(_currentMethod, d.Name);
+					IEntity tag = NameResolutionService.Resolve(d.Name);
 					if (null != tag)
-					{
+					{						
 						Bind(d, tag);
+						CheckLValue(d);
 						continue;
 					}
 				}
@@ -2090,7 +2298,8 @@ namespace Boo.Lang.Compiler.Steps
 		{
 			if (node.Exception != null)
 			{
-				if (TypeSystemServices.StringType == GetExpressionType(node.Exception))
+				IType exceptionType = GetExpressionType(node.Exception);
+				if (TypeSystemServices.StringType == exceptionType)
 				{
 					MethodInvocationExpression expression = new MethodInvocationExpression(node.Exception.LexicalInfo);
 					expression.Arguments.Add(node.Exception);
@@ -2100,6 +2309,11 @@ namespace Boo.Lang.Compiler.Steps
 
 					node.Exception = expression;				
 				}
+				else if (!TypeSystemServices.ExceptionType.IsAssignableFrom(exceptionType))
+				{
+					Error(CompilerErrorFactory.InvalidRaiseArgument(node.Exception, 
+								exceptionType.FullName));
+				}
 			}
 			else
 			{
@@ -2108,6 +2322,22 @@ namespace Boo.Lang.Compiler.Steps
 					Error(CompilerErrorFactory.ReRaiseOutsideExceptionHandler(node));
 				}
 			}
+		}
+		
+		override public void OnTryStatement(TryStatement node)
+		{
+			EnterTryBlock();
+			Visit(node.ProtectedBlock);
+			
+			EnterTryBlock();
+			Visit(node.ExceptionHandlers);
+			
+			EnterTryBlock();
+			Visit(node.EnsureBlock);
+			LeaveTryBlock();
+			
+			LeaveTryBlock();			
+			LeaveTryBlock();
 		}
 		
 		override public void OnExceptionHandler(ExceptionHandler node)
@@ -2130,7 +2360,7 @@ namespace Boo.Lang.Compiler.Steps
 				}
 			}
 			
-			DeclareLocal(node.Declaration, new Local(node.Declaration, true), GetType(node.Declaration.Type));
+			node.Declaration.Entity = DeclareLocal(node.Declaration.Name, GetType(node.Declaration.Type), true);
 			EnterNamespace(new DeclarationsNamespace(CurrentNamespace, TypeSystemServices, node.Declaration));
 			EnterExceptionHandler();
 			try
@@ -2241,7 +2471,8 @@ namespace Boo.Lang.Compiler.Steps
 					Visit(node.Right);
 					IType expressionType = MapNullToObject(GetConcreteExpressionType(node.Right));
 					CheckIsResolvedType(expressionType, node.Right);
-					DeclareLocal(reference, new Local(reference, false), expressionType);
+					IEntity local = DeclareLocal(reference.Name, expressionType);
+					reference.Entity = local;
 					BindExpressionType(node.Left, expressionType);
 					BindExpressionType(node, expressionType);
 					return false;
@@ -2288,7 +2519,15 @@ namespace Boo.Lang.Compiler.Steps
 				
 				case BinaryOperatorType.Addition:
 				{
-					BindArithmeticOperator(node);
+					if (GetExpressionType(node.Left).IsArray &&
+						GetExpressionType(node.Right).IsArray)
+					{
+						BindArrayAddition(node);
+					}
+					else
+					{
+						BindArithmeticOperator(node);
+					}
 					break;
 				}
 				
@@ -2364,6 +2603,7 @@ namespace Boo.Lang.Compiler.Steps
 					break;
 				}
 				
+				case BinaryOperatorType.BitwiseAnd:
 				case BinaryOperatorType.BitwiseOr:
 				{
 					BindBitwiseOperator(node);
@@ -2603,6 +2843,45 @@ namespace Boo.Lang.Compiler.Steps
 			}
 		}
 		
+		void ProcessSwitchInvocation(MethodInvocationExpression node)
+		{
+			if (CheckSwitchArguments(node))
+			{				
+				for (int i=1; i<node.Arguments.Count; ++i)
+				{
+					ReferenceExpression label = (ReferenceExpression)node.Arguments[i];					
+					_currentMethod.AddLabelReference(label);
+					label.ExpressionType = Unknown.Default;
+				}
+			}
+			else
+			{
+				Error(node,
+					CompilerErrorFactory.InvalidSwitch(node.Target));
+			}
+		}
+		
+		bool CheckSwitchArguments(MethodInvocationExpression node)
+		{
+			ExpressionCollection args = node.Arguments;
+			if (args.Count > 1)
+			{
+				 Visit(args[0]);
+				 if (TypeSystemServices.IsIntegerNumber(GetExpressionType(args[0])))
+				 {
+					 for (int i=1; i<args.Count; ++i)
+					{
+						 if (NodeType.ReferenceExpression != args[i].NodeType)
+						 {
+							 return false;
+						 }
+					 }
+					 return true;
+				 }	
+			}
+			return false;
+		}
+		
 		void ProcessEvalInvocation(MethodInvocationExpression node)
 		{
 			if (node.Arguments.Count > 0)
@@ -2697,10 +2976,12 @@ namespace Boo.Lang.Compiler.Steps
 			if (Array_TypedEnumerableConstructor == method ||
 				Array_TypedCollectionConstructor == method ||				
 				Array_TypedConstructor2 == method)
-			{	
-				
-				inferredType = TypeSystemServices.GetArrayType(GetType(expression.Arguments[0]));
-				
+			{
+				IType type = TypeSystemServices.GetReferencedType(expression.Arguments[0]);
+				if (null != type)
+				{				
+					inferredType = TypeSystemServices.GetArrayType(type);
+				}
 			}
 			else if (Array_EnumerableConstructor == method)
 			{
@@ -2752,17 +3033,24 @@ namespace Boo.Lang.Compiler.Steps
 				return;
 			}
 			
-			Visit(node.Target);			
-			Visit(node.Arguments);			
+			Visit(node.Target);
+			
+			IEntity targetInfo = node.Target.Entity;
+			if (BuiltinFunction.Switch == targetInfo)
+			{
+				ProcessSwitchInvocation(node);
+				return;
+			}
+			
+			Visit(node.Arguments);		
 			
 			if (TypeSystemServices.IsError(node.Target) ||
 				TypeSystemServices.IsErrorAny(node.Arguments))
 			{
 				Error(node);
 				return;
-			}
+			}			
 			
-			IEntity targetInfo = node.Target.Entity;
 			if (null == targetInfo)
 			{
 				ProcessGenericMethodInvocation(node);
@@ -2780,13 +3068,12 @@ namespace Boo.Lang.Compiler.Steps
 			}	
 			
 			switch (targetInfo.EntityType)
-			{		
+			{	
 				case EntityType.BuiltinFunction:
 				{
 					ProcessBuiltinInvocation((BuiltinFunction)targetInfo, node);
 					break;
 				}
-				
 				case EntityType.Event:
 				{
 					ProcessEventInvocation((IEvent)targetInfo, node);
@@ -2984,6 +3271,10 @@ namespace Boo.Lang.Compiler.Steps
 					node.Target = CodeBuilder.CreateMemberReference(node.Target, invoke);
 					BindExpressionType(node, invoke.ReturnType);						
 				}
+				else
+				{
+					Error(node);
+				}
 			}
 			else if (TypeSystemServices.ICallableType.IsAssignableFrom(type))
 			{
@@ -3068,7 +3359,7 @@ namespace Boo.Lang.Compiler.Steps
 				return;
 			}
 			
-			Bind(node, sliceTargetType.GetElementType());
+			node.ExpressionType = sliceTargetType.GetElementType();
 		}
 		
 		void BindAssignmentToSliceProperty(BinaryExpression node)
@@ -3253,6 +3544,29 @@ namespace Boo.Lang.Compiler.Steps
 					return BinaryOperatorType.Division;
 			}
 			throw new ArgumentException("op");
+		}
+		
+		void BindArrayAddition(BinaryExpression node)
+		{
+			IArrayType lhs = (IArrayType)GetExpressionType(node.Left);
+			IArrayType rhs = (IArrayType)GetExpressionType(node.Right);
+			
+			if (lhs.GetElementType() == rhs.GetElementType())
+			{
+				node.ParentNode.Replace(
+					node,
+					CodeBuilder.CreateCast(
+						lhs,
+						CodeBuilder.CreateMethodInvocation(
+							RuntimeServices_AddArrays,
+							CodeBuilder.CreateTypeofExpression(lhs.GetElementType()),
+							node.Left,
+							node.Right)));
+			}
+			else
+			{
+				InvalidOperatorForTypes(node);
+			}
 		}
 		
 		void BindArithmeticOperator(BinaryExpression node)
@@ -3705,7 +4019,7 @@ namespace Boo.Lang.Compiler.Steps
 				{
 					case EntityType.Local:
 					{
-						return !((LocalVariable)entity).IsPrivateScope;
+						return !((InternalLocal)entity).IsPrivateScope;
 					}
 					
 					case EntityType.Parameter:
@@ -3914,7 +4228,7 @@ namespace Boo.Lang.Compiler.Steps
 			return member != null ? member.Target : node;
 		}
 		
-		bool CheckLValue(Node node)
+		protected virtual bool CheckLValue(Node node)
 		{
 			IEntity tag = node.Entity;
 			
@@ -3929,7 +4243,7 @@ namespace Boo.Lang.Compiler.Steps
 					
 					case EntityType.Local:
 					{
-						return !((LocalVariable)tag).IsPrivateScope;
+						return !((InternalLocal)tag).IsPrivateScope;
 					}
 					
 					case EntityType.Property:
@@ -3977,37 +4291,30 @@ namespace Boo.Lang.Compiler.Steps
 		
 		ReferenceExpression CreateTempLocal(LexicalInfo li, IType type)
 		{
-			string name = string.Format("___temp{0}", _currentMethod.Method.Locals.Count);
-			
-			ReferenceExpression reference = new ReferenceExpression(li, name);
-			BindExpressionType(reference, type);
-			
-			Local local = new Local(reference, true);			
-			DeclareLocal(reference, local, type);
+			InternalLocal local = DeclareTempLocal(type);			
+			ReferenceExpression reference = new ReferenceExpression(li, local.Name);
+			reference.Entity = local;
+			reference.ExpressionType = type;
 			return reference;
 		}
 		
-		LocalVariable DeclareTempLocal(IType localType)
+		InternalLocal DeclareTempLocal(IType localType)
 		{
-			Local local  = new Local();
-			local.Name = "___temp" + _context.AllocIndex();
-			local.PrivateScope = true;
-			
-			LocalVariable entity = new LocalVariable(local, localType);
-			local.Entity = entity;
-			_currentMethod.Method.Locals.Add(local);
-			return entity;
+			return CodeBuilder.DeclareTempLocal(_currentMethod.Method, localType);
 		}
 		
-		LocalVariable DeclareLocal(Node sourceNode, Local local, IType localType)
+		IEntity DeclareLocal(string name, IType localType)
+		{
+			return DeclareLocal(name, localType, false);
+		}
+		
+		virtual protected IEntity DeclareLocal(string name, IType localType, bool privateScope)
 		{			
-			LocalVariable tag = new LocalVariable(local, localType);
-			Bind(local, tag);
-			
+			Local local = new Local(name, privateScope);
+			InternalLocal entity = new InternalLocal(local, localType);
+			local.Entity = entity;			
 			_currentMethod.Method.Locals.Add(local);
-			Bind(sourceNode, tag);
-			
-			return tag;
+			return entity;
 		}
 		
 		IType CurrentType
@@ -4038,7 +4345,7 @@ namespace Boo.Lang.Compiler.Steps
 			}
 		}
 		
-		static bool HasSideEffect(Expression node)
+		protected virtual bool HasSideEffect(Expression node)
 		{
 			return
 				node.NodeType == NodeType.MethodInvocationExpression ||
@@ -4107,61 +4414,7 @@ namespace Boo.Lang.Compiler.Steps
 			}
 			Error(CompilerErrorFactory.LocalAlreadyExists(d, d.Name));
 			return false;
-		}
-		
-		IType GetExternalEnumeratorItemType(IType iteratorType)
-		{
-			Type type = ((ExternalType)iteratorType).ActualType;
-			EnumeratorItemTypeAttribute attribute = (EnumeratorItemTypeAttribute)System.Attribute.GetCustomAttribute(type, typeof(EnumeratorItemTypeAttribute));
-			if (null != attribute)
-			{
-				return TypeSystemServices.Map(attribute.ItemType);
-			}
-			return null;
-		}
-		
-		IType GetEnumeratorItemTypeFromAttribute(IType iteratorType)
-		{
-			AbstractInternalType internalType = iteratorType as AbstractInternalType;
-			if (null == internalType)
-			{
-				return GetExternalEnumeratorItemType(iteratorType);
-			}
-			
-			IType enumeratorItemTypeAttribute = TypeSystemServices.Map(typeof(EnumeratorItemTypeAttribute));
-			foreach (Boo.Lang.Compiler.Ast.Attribute attribute in internalType.TypeDefinition.Attributes)
-			{				
-				IConstructor constructor = GetEntity(attribute) as IConstructor;
-				if (null != constructor)
-				{
-					if (constructor.DeclaringType == enumeratorItemTypeAttribute)
-					{
-						return GetType(attribute.Arguments[0]);
-					}
-				}
-			}
-			return null;
-		}
-		
-		IType GetEnumeratorItemType(IType iteratorType)
-		{
-			if (iteratorType.IsArray)
-			{
-				return ((IArrayType)iteratorType).GetElementType();
-			}
-			else
-			{
-				if (iteratorType.IsClass)
-				{
-					IType enumeratorItemType = GetEnumeratorItemTypeFromAttribute(iteratorType);
-					if (null != enumeratorItemType)
-					{
-						return enumeratorItemType;
-					}
-				}
-			}
-			return TypeSystemServices.ObjectType;
-		}	
+		}		
 		
 		void ProcessDeclarationType(IType defaultDeclarationType, Declaration d)
 		{
@@ -4180,8 +4433,13 @@ namespace Boo.Lang.Compiler.Steps
 		{
 			if (CheckIdentifierName(d, d.Name))
 			{					
-				DeclareLocal(d, new Local(d, privateScope), GetType(d.Type));
+				d.Entity = DeclareLocal(d.Name, GetType(d.Type), privateScope);
 			}
+		}
+		
+		IType GetEnumeratorItemType(IType iteratorType)
+		{
+			return TypeSystemServices.GetEnumeratorItemType(iteratorType);
 		}
 		
 		void ProcessDeclarationsForIterator(DeclarationCollection declarations, IType iteratorType)
@@ -4231,7 +4489,8 @@ namespace Boo.Lang.Compiler.Steps
 		}
 		
 		void MarkVisited(Node node)
-		{
+		{			
+			_context.TraceInfo("{0}: node '{1}' mark visited.", node.LexicalInfo, node);
 			_visited.Add(node, null);
 		}
 

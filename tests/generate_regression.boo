@@ -117,6 +117,16 @@ namespace BooCompiler.Tests
 	{
 """)
 
+GenerateTestFixture("testcases/macros", "build/MacrosTestFixture.cs", """
+namespace BooCompiler.Tests
+{
+	using NUnit.Framework;
+
+	[TestFixture]
+	public class MacrosTestFixture : AbstractCompilerTestCase
+	{
+""")
+
 GenerateTestFixture("testcases/stdlib", "build/StdlibTestFixture.cs", """
 namespace BooCompiler.Tests
 {
@@ -140,6 +150,7 @@ namespace BooCompiler.Tests
 		override protected CompilerPipeline SetUpCompilerPipeline()
 		{
 			CompilerPipeline pipeline = new Boo.Lang.Compiler.Pipelines.Parse();
+			pipeline.Add(new InitializeTypeSystemServices());
 			pipeline.Add(new InitializeNameResolutionService());
 			pipeline.Add(new IntroduceGlobalNamespaces());	
 			pipeline.Add(new BindNamespaces());
@@ -160,6 +171,22 @@ namespace Boo.AntlrParser.Tests
 		void RunCompilerTestCase(string fname)
 		{
 			RunParserTestCase(fname);
+		}
+""")
+
+GenerateTestFixture("testcases/semantics", "build/SemanticsTestFixture.cs", """
+namespace BooCompiler.Tests
+{
+	using NUnit.Framework;
+	using Boo.Lang.Compiler;
+	using Boo.Lang.Compiler.Pipelines;
+	
+	[TestFixture]
+	public class SemanticsTestFixture : AbstractCompilerTestCase
+	{
+		protected override CompilerPipeline SetUpCompilerPipeline()
+		{
+			return new CompileToBoo();
 		}
 """)
 

@@ -1,20 +1,15 @@
 """
 button = Button()
-button.Click += do ():
-	print('clicked!')
-
-button.Click += do ():
-	print('yes, it was!')
-
-button.Click += do (sender):
-	print("\${sender} clicked!")
+button.Click += { print('clicked!') }
+button.Click += { print('yes, it was!') }
+button.Click += { sender | print("\${sender} clicked!") }
 """
 button = Button()
-button.Click += do:
+button.Click += def:
 	print("clicked!")
 
-button.Click += do ():
+button.Click += def ():
 	print("yes, it was!")
 	
-button.Click += do (sender):
+button.Click += def (sender):
 	print("${sender} clicked!")

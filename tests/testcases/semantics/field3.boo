@@ -7,11 +7,14 @@ public class Foo(System.Object):
 
 	public def constructor():
 		super()
-		self._some = 3
+		self.___initializer()
 
 	public static def constructor():
-		Foo.FinalSolution = '14'
+		Foo.FinalSolution = '42'
+
+	def ___initializer() as System.Void:
+		self._some = 3
 """
 class Foo:
-	static FinalSolution = "14"
+	static FinalSolution = "42"
 	_some = 3

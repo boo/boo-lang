@@ -29,6 +29,7 @@
 namespace Boo.Lang.Compiler.Steps
 {
 	using System;
+	using System.Collections;
 	using Boo.Lang;
 	using Boo.Lang.Compiler;
 	using Boo.Lang.Compiler.Ast;
@@ -36,13 +37,16 @@ namespace Boo.Lang.Compiler.Steps
 	
 	public class ProcessGenerators : AbstractTransformerCompilerStep
 	{
-		ForeignReferenceCollector _collector = new ForeignReferenceCollector();
+		static System.Reflection.ConstructorInfo List_IEnumerableConstructor = Types.List.GetConstructor(new Type[] { Types.IEnumerable });
 		
 		Method _current;
 		
 		override public void Run()
 		{
-			Visit(CompileUnit.Modules);
+			if (0 == Errors.Count)
+			{
+				Visit(CompileUnit.Modules);
+			}
 		}
 		
 		override public void OnInterfaceDefinition(InterfaceDefinition node)
@@ -60,53 +64,326 @@ namespace Boo.Lang.Compiler.Steps
 			// ignore
 		}
 		
-		override public void OnMethod(Method method)
+		override public void OnConstructor(Constructor method)
 		{
 			_current = method;
-			Visit(method.Body);
+			Visit(_current.Body);
 		}
 		
-		override public void LeaveGeneratorExpression(GeneratorExpression node)
+		override public bool EnterMethod(Method method)
 		{
-			if (!AstUtil.IsListGenerator(node.ParentNode))
+			_current = method;
+			return true;
+		}
+		
+		override public void LeaveMethod(Method method)
+		{
+			InternalMethod entity = (InternalMethod)method.Entity;
+			if (entity.IsGenerator)
 			{
-				ProcessGenerator(node);							
+				GeneratorMethodProcessor processor = new GeneratorMethodProcessor(_context, entity);
+				processor.Run();
+			}
+		}
+
+		override public void OnListLiteralExpression(ListLiteralExpression node)
+		{
+			bool generator = AstUtil.IsListGenerator(node);
+			Visit(node.Items);
+			if (generator)
+			{
+				ReplaceCurrentNode(
+					CodeBuilder.CreateConstructorInvocation(
+						TypeSystemServices.Map(List_IEnumerableConstructor),
+						node.Items[0]));
 			}
 		}
 		
-		void ProcessGenerator(GeneratorExpression node)
-		{
-			using (_collector)
+		override public void LeaveGeneratorExpression(GeneratorExpression node)
+		{				
+			using (ForeignReferenceCollector collector = new ForeignReferenceCollector())
 			{
-				_collector.ForeignMethod = _current;
-				_collector.Initialize(_context);
-				_collector.Visit(node);
+				collector.CurrentType = (IType)AstUtil.GetParentClass(node).Entity;				
+				collector.Initialize(_context);
+				collector.Visit(node);
 
-				GeneratorProcessor processor = new GeneratorProcessor(_context, _collector, node);
+				GeneratorExpressionProcessor processor = new GeneratorExpressionProcessor(_context, collector, node);
 				processor.Run();
 				ReplaceCurrentNode(processor.CreateEnumerableConstructorInvocation());
 			}
 		}
-	}	
+	}
 	
-	class GeneratorProcessor : AbstractCompilerComponent
+	class GeneratorMethodProcessor : AbstractTransformerCompilerStep
+	{
+		InternalMethod _generator;
+		
+		InternalMethod _moveNext;
+		
+		BooClassBuilder _enumerable;
+		
+		BooClassBuilder _enumerator;
+		
+		BooMethodBuilder _enumeratorConstructor;
+		
+		BooMethodBuilder _enumerableConstructor;
+		
+		IField _state;
+		
+		IMethod _yield;
+		
+		Field _externalEnumeratorSelf;
+		
+		List _labels;
+		
+		Hashtable _mapping;
+		
+		public GeneratorMethodProcessor(CompilerContext context, InternalMethod method)
+		{
+			_labels = new List();
+			_mapping = new Hashtable();
+			_generator = method;			
+			Initialize(context);
+		}
+		
+		public InternalMethod MoveNextMethod
+		{
+			get
+			{
+				return _moveNext;
+			}
+		}
+		
+		override public void Run()
+		{
+			_enumerable = (BooClassBuilder)_generator.Method["GeneratorClassBuilder"];
+			CreateEnumerableConstructor();
+			CreateEnumerator();
+			
+			MethodInvocationExpression enumerableConstructorInvocation = CodeBuilder.CreateConstructorInvocation(_enumerable.ClassDefinition);
+			MethodInvocationExpression enumeratorConstructorInvocation = CodeBuilder.CreateConstructorInvocation(_enumerator.ClassDefinition);
+			
+			// propagate the necessary parameters from
+			// the enumerable to the enumerator
+			foreach (ParameterDeclaration parameter in _generator.Method.Parameters)
+			{
+				InternalParameter entity = (InternalParameter)parameter.Entity;				
+				if (entity.IsUsed)
+				{
+					enumerableConstructorInvocation.Arguments.Add(
+						CodeBuilder.CreateReference(parameter));
+						
+					PropagateFromEnumerableToEnumerator(enumeratorConstructorInvocation,
+														entity.Name,
+														entity.Type);
+				}
+			}
+			
+			// propagate the external self reference if necessary
+			if (null != _externalEnumeratorSelf)
+			{				
+				IType type = (IType)_externalEnumeratorSelf.Type.Entity;
+				enumerableConstructorInvocation.Arguments.Add(
+					CodeBuilder.CreateSelfReference(type));
+					
+				PropagateFromEnumerableToEnumerator(enumeratorConstructorInvocation,
+														"self_",
+														type);
+			}
+
+			
+			CreateGetEnumerator(enumeratorConstructorInvocation);
+			
+			Block body = _generator.Method.Body;
+			body.Clear();
+			body.Add(new ReturnStatement(enumerableConstructorInvocation));
+		}
+		
+		void CreateGetEnumerator(Expression enumeratorExpression)
+		{	
+			BooMethodBuilder method = (BooMethodBuilder)_generator.Method["GetEnumeratorBuilder"];
+			method.Body.Add(new ReturnStatement(enumeratorExpression));
+		}
+		
+		void CreateEnumerableConstructor()
+		{
+			_enumerableConstructor = CreateConstructor(_enumerable);
+		}
+		
+		void CreateEnumeratorConstructor()
+		{
+			_enumeratorConstructor = CreateConstructor(_enumerator);
+		}
+		
+		void CreateEnumerator()
+		{
+			IType abstractEnumeratorType = TypeSystemServices.Map(typeof(Boo.Lang.AbstractGeneratorEnumerator));
+			
+			_state = NameResolutionService.ResolveField(abstractEnumeratorType, "_state");
+			_yield = NameResolutionService.ResolveMethod(abstractEnumeratorType, "Yield");
+			
+			_enumerator = CodeBuilder.CreateClass("Enumerator");
+			_enumerator.AddBaseType(abstractEnumeratorType);
+			_enumerator.AddBaseType(TypeSystemServices.IEnumeratorType);
+			
+			CreateEnumeratorConstructor();
+			CreateMoveNext();			
+			
+			_enumerable.ClassDefinition.Members.Add(_enumerator.ClassDefinition);
+		}
+		
+		void CreateMoveNext()
+		{
+			Method generator = _generator.Method;
+			
+			BooMethodBuilder mn = _enumerator.AddVirtualMethod("MoveNext", TypeSystemServices.BoolType);
+			_moveNext = mn.Entity;
+			
+			foreach (Local local in generator.Locals)
+			{
+				InternalLocal entity = (InternalLocal)local.Entity;
+				
+				Field field = _enumerator.AddField("___" + entity.Name + _context.AllocIndex(), entity.Type);
+				_mapping[entity] = field.Entity;
+			}
+			generator.Locals.Clear();
+			
+			foreach (ParameterDeclaration parameter in generator.Parameters)
+			{
+				InternalParameter entity = (InternalParameter)parameter.Entity;				
+				if (entity.IsUsed)
+				{
+					Field field = DeclareFieldInitializedFromConstructorParameter(_enumerator, _enumeratorConstructor,
+												entity.Name,
+												entity.Type);
+					_mapping[entity] = field.Entity;					
+				}
+			}
+			
+			mn.Body.Add(CreateLabel(generator));
+			mn.Body.Add(generator.Body);
+			generator.Body.Clear();
+			
+			Visit(mn.Body);
+			
+			mn.Body.Add(CreateYieldInvocation(CodeBuilder.CreateNullLiteral()));
+			mn.Body.Add(CreateLabel(generator));
+			
+			mn.Body.Insert(0,
+				CodeBuilder.CreateSwitch(
+					CodeBuilder.CreateMemberReference(_state),
+					_labels));
+		}
+		
+		void PropagateFromEnumerableToEnumerator(MethodInvocationExpression enumeratorConstructorInvocation,
+												string parameterName,
+												IType parameterType)
+		{
+			Field field = DeclareFieldInitializedFromConstructorParameter(_enumerable, _enumerableConstructor, parameterName, parameterType);					
+			enumeratorConstructorInvocation.Arguments.Add(
+					CodeBuilder.CreateReference(field));
+		}
+		
+		Field DeclareFieldInitializedFromConstructorParameter(BooClassBuilder type,
+													BooMethodBuilder constructor,
+													string parameterName,
+													IType parameterType)
+		{
+			Field field = type.AddField("___" + parameterName + _context.AllocIndex(), parameterType);
+			InitializeFieldFromConstructorParameter(constructor, field, parameterName, parameterType);
+			return field;
+		}
+		
+		void InitializeFieldFromConstructorParameter(BooMethodBuilder constructor,
+											Field field,
+											string parameterName,
+											IType parameterType)
+		{
+			ParameterDeclaration parameter = constructor.AddParameter(parameterName, parameterType);
+			constructor.Body.Add(
+				CodeBuilder.CreateAssignment(
+					CodeBuilder.CreateReference(field),
+					CodeBuilder.CreateReference(parameter)));
+		}
+		
+		override public void OnReferenceExpression(ReferenceExpression node)
+		{
+			InternalField mapped = (InternalField)_mapping[node.Entity];
+			if (null != mapped)
+			{
+				ReplaceCurrentNode(
+					CodeBuilder.CreateMemberReference(
+						CodeBuilder.CreateSelfReference(_enumerator.Entity),
+						mapped));
+			}
+		}
+		
+		override public void OnSelfLiteralExpression(SelfLiteralExpression node)
+		{			
+			if (null == _externalEnumeratorSelf)
+			{
+				IType type = (IType)node.ExpressionType;
+				_externalEnumeratorSelf = DeclareFieldInitializedFromConstructorParameter(
+													_enumerator,
+													_enumeratorConstructor,													
+													"self_",	 type);
+			}
+			
+			ReplaceCurrentNode(CodeBuilder.CreateReference(_externalEnumeratorSelf));
+		}
+		
+		override public void LeaveYieldStatement(YieldStatement node)
+		{						
+			Block block = new Block();			
+			block.Add(new ReturnStatement(CreateYieldInvocation(node.Expression)));				
+			block.Add(CreateLabel(node));					
+			ReplaceCurrentNode(block);
+		}
+		
+		MethodInvocationExpression CreateYieldInvocation(Expression value)
+		{
+			return CodeBuilder.CreateMethodInvocation(
+					CodeBuilder.CreateSelfReference(_enumerator.Entity),
+					_yield,
+					CodeBuilder.CreateIntegerLiteral(_labels.Count),
+					value);
+		}
+		
+		LabelStatement CreateLabel(Node sourceNode)
+		{
+			InternalLabel label = CodeBuilder.CreateLabelStatement(sourceNode,
+									"___state" + _labels.Count);
+			_labels.Add(label.LabelStatement);
+			_moveNext.AddLabel(label);
+			return label.LabelStatement;
+		}
+		
+		BooMethodBuilder CreateConstructor(BooClassBuilder builder)
+		{	
+			BooMethodBuilder constructor = builder.AddConstructor();			
+			constructor.Body.Add(CodeBuilder.CreateSuperConstructorInvocation(builder.Entity.BaseType));
+			return constructor; 
+		}
+	}
+	
+	class GeneratorExpressionProcessor : AbstractCompilerComponent
 	{		
 		GeneratorExpression _generator;
 		
-		BooClassBuilder _enumerableType;
+		BooClassBuilder _enumerable;
 		
-		BooClassBuilder _enumeratorType;
+		BooClassBuilder _enumerator;
 		
-		Field _currentField;
+		Field _current;
 		
 		Field _enumeratorField;
 		
 		ForeignReferenceCollector _collector;
 		
-		public GeneratorProcessor(CompilerContext context,
+		public GeneratorExpressionProcessor(CompilerContext context,
 								ForeignReferenceCollector collector,
 								GeneratorExpression node)
-		{
+		{			
 			_collector = collector;
 			_generator = node;
 			Initialize(context);
@@ -129,13 +406,15 @@ namespace Boo.Lang.Compiler.Steps
 		
 		void CreateAnonymousGeneratorType()
 		{	
-			_enumeratorType = _collector.CreateSkeletonClass("Enumerator");
-			_enumeratorType.AddBaseType(TypeSystemServices.IEnumeratorType);
-			_enumeratorType.AddBaseType(TypeSystemServices.Map(typeof(ICloneable)));
+			_enumerable = (BooClassBuilder)_generator["GeneratorClassBuilder"];
 			
-			_enumeratorField = _enumeratorType.AddField("____enumerator",
+			_enumerator = _collector.CreateSkeletonClass("Enumerator");
+			_enumerator.AddBaseType(TypeSystemServices.IEnumeratorType);
+			_enumerator.AddBaseType(TypeSystemServices.Map(typeof(ICloneable)));
+			
+			_enumeratorField = _enumerator.AddField("____enumerator",
 									TypeSystemServices.IEnumeratorType);
-			_currentField = _enumeratorType.AddField("____current",
+			_current = _enumerator.AddField("____current",
 									TypeSystemServices.ObjectType);
 			
 			CreateReset();
@@ -146,29 +425,29 @@ namespace Boo.Lang.Compiler.Steps
 			
 			_collector.AdjustReferences();
 			
-			_enumerableType = (BooClassBuilder)_generator["ClassBuilder"];
-			_collector.DeclareFieldsAndConstructor(_enumerableType);
+			_collector.DeclareFieldsAndConstructor(_enumerable);
 			
 			CreateGetEnumerator();
-			_enumerableType.ClassDefinition.Members.Add(_enumeratorType.ClassDefinition);
+			_enumerable.ClassDefinition.Members.Add(_enumerator.ClassDefinition);
 		}
 		
 		public MethodInvocationExpression CreateEnumerableConstructorInvocation()
 		{
 			return _collector.CreateConstructorInvocationWithReferencedEntities(
-							_enumerableType.Entity);						
-		}
-		
-		MethodInvocationExpression CreateConstructorInvocation(ClassDefinition cd)
-		{
-			IConstructor constructor = ((IType)cd.Entity).GetConstructors()[0];
-			return CodeBuilder.CreateConstructorInvocation(constructor);
-		}
+							_enumerable.Entity);						
+		}		
 		
 		void EnumeratorConstructorMustCallReset()
 		{
-			Constructor constructor = _enumeratorType.ClassDefinition.GetConstructor(0);
-			constructor.Body.Add(CreateMethodInvocation(_enumeratorType.ClassDefinition, "Reset"));			
+			Constructor constructor = _enumerator.ClassDefinition.GetConstructor(0);
+			constructor.Body.Add(CreateMethodInvocation(_enumerator.ClassDefinition, "Reset"));			
+		}
+		
+		IMethod GetMemberwiseCloneMethod()
+		{
+			return TypeSystemServices.Map(
+						typeof(object).GetMethod("MemberwiseClone",
+							System.Reflection.BindingFlags.NonPublic|System.Reflection.BindingFlags.Instance));
 		}
 		
 		MethodInvocationExpression CreateMethodInvocation(ClassDefinition cd, string name)
@@ -179,12 +458,21 @@ namespace Boo.Lang.Compiler.Steps
 						method);
 		}
 		
+		void CreateCurrent()
+		{
+			Property property = _enumerator.AddReadOnlyProperty("Current", TypeSystemServices.ObjectType);
+			property.Getter.Modifiers |= TypeMemberModifiers.Virtual;
+			property.Getter.Body.Add(
+				new ReturnStatement(
+					CodeBuilder.CreateReference(_current)));
+		}
+		
 		void CreateGetEnumerator()
 		{	
 			BooMethodBuilder method = (BooMethodBuilder)_generator["GetEnumeratorBuilder"];
 			
-			MethodInvocationExpression mie = CreateConstructorInvocation(_enumeratorType.ClassDefinition);
-			foreach (TypeMember member in _enumerableType.ClassDefinition.Members)
+			MethodInvocationExpression mie = CodeBuilder.CreateConstructorInvocation(_enumerator.ClassDefinition);
+			foreach (TypeMember member in _enumerable.ClassDefinition.Members)
 			{
 				if (NodeType.Field == member.NodeType)
 				{
@@ -194,28 +482,21 @@ namespace Boo.Lang.Compiler.Steps
 			}
 			
 			method.Body.Add(new ReturnStatement(mie));
-		}
-		
-		IMethod GetMemberwiseCloneMethod()
-		{
-			return TypeSystemServices.Map(
-						typeof(object).GetMethod("MemberwiseClone",
-							System.Reflection.BindingFlags.NonPublic|System.Reflection.BindingFlags.Instance));
-		}
+		}		
 		
 		void CreateClone()
 		{			
-			BooMethodBuilder method = _enumeratorType.AddVirtualMethod("Clone", TypeSystemServices.ObjectType);
+			BooMethodBuilder method = _enumerator.AddVirtualMethod("Clone", TypeSystemServices.ObjectType);
 			method.Body.Add(
 				new ReturnStatement(
 					CodeBuilder.CreateMethodInvocation(
-						CodeBuilder.CreateSelfReference((IType)_enumeratorType.Entity),
+						CodeBuilder.CreateSelfReference((IType)_enumerator.Entity),
 						GetMemberwiseCloneMethod())));
 		}
 		
 		void CreateReset()
 		{
-			BooMethodBuilder method = _enumeratorType.AddVirtualMethod("Reset", TypeSystemServices.VoidType);
+			BooMethodBuilder method = _enumerator.AddVirtualMethod("Reset", TypeSystemServices.VoidType);
 			method.Body.Add(
 				CodeBuilder.CreateAssignment(
 					CodeBuilder.CreateReference((InternalField)_enumeratorField.Entity),
@@ -223,18 +504,9 @@ namespace Boo.Lang.Compiler.Steps
 						TypeSystemServices.Map(Types.IEnumerable.GetMethod("GetEnumerator")))));
 		}
 		
-		void CreateCurrent()
-		{
-			Property property = _enumeratorType.AddReadOnlyProperty("Current", TypeSystemServices.ObjectType);
-			property.Getter.Modifiers |= TypeMemberModifiers.Virtual;
-			property.Getter.Body.Add(
-				new ReturnStatement(
-					CodeBuilder.CreateReference((InternalField)_currentField.Entity)));
-		}
-		
 		void CreateMoveNext()
 		{
-			BooMethodBuilder method = _enumeratorType.AddVirtualMethod("MoveNext", TypeSystemServices.BoolType);
+			BooMethodBuilder method = _enumerator.AddVirtualMethod("MoveNext", TypeSystemServices.BoolType);
 			
 			Expression moveNext = CodeBuilder.CreateMethodInvocation(
 												CodeBuilder.CreateReference((InternalField)_enumeratorField.Entity),
@@ -277,26 +549,24 @@ namespace Boo.Lang.Compiler.Steps
 				stmt = wstmt;
 			}
 												
-			DeclarationCollection declarations = _generator.Declarations;
+			DeclarationCollection declarations = _generator.Declarations;			
 			if (declarations.Count > 1)
 			{
-				UnpackStatement unpack = new UnpackStatement();
-				
+				NormalizeIterationStatements.UnpackExpression(CodeBuilder,
+												method.Method,
+												outerBlock,
+												current,
+												declarations);
+												
 				foreach (Declaration declaration in declarations)
 				{
-					LocalVariable local = (LocalVariable)declaration.Entity;
-					method.Locals.Add(local.Local);
-					unpack.Declarations.Add(declaration);
+					method.Locals.Add(((InternalLocal)declaration.Entity).Local);
 				}
-				
-				unpack.Expression = current;
-				outerBlock.Add(unpack);
 			}
 			else
 			{
-				LocalVariable local = (LocalVariable)declarations[0].Entity;
+				InternalLocal local = (InternalLocal)declarations[0].Entity;
 				method.Locals.Add(local.Local);
-				
 				outerBlock.Add(CodeBuilder.CreateAssignment(
 								CodeBuilder.CreateReference(local),
 								current));
@@ -308,7 +578,7 @@ namespace Boo.Lang.Compiler.Steps
 			}
 			
 			innerBlock.Add(CodeBuilder.CreateAssignment(
-								CodeBuilder.CreateReference((InternalField)_currentField.Entity),
+								CodeBuilder.CreateReference((InternalField)_current.Entity),
 								_generator.Expression));
 			innerBlock.Add(new ReturnStatement(new BoolLiteralExpression(true)));
 			

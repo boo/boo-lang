@@ -51,6 +51,8 @@ namespace Boo.Lang.Compiler.TypeSystem
 		
 		public ExternalType ObjectType;
 		
+		public ExternalType ValueTypeType;
+		
 		public ExternalType EnumType;
 		
 		public ExternalType ArrayType;
@@ -145,6 +147,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 			Cache(typeof(Boo.Lang.Builtins.duck), DuckType = new DuckTypeImpl(this));
 			Cache(VoidType = new VoidTypeImpl(this));
 			Cache(ObjectType = new ExternalType(this, Types.Object));
+			Cache(ValueTypeType = new ExternalType(this, typeof(System.ValueType)));
 			Cache(EnumType = new ExternalType(this, typeof(System.Enum)));
 			Cache(ArrayType = new ExternalType(this, Types.Array));
 			Cache(TypeType = new ExternalType(this, Types.Type));
@@ -183,6 +186,14 @@ namespace Boo.Lang.Compiler.TypeSystem
 			PreparePrimitives();
 		}
 		
+		public CompilerContext Context
+		{
+			get
+			{
+				return _context;
+			}
+		}
+		
 		public IType GetMostGenericType(IType current, IType candidate)
 		{
 			if (current.IsAssignableFrom(candidate))
@@ -198,6 +209,11 @@ namespace Boo.Lang.Compiler.TypeSystem
 			if (IsNumberOrBool(current) && IsNumberOrBool(candidate))
 			{
 				return GetPromotedNumberType(current, candidate);
+			}
+			
+			if (IsCallableType(current) && IsCallableType(candidate))
+			{
+				return ICallableType;
 			}
 			
 			IType obj = ObjectType;			
@@ -248,8 +264,12 @@ namespace Boo.Lang.Compiler.TypeSystem
 		
 		public bool IsCallable(IType type)
 		{
-			return (TypeType == type) ||
-				(ICallableType.IsAssignableFrom(type)) ||
+			return (TypeType == type) || IsCallableType(type);
+		}
+		
+		bool IsCallableType(IType type)
+		{			
+			return (ICallableType.IsAssignableFrom(type)) ||
 				(type is Boo.Lang.Compiler.TypeSystem.ICallableType);
 		}
 		
@@ -274,6 +294,26 @@ namespace Boo.Lang.Compiler.TypeSystem
 		{
 			AnonymousCallableType type = GetCallableType(signature);
 			return GetConcreteCallableType(sourceNode, type);
+		}
+		
+		public IType GetEnumeratorItemType(IType iteratorType)
+		{
+			if (iteratorType.IsArray)
+			{
+				return ((IArrayType)iteratorType).GetElementType();
+			}
+			else
+			{
+				if (iteratorType.IsClass)
+				{
+					IType enumeratorItemType = GetEnumeratorItemTypeFromAttribute(iteratorType);
+					if (null != enumeratorItemType)
+					{
+						return enumeratorItemType;
+					}
+				}
+			}
+			return ObjectType;
 		}
 		
 		public IType GetExpressionType(Expression node)
@@ -359,6 +399,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 		public bool AreTypesRelated(IType lhs, IType rhs)
 		{
 			return lhs.IsAssignableFrom(rhs) ||
+				(lhs.IsInterface && rhs.IsInterface) ||
 				CanBeReachedByDownCastOrPromotion(lhs, rhs);
 		}
 		
@@ -545,6 +586,23 @@ namespace Boo.Lang.Compiler.TypeSystem
 			return tag;
 		}	
 		
+		public static IType GetReferencedType(Expression typeref)
+		{
+			switch (typeref.NodeType)
+			{
+				case NodeType.TypeofExpression:
+				{
+					return GetType(((TypeofExpression)typeref).Type);
+				}
+				case NodeType.ReferenceExpression:
+				case NodeType.MemberReferenceExpression:
+				{
+					return typeref.Entity as IType;					
+				}
+			}
+			return null;
+		}
+		
 		public static IType GetType(Node node)
 		{
 			return ((ITypedEntity)GetEntity(node)).Type;
@@ -606,6 +664,18 @@ namespace Boo.Lang.Compiler.TypeSystem
 			return mapped;
 		}
 		
+		public IConstructor Map(ConstructorInfo constructor)
+		{
+			object key = GetCacheKey(constructor);
+			IConstructor entity = (IConstructor)_entityCache[key];
+			if (null == entity)
+			{
+				entity = new ExternalConstructor(this, constructor);
+				_entityCache[key] = entity;
+			}
+			return entity;
+		}
+		
 		public IMethod Map(MethodInfo method)
 		{
 			object key = GetCacheKey(method);
@@ -650,8 +720,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 					
 					case MemberTypes.Constructor:
 					{
-						tag = new ExternalConstructor(this, (System.Reflection.ConstructorInfo)mi);
-						break;
+						return Map((System.Reflection.ConstructorInfo)mi);
 					}
 					
 					case MemberTypes.Field:
@@ -761,6 +830,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 			AddBuiltin(BuiltinFunction.Len);
 			AddBuiltin(BuiltinFunction.AddressOf);
 			AddBuiltin(BuiltinFunction.Eval);
+			AddBuiltin(BuiltinFunction.Switch);
 		}
 		
 		void AddPrimitiveType(string name, ExternalType type)
@@ -788,7 +858,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 			_entityCache[key] = tag;
 		}
 		
-		public Method CreateBeginInvokeMethod(ICallableType anonymousType)
+		Method CreateBeginInvokeMethod(ICallableType anonymousType)
 		{
 			Method method = CodeBuilder.CreateRuntimeMethod("BeginInvoke", Map(typeof(IAsyncResult)),
 												anonymousType.GetSignature().Parameters);
@@ -799,6 +869,53 @@ namespace Boo.Lang.Compiler.TypeSystem
 			method.Parameters.Add(
 					CodeBuilder.CreateParameterDeclaration(delta+1, "asyncState", ObjectType));
 			return method;
+		}
+		
+		Method CreateBeginInvokeOverload(ICallableType anonymousType, Method beginInvoke, out MethodInvocationExpression mie)
+		{
+			InternalMethod beginInvokeEntity = (InternalMethod)beginInvoke.Entity;
+			
+			Method overload = CodeBuilder.CreateMethod("BeginInvoke", Map(typeof(IAsyncResult)),
+										TypeMemberModifiers.Public);
+			CodeBuilder.DeclareParameters(overload, 1, anonymousType.GetSignature().Parameters);
+			
+			mie = CodeBuilder.CreateMethodInvocation(
+						CodeBuilder.CreateSelfReference(beginInvokeEntity.DeclaringType),
+						beginInvokeEntity);
+						
+			foreach (ParameterDeclaration parameter in overload.Parameters)
+			{
+				mie.Arguments.Add(CodeBuilder.CreateReference(parameter));
+			}
+			
+			overload.Body.Add(new ReturnStatement(mie));
+			return overload;
+		}
+		
+		Method CreateBeginInvokeSimplerOverload(ICallableType anonymousType, Method beginInvoke)
+		{
+			MethodInvocationExpression mie;
+			Method overload = CreateBeginInvokeOverload(anonymousType, beginInvoke, out mie);
+			
+			mie.Arguments.Add(CodeBuilder.CreateNullLiteral());
+			mie.Arguments.Add(CodeBuilder.CreateNullLiteral());
+			
+			return overload;
+		}
+		
+		Method CreateBeginInvokeCallbackOnlyOverload(ICallableType anonymousType, Method beginInvoke)
+		{
+			MethodInvocationExpression mie;
+			
+			Method overload = CreateBeginInvokeOverload(anonymousType, beginInvoke, out mie);
+			ParameterDeclaration callback = CodeBuilder.CreateParameterDeclaration(overload.Parameters.Count+1,
+										"callback", Map(typeof(AsyncCallback)));
+			overload.Parameters.Add(callback);
+
+			mie.Arguments.Add(CodeBuilder.CreateReference(callback));			
+			mie.Arguments.Add(CodeBuilder.CreateNullLiteral());
+			
+			return overload;
 		}
 		
 		public Method CreateEndInvokeMethod(ICallableType anonymousType)
@@ -831,16 +948,50 @@ namespace Boo.Lang.Compiler.TypeSystem
 			return null;
 		}
 		
-		IType GetConcreteCallableType(Node sourceNode, AnonymousCallableType anonymousType)
+		IType GetExternalEnumeratorItemType(IType iteratorType)
+		{
+			Type type = ((ExternalType)iteratorType).ActualType;
+			EnumeratorItemTypeAttribute attribute = (EnumeratorItemTypeAttribute)System.Attribute.GetCustomAttribute(type, typeof(EnumeratorItemTypeAttribute));
+			if (null != attribute)
+			{
+				return Map(attribute.ItemType);
+			}
+			return null;
+		}
+		
+		IType GetEnumeratorItemTypeFromAttribute(IType iteratorType)
+		{
+			AbstractInternalType internalType = iteratorType as AbstractInternalType;
+			if (null == internalType)
+			{
+				return GetExternalEnumeratorItemType(iteratorType);
+			}
+			
+			IType enumeratorItemTypeAttribute = Map(typeof(EnumeratorItemTypeAttribute));
+			foreach (Boo.Lang.Compiler.Ast.Attribute attribute in internalType.TypeDefinition.Attributes)
+			{				
+				IConstructor constructor = GetEntity(attribute) as IConstructor;
+				if (null != constructor)
+				{
+					if (constructor.DeclaringType == enumeratorItemTypeAttribute)
+					{
+						return GetType(attribute.Arguments[0]);
+					}
+				}
+			}
+			return null;
+		}
+		
+		public virtual IType GetConcreteCallableType(Node sourceNode, AnonymousCallableType anonymousType)
 		{
 			if (null == anonymousType.ConcreteType)
 			{
-				CreateConcreteCallableType(sourceNode, anonymousType);
+				anonymousType.ConcreteType = CreateConcreteCallableType(sourceNode, anonymousType);
 			}
 			return anonymousType.ConcreteType;
 		}
 		
-		void CreateConcreteCallableType(Node sourceNode, AnonymousCallableType anonymousType)
+		protected virtual IType CreateConcreteCallableType(Node sourceNode, AnonymousCallableType anonymousType)
 		{
 			Boo.Lang.Compiler.Ast.Module module = GetAnonymousTypesModule();
 			
@@ -850,11 +1001,16 @@ namespace Boo.Lang.Compiler.TypeSystem
 			cd.LexicalInfo = sourceNode.LexicalInfo;
 			
 			cd.Members.Add(CreateInvokeMethod(anonymousType));
-			cd.Members.Add(CreateBeginInvokeMethod(anonymousType));
+			
+			Method beginInvoke = CreateBeginInvokeMethod(anonymousType);
+			cd.Members.Add(beginInvoke);
+			cd.Members.Add(CreateBeginInvokeCallbackOnlyOverload(anonymousType, beginInvoke));
+			cd.Members.Add(CreateBeginInvokeSimplerOverload(anonymousType, beginInvoke));
+			
 			cd.Members.Add(CreateEndInvokeMethod(anonymousType));
 			_anonymousTypesModule.Members.Add(cd);
 			
-			anonymousType.ConcreteType = (IType)cd.Entity;
+			return (IType)cd.Entity;
 		}
 		
 		private static void InvalidNode(Node node)

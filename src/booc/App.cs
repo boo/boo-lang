@@ -66,7 +66,13 @@ namespace BooC
 				if (0 == options.Input.Count)
 				{
 					throw new ApplicationException(Boo.ResourceManager.GetString("BooC.NoInputSpecified"));
-				}				
+				}
+
+				if (options.TraceSwitch.TraceInfo)
+				{
+					compiler.Parameters.Pipeline.BeforeStep += new CompilerStepEventHandler(OnBeforeStep);
+					compiler.Parameters.Pipeline.AfterStep += new CompilerStepEventHandler(OnAfterStep);
+				}
 				
 				TimeSpan setupTime = DateTime.Now - start;	
 				
@@ -100,7 +106,8 @@ namespace BooC
 			}
 			catch (Exception x)
 			{
-				Console.WriteLine(Boo.ResourceManager.Format("BooC.FatalError", x.Message));
+				object message = options.TraceSwitch.TraceWarning ? (object)x : (object)x.Message;
+				Console.WriteLine(Boo.ResourceManager.Format("BooC.FatalError", message));
 			}			
 			return resultCode;
 		}
@@ -283,7 +290,7 @@ namespace BooC
 			
 			if (null == options.Pipeline)
 			{
-				options.Pipeline = new CompileToFileAndVerify();
+				options.Pipeline = new CompileToFile();
 			}
 		}
 
@@ -392,6 +399,16 @@ namespace BooC
 			}
 			return reference;
 		}		
+		
+		static void OnBeforeStep(object sender, CompilerStepEventArgs args)
+		{
+			args.Context.TraceEnter("Entering {0}", args.Step);
+		}
+		
+		static void OnAfterStep(object sender, CompilerStepEventArgs args)
+		{
+			args.Context.TraceLeave("Leaving {0}", args.Step);
+		}
 		
 		static void InvalidOption(string arg)
 		{

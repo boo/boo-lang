@@ -58,22 +58,14 @@ namespace Boo.Lang.Compiler.Steps
 	}
 	
 	public class EmitAssembly : AbstractVisitorCompilerStep
-	{	
-		static MethodInfo RuntimeServices_MoveNext = Types.RuntimeServices.GetMethod("MoveNext");
-		
-		static MethodInfo RuntimeServices_CheckArrayUnpack = Types.RuntimeServices.GetMethod("CheckArrayUnpack");
-		
+	{		
 		static MethodInfo RuntimeServices_NormalizeArrayIndex = Types.RuntimeServices.GetMethod("NormalizeArrayIndex");
 		
-		static MethodInfo RuntimeServices_GetEnumerable = Types.RuntimeServices.GetMethod("GetEnumerable");
-		
 		static MethodInfo RuntimeServices_ToBool = Types.RuntimeServices.GetMethod("ToBool");
+
+		static MethodInfo Builtins_ArrayTypedConstructor = Types.Builtins.GetMethod("array", new Type[] { Types.Type, Types.Int });
 		
-		static MethodInfo IEnumerable_GetEnumerator = Types.IEnumerable.GetMethod("GetEnumerator");
-		
-		static MethodInfo IEnumerator_MoveNext = Types.IEnumerator.GetMethod("MoveNext");
-		
-		static MethodInfo IEnumerator_get_Current = Types.IEnumerator.GetProperty("Current").GetGetMethod();		
+		static MethodInfo Builtins_ArrayTypedCollectionConstructor = Types.Builtins.GetMethod("array", new Type[] { Types.Type, Types.ICollection });
 		
 		static MethodInfo Math_Pow = typeof(Math).GetMethod("Pow");
 		
@@ -101,7 +93,7 @@ namespace Boo.Lang.Compiler.Steps
 		
 		ModuleBuilder _moduleBuilder;
 		
-		ISymbolDocumentWriter _symbolDocWriter;
+		//ISymbolDocumentWriter _symbolDocWriter;
 		
 		TypeBuilder _typeBuilder;
 		
@@ -179,7 +171,8 @@ namespace Boo.Lang.Compiler.Steps
 			
 			SetUpAssembly();
 			
-			DefineTypes();			
+			DefineTypes();
+			
 			DefineResources();
 			DefineAssemblyAttributes();
 			DefineEntryPoint();			
@@ -212,32 +205,124 @@ namespace Boo.Lang.Compiler.Steps
 		
 		void CreateTypes(Boo.Lang.List types)
 		{
-			Hashtable created = new Hashtable();
-			foreach (TypeMember type in types)
-			{
-				CreateType(created, type);
-			}
+			new TypeCreator(this, types).Run();
 		}
 		
-		void CreateType(Hashtable created, TypeMember type)
-		{	
-			if (!created.ContainsKey(type))
+		/// <summary>
+		/// Ensures that all types are created in the correct order.
+		/// </summary>
+		class TypeCreator
+		{
+			EmitAssembly _emitter;
+			
+			Hashtable _created;
+			
+			Boo.Lang.List _types;
+			
+			TypeMember _current;
+			
+			public TypeCreator(EmitAssembly emitter, Boo.Lang.List types)
 			{
-				created.Add(type, type);
-				
-				TypeDefinition typedef = type as TypeDefinition;
-				if (null != typedef)
+				_emitter = emitter;
+				_types = types;
+				_created = new Hashtable();
+			}
+			
+			public void Run()
+			{
+				ResolveEventHandler resolveHandler = new ResolveEventHandler(OnTypeResolve);
+				AppDomain current = System.Threading.Thread.GetDomain();
+			
+				try
 				{
-					foreach (TypeReference baseTypeRef in typedef.BaseTypes)
+					current.TypeResolve += resolveHandler;
+					CreateTypes();
+				}
+				finally
+				{
+					current.TypeResolve -= resolveHandler;
+				}
+			}
+			
+			void CreateTypes()
+			{			
+				foreach (TypeMember type in _types)
+				{
+					CreateType(type);
+				}
+			}
+		
+			void CreateType(TypeMember type)
+			{					 
+				if (!_created.ContainsKey(type))
+				{
+					TypeMember saved = _current;
+					_current = type;
+					
+					_created.Add(type, type);
+					
+					Trace("creating type '{0}'", type);
+					
+					if (IsNestedType(type))
 					{
-						AbstractInternalType tag = GetType(baseTypeRef) as AbstractInternalType;
-						if (null != tag)
+						CreateType((TypeMember)type.ParentNode);
+					}
+					
+					TypeDefinition typedef = type as TypeDefinition;
+					if (null != typedef)
+					{
+						foreach (TypeReference baseTypeRef in typedef.BaseTypes)
 						{
-							CreateType(created, tag.TypeDefinition);
+							AbstractInternalType tag = _emitter.GetType(baseTypeRef) as AbstractInternalType;
+							if (null != tag)
+							{
+								CreateType(tag.TypeDefinition);
+							}
+						}
+					}
+					
+					((AbstractInternalType)type.Entity).GeneratedType = _emitter.GetTypeBuilder(type).CreateType();					 
+					
+					Trace("type '{0}' successfully created", type);
+					
+					_current = saved;
+				}
+			}
+			
+			bool IsNestedType(TypeMember type)
+			{
+				NodeType parent = type.ParentNode.NodeType;
+				return (NodeType.ClassDefinition == parent) ||
+						(NodeType.InterfaceDefinition == parent);
+			}
+			
+			Assembly OnTypeResolve(object sender, ResolveEventArgs args)
+			{	
+				Trace("OnTypeResolve('{0}') during '{1}' creation.", args.Name, _current);
+				
+				// TypeResolve is generated whenever a type
+				// contains fields of a value type not created yet.
+				// All we need to do is look for value type fields
+				// and create them all.
+				ClassDefinition classdef = _current as ClassDefinition;
+				foreach (TypeMember member in classdef.Members)
+				{
+					if (NodeType.Field == member.NodeType)
+					{
+						AbstractInternalType type = _emitter.GetType(((Field)member).Type) as AbstractInternalType;
+						if (type != null && type.IsValueType)
+						{
+							CreateType(type.TypeDefinition);
 						}
 					}
 				}
-				GetTypeBuilder(type).CreateType();
+
+				return _emitter._asmBuilder;
+			}
+			
+			void Trace(string format, params object[] args)
+			{
+				_emitter.Context.TraceVerbose(format, args);
 			}
 		}
 		
@@ -257,23 +342,16 @@ namespace Boo.Lang.Compiler.Steps
 			{
 				switch (member.NodeType)
 				{
+					case NodeType.InterfaceDefinition:
 					case NodeType.ClassDefinition:
 					{
 						types.Add(member);
 						CollectTypes(types, ((TypeDefinition)member).Members);
 						break;
 					}
-					
-					case NodeType.InterfaceDefinition:
-					{
-						types.Add(member);
-						CollectTypes(types, ((TypeDefinition)member).Members);
-						break;
-					}
-					
 					case NodeType.EnumDefinition:
-					{
-						types.Insert(0, member);
+					{					
+						types.Add(member);
 						break;
 					}
 				}
@@ -286,7 +364,7 @@ namespace Boo.Lang.Compiler.Steps
 			
 			_asmBuilder = null;		
 			_moduleBuilder = null;		
-			_symbolDocWriter = null;
+			//_symbolDocWriter = null;
 			_typeBuilder = null;
 			_il = null;		
 			_returnValueLocal = null;
@@ -294,6 +372,7 @@ namespace Boo.Lang.Compiler.Steps
 			_tryBlock = 0;
 			_types.Clear();
 			_typeCache.Clear();
+			_builders.Clear();
 		}
 		
 		override public void OnAttribute(Boo.Lang.Compiler.Ast.Attribute node)
@@ -301,7 +380,8 @@ namespace Boo.Lang.Compiler.Steps
 		}
 		
 		override public void OnModule(Boo.Lang.Compiler.Ast.Module module)
-		{			
+		{	
+			/*
 			string fname = module.LexicalInfo.FileName;
 			if (null != fname)
 			{
@@ -311,6 +391,7 @@ namespace Boo.Lang.Compiler.Steps
 			{
 				_symbolDocWriter = null;
 			}
+			*/
 			Visit(module.Members);
 		}
 		
@@ -327,7 +408,6 @@ namespace Boo.Lang.Compiler.Steps
 			
 			foreach (EnumMember member in node.Members)
 			{
-				//enumBuilder.DefineLiteral(member.Name, (long)member.Initializer.Value);
 				FieldBuilder field = builder.DefineField(member.Name, builder,
 									FieldAttributes.Public |
 									FieldAttributes.Static |
@@ -383,6 +463,7 @@ namespace Boo.Lang.Compiler.Steps
 				_returnValueLocal = _il.DeclareLocal(GetSystemType(_returnType));
 			}
 			
+			DefineLabels(method);
 			Visit(method.Locals);
 			Visit(method.Body);
 			
@@ -396,6 +477,14 @@ namespace Boo.Lang.Compiler.Steps
 			_il.Emit(OpCodes.Ret);			
 		}
 		
+		void DefineLabels(Method method)
+		{
+			foreach (InternalLabel label in ((InternalMethod)method.Entity).Labels)
+			{
+				label.Label = _il.DefineLabel();
+			}
+		}
+		
 		override public void OnConstructor(Constructor constructor)
 		{
 			if (constructor.IsRuntime)
@@ -406,7 +495,7 @@ namespace Boo.Lang.Compiler.Steps
 			ConstructorBuilder builder = GetConstructorBuilder(constructor);
 			_il = builder.GetILGenerator();
 
-			InternalConstructor tag = (InternalConstructor)GetEntity(constructor);
+			DefineLabels(constructor);
 			Visit(constructor.Locals);
 			Visit(constructor.Body);
 			_il.Emit(OpCodes.Ret);
@@ -414,27 +503,14 @@ namespace Boo.Lang.Compiler.Steps
 		
 		override public void OnLocal(Local local)
 		{			
-			LocalVariable info = GetLocalVariable(local);
+			InternalLocal info = GetInternalLocal(local);
 			info.LocalBuilder = _il.DeclareLocal(GetSystemType(local));
-			info.LocalBuilder.SetLocalSymInfo(local.Name);			
+			//info.LocalBuilder.SetLocalSymInfo(local.Name);			
 		}
 		
 		override public void OnForStatement(ForStatement node)
 		{									
-			EmitDebugInfo(node, node.Iterator);
-			
-			// iterator = <node.Iterator>;
-			node.Iterator.Accept(this);		
-			
-			IType iteratorType = PopType();
-			if (iteratorType.IsArray)
-			{
-				EmitArrayBasedFor(node, (IArrayType)iteratorType);
-			}
-			else
-			{
-				EmitEnumerableBasedFor(node, iteratorType);
-			}			
+			NotImplemented("ForStatement");			
 		}
 		
 		override public void OnReturnStatement(ReturnStatement node)
@@ -489,12 +565,7 @@ namespace Boo.Lang.Compiler.Steps
 		
 		override public void OnUnpackStatement(UnpackStatement node)
 		{
-			DeclarationCollection decls = node.Declarations;
-			
-			EmitDebugInfo(decls[0], node.Expression);						
-			node.Expression.Accept(this);
-			
-			EmitUnpackForDeclarations(node.Declarations, PopType());			
+			NotImplemented("Unpacking");			
 		}	
 		
 		override public bool EnterExpressionStatement(ExpressionStatement node)
@@ -528,6 +599,27 @@ namespace Boo.Lang.Compiler.Steps
 			EmitBranchTrue(node.Condition, endLabel);
 			node.Block.Accept(this);
 			_il.MarkLabel(endLabel);
+		}
+		
+		override public void OnGotoStatement(GotoStatement node)
+		{
+			InternalLabel label = (InternalLabel)node.Label.Entity;
+			int gotoDepth = ContextAnnotations.GetTryBlockDepth(node);
+			int targetDepth = ContextAnnotations.GetTryBlockDepth(label.LabelStatement);
+	
+			if (targetDepth == gotoDepth)
+			{
+				_il.Emit(OpCodes.Br, label.Label);
+			}
+			else
+			{
+				_il.Emit(OpCodes.Leave, label.Label);
+			}
+		}
+		
+		override public void OnLabelStatement(LabelStatement node)
+		{
+			_il.MarkLabel(((InternalLabel)node.Entity).Label);
 		}
 		
 		override public void OnIfStatement(IfStatement node)
@@ -936,7 +1028,7 @@ namespace Boo.Lang.Compiler.Steps
 			{
 				case EntityType.Local:
 				{
-					SetLocal(node, (LocalVariable)tag, leaveValueOnStack);
+					SetLocal(node, (InternalLocal)tag, leaveValueOnStack);
 					break;
 				}
 				
@@ -984,7 +1076,17 @@ namespace Boo.Lang.Compiler.Steps
 		void EmitTypeTest(BinaryExpression node)
 		{
 			Visit(node.Left); PopType();
-			_il.Emit(OpCodes.Isinst, GetSystemType(node.Right));
+			
+			System.Type type = null;
+			if (NodeType.TypeofExpression == node.Right.NodeType)
+			{
+				type = GetSystemType(((TypeofExpression)node.Right).Type);
+			}
+			else
+			{
+				type = GetSystemType(node.Right);
+			}
+			_il.Emit(OpCodes.Isinst, type);
 		}
 		
 		void OnTypeTest(BinaryExpression node)
@@ -1150,7 +1252,20 @@ namespace Boo.Lang.Compiler.Steps
 			Visit(node.Right);
 			EmitCastIfNeeded(type, PopType());
 			
-			_il.Emit(OpCodes.Or);
+			switch (node.Operator)
+			{
+				case BinaryOperatorType.BitwiseOr:
+				{
+					_il.Emit(OpCodes.Or);
+					break;
+				}
+				
+				case BinaryOperatorType.BitwiseAnd:
+				{
+					_il.Emit(OpCodes.And);
+					break;
+				}
+			}
 			
 			PushType(type);
 		}
@@ -1159,6 +1274,7 @@ namespace Boo.Lang.Compiler.Steps
 		{				
 			switch (node.Operator)
 			{
+				case BinaryOperatorType.BitwiseAnd:
 				case BinaryOperatorType.BitwiseOr:
 				{
 					EmitBitwiseOperator(node);
@@ -1275,10 +1391,15 @@ namespace Boo.Lang.Compiler.Steps
 				
 				default:
 				{				
-					NotImplemented(node, node.Operator.ToString());
+					OperatorNotImplemented(node);
 					break;
 				}
 			}
+		}
+		
+		void OperatorNotImplemented(BinaryExpression node)
+		{
+			NotImplemented(node, node.Operator.ToString());
 		}
 		
 		override public void OnTypeofExpression(TypeofExpression node)
@@ -1303,9 +1424,53 @@ namespace Boo.Lang.Compiler.Steps
 			PushType(node.ExpressionType);
 		}
 		
-		void InvokeMethod(IMethod methodInfo, MethodInvocationExpression node)
-		{			
-			MethodInfo mi = GetMethodInfo(methodInfo);
+		void InvokeMethod(IMethod method, MethodInvocationExpression node)
+		{	
+			MethodInfo mi = GetMethodInfo(method);
+			if (!InvokeOptimizedMethod(method, mi, node))
+			{
+				InvokeRegularMethod(method, mi, node);
+			}
+		}
+		
+		bool InvokeOptimizedMethod(IMethod method, MethodInfo mi, MethodInvocationExpression node)
+		{		
+			if (Builtins_ArrayTypedConstructor == mi)
+			{
+				// optimize constructs such as:
+				//		array(int, 2)
+				IType type = TypeSystemServices.GetReferencedType(node.Arguments[0]);
+				if (null != type)
+				{
+					Visit(node.Arguments[1]);
+					EmitCastIfNeeded(TypeSystemServices.IntType, PopType());					
+					_il.Emit(OpCodes.Newarr, GetSystemType(type));
+					PushType(TypeSystemServices.GetArrayType(type));
+					return true;
+				}
+			}			
+			else if (Builtins_ArrayTypedCollectionConstructor == mi)
+			{			
+				// optimize constructs such as:
+				//		array(int, (1, 2, 3))
+				//		array(byte, [1, 2, 3, 4])
+				IType type = TypeSystemServices.GetReferencedType(node.Arguments[0]);
+				if (null != type)
+				{
+					ListLiteralExpression items = node.Arguments[1] as ListLiteralExpression;
+					if (null != items)
+					{
+						EmitArray(type, items.Items);
+						PushType(TypeSystemServices.GetArrayType(type));
+						return true;
+					}
+				}
+			}
+			return false;
+		}
+		
+		void InvokeRegularMethod(IMethod method, MethodInfo mi, MethodInvocationExpression node)
+		{				
 			OpCode code = OpCodes.Call;
 			if (!mi.IsStatic)
 			{					
@@ -1340,17 +1505,24 @@ namespace Boo.Lang.Compiler.Steps
 				}
 			}
 			
-			PushArguments(methodInfo, node.Arguments);
+			PushArguments(method, node.Arguments);
 			_il.EmitCall(code, mi, null);
 			
-			PushType(methodInfo.ReturnType);
+			PushType(method.ReturnType);
 		}
 		
 		void InvokeSuperMethod(IMethod methodInfo, MethodInvocationExpression node)
 		{
 			IMethod super = ((InternalMethod)methodInfo).Override;
 			MethodInfo superMI = GetMethodInfo(super);
-			_il.Emit(OpCodes.Ldarg_0); // this
+			if (methodInfo.DeclaringType.IsValueType)
+			{
+				_il.Emit(OpCodes.Ldarga_S, 0);
+			}
+			else
+			{
+				_il.Emit(OpCodes.Ldarg_0); // this
+			}
 			PushArguments(super, node.Arguments);
 			_il.EmitCall(OpCodes.Call, superMI, null);
 			PushType(super.ReturnType);
@@ -1361,6 +1533,22 @@ namespace Boo.Lang.Compiler.Steps
 			_il.Emit(OpCodes.Ldtoken, type);
 			_il.EmitCall(OpCodes.Call, Type_GetTypeFromHandle, null);
 			PushType(TypeSystemServices.TypeType);
+		}
+		
+		void OnSwitch(MethodInvocationExpression node)
+		{
+			ExpressionCollection args = node.Arguments;
+			Visit(args[0]); 
+			EmitCastIfNeeded(TypeSystemServices.IntType, PopType());
+			
+			Label[] labels = new Label[args.Count-1];
+			for (int i=0; i<labels.Length; ++i)
+			{
+				labels[i] = ((InternalLabel)args[i+1].Entity).Label;
+			}
+			_il.Emit(OpCodes.Switch, labels);
+			
+			PushVoid();
 		}
 		
 		void OnEval(MethodInvocationExpression node)
@@ -1385,6 +1573,12 @@ namespace Boo.Lang.Compiler.Steps
 		{
 			switch (function.FunctionType)
 			{
+				case BuiltinFunctionType.Switch:
+				{
+					OnSwitch(node);
+					break;
+				}
+				
 				case BuiltinFunctionType.AddressOf:
 				{
 					OnAddressOf(node);
@@ -1550,16 +1744,9 @@ namespace Boo.Lang.Compiler.Steps
 		{
 			if (node.Items.Count > 0)
 			{
-				if (AstUtil.IsListGenerator(node))
-				{
-					EmitListDisplay(node);
-				}
-				else
-				{
-					EmitObjectArray(node.Items);
-					_il.Emit(OpCodes.Ldc_I4_1);
-					_il.Emit(OpCodes.Newobj, List_ArrayBoolConstructor);
-				}
+				EmitObjectArray(node.Items);
+				_il.Emit(OpCodes.Ldc_I4_1);
+				_il.Emit(OpCodes.Newobj, List_ArrayBoolConstructor);
 			}
 			else
 			{
@@ -1679,6 +1866,19 @@ namespace Boo.Lang.Compiler.Steps
 			PushType(TypeSystemServices.StringType);
 		}
 		
+		void LoadMemberTarget(Expression self, IMember member)
+		{						
+			if (member.DeclaringType.IsValueType)
+			{
+				LoadAddress(self);
+			}
+			else
+			{
+				Visit(self);
+				PopType();
+			}
+		}
+		
 		void EmitLoadFieldAddress(Expression expression, IField field)
 		{
 			if (field.IsStatic)
@@ -1687,7 +1887,7 @@ namespace Boo.Lang.Compiler.Steps
 			}
 			else
 			{
-				Visit(((MemberReferenceExpression)expression).Target); PopType();
+				LoadMemberTarget(((MemberReferenceExpression)expression).Target, field);
 				_il.Emit(OpCodes.Ldflda, GetFieldInfo(field));
 			}
 		}
@@ -1707,7 +1907,7 @@ namespace Boo.Lang.Compiler.Steps
 			}
 			else
 			{						
-				Visit(self); PopType();
+				LoadMemberTarget(self, fieldInfo);
 				_il.Emit(OpCodes.Ldfld, GetFieldInfo(fieldInfo));						
 			}
 			PushType(fieldInfo.Type);
@@ -1822,7 +2022,16 @@ namespace Boo.Lang.Compiler.Steps
 		}
 		
 		void LoadAddress(Expression expression)
-		{
+		{			
+			if (NodeType.SelfLiteralExpression == expression.NodeType)
+			{
+				if (expression.ExpressionType.IsValueType)
+				{
+					_il.Emit(OpCodes.Ldarg_0);
+					return;
+				}
+			}
+			
 			IEntity tag = expression.Entity;
 			if (null != tag)
 			{
@@ -1830,7 +2039,7 @@ namespace Boo.Lang.Compiler.Steps
 				{
 					case EntityType.Local:
 					{				
-						_il.Emit(OpCodes.Ldloca, ((LocalVariable)tag).LocalBuilder);
+						_il.Emit(OpCodes.Ldloca, ((InternalLocal)tag).LocalBuilder);
 						return;
 					}
 				
@@ -1885,7 +2094,7 @@ namespace Boo.Lang.Compiler.Steps
 			{
 				case EntityType.Local:
 				{
-					LocalVariable local = (LocalVariable)info;
+					InternalLocal local = (InternalLocal)info;
 					LocalBuilder builder = local.LocalBuilder;
 					_il.Emit(OpCodes.Ldloc, builder);
 					PushType(local.Type);
@@ -1939,6 +2148,7 @@ namespace Boo.Lang.Compiler.Steps
 					break;
 				}
 				
+				case EntityType.Array:
 				case EntityType.Type:
 				{
 					EmitGetTypeFromHandle(GetSystemType(node));
@@ -1954,7 +2164,7 @@ namespace Boo.Lang.Compiler.Steps
 			}			
 		}
 		
-		void SetLocal(BinaryExpression node, LocalVariable tag, bool leaveValueOnStack)
+		void SetLocal(BinaryExpression node, InternalLocal tag, bool leaveValueOnStack)
 		{
 			node.Right.Accept(this); // leaves type on stack
 					
@@ -1972,7 +2182,7 @@ namespace Boo.Lang.Compiler.Steps
 			EmitAssignment(tag, typeOnStack);
 		}
 		
-		void EmitAssignment(LocalVariable tag, IType typeOnStack)
+		void EmitAssignment(InternalLocal tag, IType typeOnStack)
 		{			
 			// todo: assignment result must be type on the left in the
 			// case of casting
@@ -1989,8 +2199,9 @@ namespace Boo.Lang.Compiler.Steps
 				opSetField = OpCodes.Stfld;
 				if (null != reference)
 				{
-					((MemberReferenceExpression)reference).Target.Accept(this);
-					PopType();
+					LoadMemberTarget(
+								((MemberReferenceExpression)reference).Target,
+								field);
 				}
 			}
 			
@@ -2063,202 +2274,12 @@ namespace Boo.Lang.Compiler.Steps
 				_il.MarkSequencePoint(_symbolDocWriter, start.Line, start.StartColumn, end.Line, end.EndColumn);
 			}
 			*/
-		}
-		
-		void EmitListDisplay(ListLiteralExpression node)
-		{
-			GeneratorExpression display = (GeneratorExpression)node.Items[0]; 
-			
-			// list = List()
-			LocalBuilder list = _il.DeclareLocal(Types.List);			
-			_il.Emit(OpCodes.Newobj, List_EmptyConstructor);
-			_il.Emit(OpCodes.Stloc, list);
-			
-			Label labelTest = _il.DefineLabel();
-			Label labelBody = _il.DefineLabel();
-			
-			LocalBuilder localIterator = _il.DeclareLocal(Types.IEnumerator);
-			
-			Visit(display.Iterator); PopType();
-			_il.EmitCall(OpCodes.Callvirt, IEnumerable_GetEnumerator, null);
-			_il.Emit(OpCodes.Stloc, localIterator);
-			_il.Emit(OpCodes.Br, labelTest);
-			
-			_il.MarkLabel(labelBody);
-			_il.Emit(OpCodes.Ldloc, localIterator);
-			_il.EmitCall(OpCodes.Callvirt, IEnumerator_get_Current, null);
-			EmitUnpackForDeclarations(display.Declarations, TypeSystemServices.ObjectType);			
-			
-			StatementModifier filter = display.Filter; 
-			if (null != filter)
-			{
-				if (StatementModifierType.If == filter.Type)
-				{
-					EmitBranchFalse(filter.Condition, labelTest);
-				}
-				else
-				{
-					EmitBranchTrue(filter.Condition, labelTest);
-				}
-			}
-			
-			_il.Emit(OpCodes.Ldloc, list);
-			Visit(display.Expression);
-			EmitCastIfNeeded(TypeSystemServices.ObjectType, PopType());
-			_il.EmitCall(OpCodes.Call, List_Add, null);
-			_il.Emit(OpCodes.Pop);
-			
-			_il.MarkLabel(labelTest);
-			_il.Emit(OpCodes.Ldloc, localIterator);
-			_il.EmitCall(OpCodes.Callvirt, IEnumerator_MoveNext, null);
-			_il.Emit(OpCodes.Brtrue, labelBody);
-			
-			_il.Emit(OpCodes.Ldloc, list);
-		}
-		
-		void EmitEnumerableBasedFor(ForStatement node, IType iteratorType)
-		{			
-			Label labelTest = _il.DefineLabel();
-			Label labelBody = _il.DefineLabel();
-			Label breakLabel = _il.DefineLabel();
-			
-			LocalBuilder localIterator = _il.DeclareLocal(Types.IEnumerator);
-			_il.EmitCall(OpCodes.Callvirt, IEnumerable_GetEnumerator, null);
-			_il.Emit(OpCodes.Stloc, localIterator);
-			_il.Emit(OpCodes.Br, labelTest);
-			
-			_il.MarkLabel(labelBody);
-			_il.Emit(OpCodes.Ldloc, localIterator);
-			_il.EmitCall(OpCodes.Callvirt, IEnumerator_get_Current, null);
-			EmitUnpackForDeclarations(node.Declarations, TypeSystemServices.ObjectType);
-			
-			EnterLoop(breakLabel, labelTest);
-			Visit(node.Block);
-			LeaveLoop();
-			
-			// iterator.MoveNext()			
-			_il.MarkLabel(labelTest);
-			_il.Emit(OpCodes.Ldloc, localIterator);
-			_il.EmitCall(OpCodes.Callvirt, IEnumerator_MoveNext, null);
-			_il.Emit(OpCodes.Brtrue, labelBody);
-			
-			_il.MarkLabel(breakLabel);
-		}
-		
-		void EmitArrayBasedFor(ForStatement node, IArrayType iteratorTypeInfo)
-		{				
-			Label labelTest = _il.DefineLabel();
-			Label labelBody = _il.DefineLabel();
-			Label continueLabel = _il.DefineLabel();
-			Label breakLabel = _il.DefineLabel();
-			
-			OpCode ldelem = GetLoadEntityOpCode(iteratorTypeInfo.GetElementType());
-			
-			Type iteratorType = GetSystemType(iteratorTypeInfo);
-			LocalBuilder localIterator = _il.DeclareLocal(iteratorType);
-			_il.Emit(OpCodes.Stloc, localIterator);
-			
-			// i = 0;
-			LocalBuilder localIndex = _il.DeclareLocal(Types.Int);
-			_il.Emit(OpCodes.Ldc_I4_0);
-			_il.Emit(OpCodes.Stloc, localIndex);
-
-			_il.Emit(OpCodes.Br, labelTest);
-			
-			_il.MarkLabel(labelBody);
-			
-			// value = iterator[i]
-			_il.Emit(OpCodes.Ldloc, localIterator);
-			_il.Emit(OpCodes.Ldloc, localIndex);
-			_il.Emit(ldelem);
-			
-			EmitUnpackForDeclarations(node.Declarations, iteratorTypeInfo.GetElementType());
-			
-			EnterLoop(breakLabel, continueLabel);
-			Visit(node.Block);
-			LeaveLoop();
-			
-			_il.MarkLabel(continueLabel);
-			
-			// ++i			
-			_il.Emit(OpCodes.Ldloc, localIndex);
-			_il.Emit(OpCodes.Ldc_I4_1);
-			_il.Emit(OpCodes.Add);
-			_il.Emit(OpCodes.Stloc, localIndex);
-			
-			// i<iterator.Length			
-			_il.MarkLabel(labelTest);			
-			_il.Emit(OpCodes.Ldloc, localIndex);
-			_il.Emit(OpCodes.Ldloc, localIterator);
-			_il.Emit(OpCodes.Ldlen);
-			_il.Emit(OpCodes.Conv_I4);
-			_il.Emit(OpCodes.Blt, labelBody);
-			
-			_il.MarkLabel(breakLabel);
-		}
-		
-		void EmitUnpackForDeclarations(DeclarationCollection decls, IType topOfStack)
-		{
-			if (1 == decls.Count)
-			{
-				// for arg in iterator				
-				StoreLocal(topOfStack, GetLocalVariable(decls[0]));
-			}
-			else
-			{
-				if (topOfStack.IsArray)
-				{						
-					IType elementTypeInfo = ((IArrayType)topOfStack).GetElementType();
-					
-					// RuntimeServices.CheckArrayUnpack(array, decls.Count);					
-					_il.Emit(OpCodes.Dup);
-					_il.Emit(OpCodes.Ldc_I4, decls.Count);					
-					_il.EmitCall(OpCodes.Call, RuntimeServices_CheckArrayUnpack, null);
-					
-					OpCode ldelem = GetLoadEntityOpCode(elementTypeInfo);
-					for (int i=0; i<decls.Count; ++i)
-					{
-						// local = array[i]
-						_il.Emit(OpCodes.Dup);
-						_il.Emit(OpCodes.Ldc_I4, i); // element index			
-						_il.Emit(ldelem);
-						
-						StoreLocal(elementTypeInfo, GetLocalVariable(decls[i]));					
-					}
-				}
-				else
-				{
-					EmitGetEnumerableIfNeeded(topOfStack);
-					_il.EmitCall(OpCodes.Callvirt, IEnumerable_GetEnumerator, null);
-					
-					foreach (Declaration d in decls)
-					{
-						_il.Emit(OpCodes.Dup);
-						_il.EmitCall(OpCodes.Call, RuntimeServices_MoveNext, null);				
-						StoreLocal(TypeSystemServices.ObjectType, GetLocalVariable(d));				
-					}					
-				}
-				_il.Emit(OpCodes.Pop);
-			}
-		}
-		
-		void EmitGetEnumerableIfNeeded(IType topOfStack)
-		{
-			if (!IsIEnumerableCompatible(topOfStack))
-			{
-				_il.EmitCall(OpCodes.Call, RuntimeServices_GetEnumerable, null);
-			}
-		}
+		}		
 		
 		bool IsBoolOrInt(IType type)
 		{
 			return TypeSystemServices.BoolType == type ||
 				TypeSystemServices.IntType == type;
-		}
-		
-		bool IsIEnumerableCompatible(IType type)
-		{
-			return TypeSystemServices.IEnumerableType.IsAssignableFrom(type);
 		}
 		
 		void PushArguments(IMethod tag, ExpressionCollection args)
@@ -2336,7 +2357,8 @@ namespace Boo.Lang.Compiler.Steps
 		{
 			if (tag.IsValueType)
 			{
-				if (TypeSystemServices.IntType == tag)
+				if (TypeSystemServices.IntType == tag ||
+					tag.IsEnum)
 				{
 					return OpCodes.Ldelem_I4;
 				}
@@ -2370,7 +2392,8 @@ namespace Boo.Lang.Compiler.Steps
 		{
 			if (tag.IsValueType)
 			{
-				if (TypeSystemServices.IntType == tag)
+				if (TypeSystemServices.IntType == tag ||
+					tag.IsEnum)
 				{
 					return OpCodes.Stelem_I4;
 				}
@@ -2429,12 +2452,11 @@ namespace Boo.Lang.Compiler.Steps
 			}
 			else
 			{
-				if (TypeSystemServices.IsSystemObject(expectedType))
+				if (actualType.IsValueType &&
+						(expectedType.IsInterface ||
+						TypeSystemServices.IsSystemObject(expectedType)))
 				{
-					if (actualType.IsValueType)
-					{
-						_il.Emit(OpCodes.Box, GetSystemType(actualType));
-					}
+					_il.Emit(OpCodes.Box, GetSystemType(actualType));
 				}
 			}
 		}
@@ -2550,7 +2572,7 @@ namespace Boo.Lang.Compiler.Steps
 			}
 		}
 		
-		void StoreLocal(IType topOfStack, LocalVariable local)
+		void StoreLocal(IType topOfStack, InternalLocal local)
 		{
 			EmitCastIfNeeded(local.Type, topOfStack);
 			_il.Emit(OpCodes.Stloc, local.LocalBuilder);
@@ -2631,7 +2653,7 @@ namespace Boo.Lang.Compiler.Steps
 			return _builders[node];
 		}
 		
-		TypeBuilder GetTypeBuilder(Node node)
+		internal TypeBuilder GetTypeBuilder(Node node)
 		{
 			return (TypeBuilder)_builders[node];
 		}
@@ -2658,7 +2680,7 @@ namespace Boo.Lang.Compiler.Steps
 		
 		LocalBuilder GetLocalBuilder(Node local)
 		{
-			return GetLocalVariable(local).LocalBuilder;
+			return GetInternalLocal(local).LocalBuilder;
 		}
 		
 		PropertyInfo GetPropertyInfo(IEntity tag)
@@ -2925,6 +2947,10 @@ namespace Boo.Lang.Compiler.Steps
 			else if (method.IsPrivate)
 			{
 				attributes |= MethodAttributes.Private;
+			}
+			else if (method.IsInternal)
+			{
+				attributes |= MethodAttributes.Assembly;
 			}
 			
 			if (method.IsStatic)
@@ -3316,9 +3342,8 @@ namespace Boo.Lang.Compiler.Steps
 			return Path.GetDirectoryName(Path.GetFullPath(fname));
 		}
 		
-		string BuildOutputAssemblyName()
+		string BuildOutputAssemblyName(string fname)
 		{				
-			string fname = Parameters.OutputAssembly;
 			if (!Path.HasExtension(fname))
 			{
 				if (CompilerOutputType.Library == Parameters.OutputType)
@@ -3345,18 +3370,19 @@ namespace Boo.Lang.Compiler.Steps
 		
 		void SetUpAssembly()
 		{
-			if (0 == Parameters.OutputAssembly.Length)
+			string fname = Parameters.OutputAssembly;
+			if (0 == fname.Length)
 			{				
-				Parameters.OutputAssembly = CompileUnit.Modules[0].Name;			
+				fname = CompileUnit.Modules[0].Name;			
 			}
 			
-			Parameters.OutputAssembly = BuildOutputAssemblyName();
+			Context.GeneratedAssemblyFileName = BuildOutputAssemblyName(fname);
 			
 			AssemblyName asmName = new AssemblyName();
-			asmName.Name = GetAssemblyName(Parameters.OutputAssembly);
+			asmName.Name = GetAssemblyName(Context.GeneratedAssemblyFileName);
 			
-			_asmBuilder = AppDomain.CurrentDomain.DefineDynamicAssembly(asmName, AssemblyBuilderAccess.RunAndSave, GetTargetDirectory(Parameters.OutputAssembly));
-			_moduleBuilder = _asmBuilder.DefineDynamicModule(asmName.Name, Path.GetFileName(Parameters.OutputAssembly), true);			
+			_asmBuilder = AppDomain.CurrentDomain.DefineDynamicAssembly(asmName, AssemblyBuilderAccess.RunAndSave, GetTargetDirectory(Context.GeneratedAssemblyFileName));
+			_moduleBuilder = _asmBuilder.DefineDynamicModule(asmName.Name, Path.GetFileName(Context.GeneratedAssemblyFileName), true);			
 			ContextAnnotations.SetAssemblyBuilder(Context, _asmBuilder);
 		}
 	}

@@ -150,6 +150,11 @@ namespace Boo.Lang.Compiler.TypeSystem
 			get;
 		}
 		
+		bool IsFinal
+		{
+			get;
+		}
+		
 		bool IsArray
 		{
 			get;
@@ -196,6 +201,15 @@ namespace Boo.Lang.Compiler.TypeSystem
 		/// Is this variable shared among closures?
 		/// </summary>
 		bool IsShared
+		{
+			get;
+			set;
+		}
+		
+		/// <summary>
+		/// Is this variable ever used in the body of the method?
+		/// </summary>
+		bool IsUsed
 		{
 			get;
 			set;

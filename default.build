@@ -22,7 +22,7 @@
 	
 	<include buildfile="build.properties" if="${file::exists('build.properties')}" />
 
-	<target name="all" depends="booc, booi">	
+	<target name="all" depends="booc, booi, booish">	
 	</target>
 	
 	<target name="test" depends="all">
@@ -31,6 +31,17 @@
 	
 	<target name="compile-tests" depends="all">
 		<nant buildfile="tests/default.build" target="compile" />
+	</target>
+	
+	<target name="booish" depends="Boo.NAnt">
+		<booc
+			target="exe"
+			output="build/booish.exe">
+			
+			<sources basedir="src/booish">
+				<include name="*.boo" />
+			</sources>
+		</booc>
 	</target>
 	
 	<target name="booi" depends="Boo.NAnt">
@@ -71,15 +82,19 @@
 			</targetfiles>
 		</uptodate>
 		
-		<exec program="build/booc.exe" useruntimeengine="true" unless="${Boo.NAnt-is-uptodate}">
+		<property name="NAnt.Core.dll" value="build/NAnt.Core.dll"
+			if="${'net-2.0' == framework::get-target-framework()}" />
+			
+		<exec program="build/booc.exe" useruntimeengine="true" unless="${Boo.NAnt-is-uptodate}">		
+			<arg value="-v" />
 			<arg value="-out:build/Boo.NAnt.dll" />
 			<arg value="-target:library" />
 			<arg value="-r:${NAnt.Core.dll}" />
-			<arg value="-v" />
 			<arg value="src/Boo.NAnt/BoocTask.boo" />
 			<arg value="src/Boo.NAnt/BooTask.boo" />
 			<arg value="src/Boo.NAnt/AbstractBooTask.boo" />			
 		</exec>
+		
 		<loadtasks assembly="build/Boo.NAnt.dll" />
 	</target>
 	
@@ -121,7 +136,8 @@
 				<include name="antlr.runtime.dll" />
 				<include name="booc.exe" />
 				<include name="booc.rsp" />
-				<include name="booi.exe" />				
+				<include name="booi.exe" />
+				<include name="booish.exe" />	
 			</fileset>
 		</copy>
 	</target>
@@ -184,16 +200,35 @@
 		</exec>
 	</target>
 	
-	<target name="update-stable-branch">
-		<exec program="bin/booi.exe" useruntimeengine="true">
-			<arg file="scripts/update-stable-branch.boo" />
-		</exec>
+	<target name="update-stable-branch" depends="SVNUtil">
+		<boo src="scripts/update-stable-branch.boo">
+			<references basedir="build">
+				<include name="SVNUtil.dll" />
+			</references>
+		</boo>		
+	</target>
+	
+	<target name="create-distro-tag" depends="SVNUtil">
+		<boo src="scripts/create-distro-tag.boo">
+			<references basedir="build">
+				<include name="SVNUtil.dll" />
+			</references>
+		</boo>
+	</target>
+	
+	<target name="SVNUtil" depends="Boo.NAnt">
+		<booc target="library" output="build/SVNUtil.dll">
+			<sources basedir="scripts">
+				<include name="SVNUtil.boo" />
+			</sources>
+		</booc>
 	</target>
 	
 	<target name="upload-distro" depends="distro">
 		<exec program="scp">
 			<arg value="-B" />
-			<arg value="boo-${distro-version}-*.zip" />
+			<arg file="boo-${distro-version}-bin.zip" />
+			<arg file="boo-${distro-version}-src.zip" />
 			<arg value="${distro-user}@beaver.codehaus.org:/home/projects/boo/dist/distributions/" />
 		</exec>
 	</target>
@@ -214,7 +249,7 @@
 				<include name="docs/**/*.boo" />
 				<include name="docs/**/*.build" />
 				<include name="docs/**/*.sxw" />
-				<include name="bin/*.dll" />
+				<include name="bin/**/*.dll" />
 				<include name="bin/*.exe" />
 				<include name="bin/*.rsp" />
 				
@@ -224,7 +259,8 @@
 				<include name="extras/SharpDevelop/boo.xshd" />
 				<include name="extras/boox/**/*.boo" />
 				<include name="extras/boox/**/*.build" />
-				<include name="extras/boox/booxw/resources/**/*.png" />
+				<include name="extras/boox/resources/**/*.png" />
+				<include name="extras/boox/resources/**/*.ico" />
 				
 				<include name="examples/**/*.boo" />
 				<include name="examples/**/*.xml" />
@@ -245,7 +281,7 @@
 				<include name="docs/**/*.boo" />
 				<include name="docs/**/*.build" />
 				<include name="docs/**/*.sxw" />
-				<include name="bin/*.dll" />
+				<include name="bin/**/*.dll" />
 				<include name="bin/*.exe" />
 				<include name="bin/*.rsp" />
 				
@@ -255,7 +291,8 @@
 				<include name="extras/SharpDevelop/boo.xshd" />
 				<include name="extras/boox/**/*.boo" />
 				<include name="extras/boox/**/*.build" />
-				<include name="extras/boox/booxw/resources/**/*.png" />
+				<include name="extras/boox/resources/**/*.png" />
+				<include name="extras/boox/resources/**/*.ico" />
 				
 				<include name="examples/**/*.boo" />
 				<include name="examples/**/*.xml" />

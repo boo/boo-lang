@@ -42,5 +42,10 @@ namespace Boo.Lang.Compiler
 		{
 			return new CompilerWarning("BCW0001", node.LexicalInfo, typeName, memberName);
 		}
+		
+		public static CompilerWarning ModifiersInLabelsHaveNoEffect(Node node)
+		{
+			return new CompilerWarning("BCW0002", node.LexicalInfo);
+		}
 	}
 }

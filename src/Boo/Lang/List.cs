@@ -282,7 +282,7 @@ namespace Boo.Lang
 
 		override public string ToString()
 		{
-			return Join(", ");
+			return "[" + Join(", ") + "]";
 		}
 		
 		public string Join(string separator)
@@ -364,8 +364,23 @@ namespace Boo.Lang
 			return -1 != IndexOf(condition);
 		}
 		
+		public object Find(Predicate condition)
+		{
+			int index = IndexOf(condition);
+			if (-1 != index)
+			{
+				return _items[index];
+			}
+			return null;
+		}
+		
 		public int IndexOf(Predicate condition)
 		{
+			if (null == condition)
+			{
+				throw new ArgumentNullException("condition");
+			}
+			
 			for (int i=0; i<_count; ++i)
 			{
 				if (condition(_items[i]))

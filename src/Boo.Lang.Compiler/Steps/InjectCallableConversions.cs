@@ -54,7 +54,7 @@ namespace Boo.Lang.Compiler.Steps
 		
 		void Initialize()
 		{
-			Type type = typeof( System.Runtime.Remoting.Messaging.AsyncResult);
+			Type type = typeof(System.Runtime.Remoting.Messaging.AsyncResult);
 			_asyncResultType = TypeSystemServices.Map(type);
 			_asyncResultTypeAsyncDelegateGetter = (IMethod)TypeSystemServices.Map(type.GetProperty("AsyncDelegate").GetGetMethod());
 			_adaptors = new Boo.Lang.List();
@@ -102,6 +102,16 @@ namespace Boo.Lang.Compiler.Steps
 				IsNotTargetOfMethodInvocation(node);
 		}
 		
+		override public void LeaveExpressionStatement(ExpressionStatement node)
+		{
+			// allow interactive evaluation of closures (see booish)
+			Expression converted = ConvertExpression(node.Expression);
+			if (null != converted)
+			{
+				node.Expression = converted;
+			}
+		}
+		
 		override public void LeaveReturnStatement(ReturnStatement node)
 		{
 			if (HasReturnType(_current))
@@ -140,18 +150,40 @@ namespace Boo.Lang.Compiler.Steps
 		
 		override public void LeaveArrayLiteralExpression(ArrayLiteralExpression node)
 		{
-			ConvertExpressions(node.Items);
+			IType elementType = ((IArrayType)GetExpressionType(node)).GetElementType();
+			for (int i=0; i<node.Items.Count; ++i)
+			{
+				Expression converted = Convert(elementType, node.Items[i]);
+				if (null != converted)
+				{
+					node.Items.ReplaceAt(i, converted);
+				}
+			}
 		}
 		
 		override public void LeaveMethodInvocationExpression(MethodInvocationExpression node)
 		{
-			ICallableType type = node.Target.ExpressionType as ICallableType;
-			if (null == type)
+			IParameter[] parameters = null;
+			
+			if (EntityType.Constructor == node.Target.Entity.EntityType)
 			{
-				return;
+				parameters = ((IConstructor)node.Target.Entity).GetParameters();
+			}
+			else
+			{			
+				ICallableType type = node.Target.ExpressionType as ICallableType;
+				if (null == type)
+				{
+					return;					
+				}
+				parameters = type.GetSignature().Parameters;
 			}
 			
-			IParameter[] parameters = type.GetSignature().Parameters;
+			ConvertMethodInvocation(node, parameters);
+		}
+		
+		void ConvertMethodInvocation(MethodInvocationExpression node, IParameter[] parameters)
+		{		
 			ExpressionCollection arguments = node.Arguments;
 			for (int i=0; i<parameters.Length; ++i)
 			{
@@ -204,8 +236,8 @@ namespace Boo.Lang.Compiler.Steps
 		override public void LeaveGeneratorExpression(GeneratorExpression node)
 		{
 			Expression newExpression = Convert(
-																GetConcreteExpressionType(node.Expression),
-																node.Expression);
+										GetConcreteExpressionType(node.Expression),
+										node.Expression);
 			if (null != newExpression)
 			{
 				node.Expression = newExpression;
@@ -316,7 +348,7 @@ namespace Boo.Lang.Compiler.Steps
 		
 		ClassDefinition CreateAdaptor(ICallableType to, ICallableType from)
 		{
-			BooClassBuilder adaptor = CodeBuilder.CreateClass("__adaptor" + _adaptors.Count + "__");
+			BooClassBuilder adaptor = CodeBuilder.CreateClass("___adaptor" + _adaptors.Count);
 			adaptor.AddBaseType(TypeSystemServices.ObjectType);
 			adaptor.Modifiers = TypeMemberModifiers.Final|TypeMemberModifiers.Internal;
 			
@@ -382,8 +414,7 @@ namespace Boo.Lang.Compiler.Steps
 		{
 			if (IsStandaloneMethodReference(node.Target))
 			{
-				InternalCallableType type = (InternalCallableType)node.Target.ExpressionType;
-				return type.GetEndInvokeMethod() == node.Entity;
+				return node.Entity.Name == "EndInvoke";
 			}
 			return false;
 		}
@@ -415,23 +446,28 @@ namespace Boo.Lang.Compiler.Steps
 		{
 			IMethod method = (IMethod)GetEntity(source);
 			
-			MethodInvocationExpression constructor = new MethodInvocationExpression(source.LexicalInfo);
-			constructor.Target = new ReferenceExpression(type.FullName);
-			
+			Expression target = null;
 			if (method.IsStatic)
 			{
-				constructor.Arguments.Add(new NullLiteralExpression());
+				target = CodeBuilder.CreateNullLiteral();
 			}
 			else
 			{
-				constructor.Arguments.Add(((MemberReferenceExpression)source).Target);
+				target = ((MemberReferenceExpression)source).Target;
 			}
-			
-			constructor.Arguments.Add(CodeBuilder.CreateAddressOfExpression(method));
-			Bind(constructor.Target, type.GetConstructors()[0]);
-			BindExpressionType(constructor, type);
-			
-			return constructor;
+			return CodeBuilder.CreateConstructorInvocation(GetConcreteType(type).GetConstructors()[0],
+									target,
+									CodeBuilder.CreateAddressOfExpression(method));
+		}
+		
+		IType GetConcreteType(IType type)
+		{
+			AnonymousCallableType anonymous = type as AnonymousCallableType;
+			if (null == anonymous)
+			{
+				return type;
+			}
+			return anonymous.ConcreteType;
 		}
 		
 		IMethod GetInvokeMethod(ICallableType type)

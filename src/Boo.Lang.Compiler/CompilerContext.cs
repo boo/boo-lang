@@ -37,7 +37,7 @@ namespace Boo.Lang.Compiler
 	/// <summary>
 	/// boo compilation context.
 	/// </summary>
-	public class CompilerContext// : System.MarshalByRefObject
+	public class CompilerContext
 	{				
 		protected CompilerParameters _parameters;
 
@@ -49,9 +49,7 @@ namespace Boo.Lang.Compiler
 		
 		protected CompilerWarningCollection _warnings;
 		
-		protected readonly TypeSystem.TypeSystemServices _typeSystemServices;
-
-		protected readonly TypeSystem.BooCodeBuilder _codeBuilder;		
+		protected TypeSystem.TypeSystemServices _typeSystemServices;
 		
 		protected readonly TypeSystem.NameResolutionService _nameResolutionService;
 		
@@ -62,6 +60,8 @@ namespace Boo.Lang.Compiler
 		protected System.Reflection.MethodInfo _generatedEntryPoint;
 		
 		protected Assembly _generatedAssembly;
+		
+		protected string _generatedAssemblyFileName;
 		
 		protected Hash _properties;
 		
@@ -90,8 +90,6 @@ namespace Boo.Lang.Compiler
 			_warnings = new CompilerWarningCollection();
 			_assemblyReferences = options.References;
 			_parameters = options;
-			_typeSystemServices = new TypeSystem.TypeSystemServices(this);
-			_codeBuilder = _typeSystemServices.CodeBuilder;
 			_nameResolutionService = new TypeSystem.NameResolutionService(this); 
 			_traceSwitch = _parameters.TraceSwitch;
 			_properties = new Hash();
@@ -102,6 +100,23 @@ namespace Boo.Lang.Compiler
 			get
 			{
 				return _properties;
+			}
+		}
+		
+		public string GeneratedAssemblyFileName
+		{
+			get
+			{
+				return _generatedAssemblyFileName;
+			}
+			
+			set
+			{
+				if (null == value || 0 == value.Length)
+				{
+					throw new ArgumentException("GeneratedAssemblyFileName");
+				}
+				_generatedAssemblyFileName = value;
 			}
 		}
 		
@@ -164,13 +179,22 @@ namespace Boo.Lang.Compiler
 			{
 				return _typeSystemServices;
 			}
+			
+			set
+			{
+				if (null == value)
+				{
+					throw new ArgumentNullException("TypeSystemServices");
+				}
+				_typeSystemServices = value;
+			}
 		}		
 		
 		public TypeSystem.BooCodeBuilder CodeBuilder
 		{
 			get
 			{
-				return _codeBuilder;
+				return _typeSystemServices.CodeBuilder;
 			}
 		}
 		
@@ -294,5 +318,13 @@ namespace Boo.Lang.Compiler
 				Trace.WriteLine(message);
 			}
 		}	
+		
+		public void TraceError(string message, params object[] args)
+		{
+			if (_traceSwitch.TraceError)
+			{
+				Trace.WriteLine(string.Format(message, args));
+			}
+		}
 	}
 }

@@ -27,6 +27,9 @@ class MainForm(Form):
 	
 	[getter(OutputPane)]
 	_outputPane = BooExplorer.OutputPane()
+	
+	[getter(InteractiveConsole)]
+	_interactiveConsole = BooExplorer.InteractiveConsole(self)
 
 	[getter(TextInterceptors)]
 	_textInterceptors as (ITextInterceptor)
@@ -38,6 +41,8 @@ class MainForm(Form):
 	_menuItemSaveAs as MenuItem
 	
 	_parser = BooCompiler()
+	
+	_resourceManager = System.Resources.ResourceManager(MainForm)
 
 	def constructor(argv as (string)):
 		_argv = argv
@@ -55,6 +60,7 @@ class MainForm(Form):
 
 		SuspendLayout()
 
+		self.Icon = _resourceManager.GetObject("_icon")
 		self.Size = System.Drawing.Size(800, 600)
 		self.Menu = CreateMainMenu()
 		self.Text = "Boo Explorer"
@@ -112,7 +118,10 @@ class MainForm(Form):
 						Shortcut: Shortcut.CtrlShiftT),
 				MenuItem(Text: "Output",
 						Click: _menuItemOutputPane_Click,
-						Shortcut: Shortcut.CtrlShiftO)
+						Shortcut: Shortcut.CtrlShiftO),
+				MenuItem(Text: "Prompt",
+						Click: ShowPrompt, 
+						Shortcut: Shortcut.CtrlShiftP)
 			))
 
 
@@ -234,7 +243,7 @@ class MainForm(Form):
 	def _menuItemExit_Click(sender, args as EventArgs):
 		self.Close()
 
-	def _menuItemClose_Click(sender, args as EventArgs):
+	def _menuItemClose_Click(sender, args as EventArgs):		
 		_dockPanel.ActiveDocument.Close()
 
 	def _menuItemDocumentOutline_Click(sender, args as EventArgs):
@@ -252,6 +261,9 @@ class MainForm(Form):
 		
 	def ShowOutputPane():
 		ShowContent(_outputPane)
+		
+	def ShowPrompt():
+		ShowContent(_interactiveConsole)
 
 	def _menuItemOutputPane_Click(sender, args as EventArgs):
 		ShowOutputPane()
@@ -289,6 +301,8 @@ class MainForm(Form):
 		print("type: ${type}, content: ${content}")
 		if "DocumentOutline" == type:
 			return _documentOutline
+		if "InteractiveConsole" == type:
+			return _interactiveConsole
 		if "TaskList" == type:
 			return _taskList
 		if "OutputPane" == type:

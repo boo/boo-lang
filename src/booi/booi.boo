@@ -29,6 +29,7 @@
 import System
 import System.IO
 import System.Reflection
+import System.Security.Permissions
 import System.Threading
 import Boo.Lang.Compiler
 import Boo.Lang.Compiler.IO
@@ -62,18 +63,17 @@ class AssemblyResolver:
 		return Assembly.LoadFrom(fname) if File.Exists(fname)
 
 def consume(reader as TextReader):
-	writer = StringWriter()
-	for line in reader:
-		writer.WriteLine(line)
-	return writer.ToString()
+	return join(line for line in reader, "\n")
 
-def main(argv as (string)):
-	Thread.CurrentThread.ApartmentState = ApartmentState.STA
+[STAThread]
+def Main(argv as (string)):
 	
-	compiler = BooCompiler()
+	if len(argv) < 1:
+		print("booi <script.boo>") 
+		return -1
 		
-	// boo memory pipeline
-	// compiles the code in memory only
+	compiler = BooCompiler()
+	
 	compiler.Parameters.Pipeline = CompileToMemory()	
 	
 	if "-" == argv[0]:
@@ -85,8 +85,7 @@ def main(argv as (string)):
 	AppDomain.CurrentDomain.AssemblyResolve += resolver.AssemblyResolve
 	result = compiler.Run()
 	if len(result.Errors):
-		for error in result.Errors:
-			print(error.ToString(true))
+		print(result.Errors.ToString(true))
 		return -1
 	else:	
 		try: 
@@ -97,7 +96,8 @@ def main(argv as (string)):
 			return -1
 	return 0
 	
-if len(argv) > 0:
-	Environment.Exit(main(argv))
-else:
-	print("booi <script.boo>")
+[assembly: SecurityPermission(
+						SecurityAction.RequestMinimum,
+						ControlAppDomain: true)] 
+	
+

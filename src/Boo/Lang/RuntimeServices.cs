@@ -46,10 +46,13 @@ namespace Boo.Lang
 												BindingFlags.InvokeMethod;												
 												
 		const BindingFlags SetPropertyBindingFlags = DefaultBindingFlags |
-												BindingFlags.SetProperty;
+												BindingFlags.SetProperty |
+												BindingFlags.SetField;
 												
 		const BindingFlags GetPropertyBindingFlags = DefaultBindingFlags |
-												BindingFlags.GetProperty;
+												BindingFlags.GetProperty |
+												BindingFlags.GetField;
+												
 			
 		public static object Invoke(object target, string name, object[] args)
 		{
@@ -221,6 +224,15 @@ namespace Boo.Lang
 		}
 		
 		#region global operators
+		
+		public static Array AddArrays(Type resultingElementType, Array lhs, Array rhs)
+		{
+			int resultingLen = lhs.Length + rhs.Length;
+			Array result = Array.CreateInstance(resultingElementType, resultingLen);
+			Array.Copy(lhs, 0, result, 0, lhs.Length);
+			Array.Copy(rhs, 0, result, lhs.Length, rhs.Length);
+			return result;
+		}
 		
 		public static string op_Addition(string lhs, object rhs)
 		{

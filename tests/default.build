@@ -1,25 +1,7 @@
 <?xml version="1.0"?>
 <project name="tests" default="run">
 
-	<!-- find out where nunit.framework.dll is -->
-	<property name="lib.dir"
-		value="${path::combine(nant::get-base-directory(), 'lib')}"
-		dynamic="true" />
-		
-    <property name="lib.family.dir"
-		value="${path::combine(lib.dir,framework::get-family(framework::get-target-framework()))}"
-		dynamic="true" />
-		
-    <property name="lib.framework.dir"
-		value="${path::combine(lib.family.dir, framework::get-version(framework::get-target-framework()))}"
-		dynamic="true" />
-		
-	<property name="nunit.framework.dll"
-			value="${path::combine(lib.framework.dir, 'nunit.framework.dll')}" />
-
-	<property name="nant.tasks.nunit2"
-			value="False"
-			unless="${property::exists('nant.tasks.nunit2')}" />	
+	<include buildfile="nunit.inc" />	
 
 	<target name="run" depends="compile" if="${nant.tasks.nunit2}">
 
@@ -33,6 +15,7 @@
 					<include name="BooCompiler.Tests.dll" />					
 					<include name="BooCompilerResources.Tests.dll" />					
 					<include name="Regression.Tests.dll" />
+					<include name="Booish.Tests.dll" />
 				</assemblies>
 			</test>
 		</nunit2>
@@ -64,6 +47,8 @@
 				<include name="build/IntegrationTestFixture.cs" />
 				<include name="build/StdlibTestFixture.cs" />
 				<include name="build/AttributesTestFixture.cs" />
+				<include name="build/SemanticsTestFixture.cs" />
+				<include name="build/MacrosTestFixture.cs" />
 			</sources>
 			
 			<references basedir="build">
@@ -113,6 +98,20 @@
 			</references>
 		</booc>		
 		
+		<booc
+			target="library"
+			output="build/Booish.Tests.dll">
+			
+			<sources basedir="Booish.Tests">
+				<include name="**/*.boo" />
+			</sources>
+			
+			<references basedir="build">
+				<include name="booish.exe" />
+				<include name="${nunit.framework.dll}" />
+			</references>
+		</booc>
+		
 		<csc
 			target="library"
 			output="build/Boo.AntlrParser.Tests.dll">
@@ -137,6 +136,7 @@
 		<mkdir dir="build" />
 		<copy todir="build">
 			<fileset basedir="../build">
+				<include name="booish.exe" />
 				<include name="*.dll" />
 				<include name="*.pdb" />
 				<include name="pt/*.dll" />

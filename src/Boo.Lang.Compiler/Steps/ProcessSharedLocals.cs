@@ -59,7 +59,13 @@ namespace Boo.Lang.Compiler.Steps
 		override public void Dispose()
 		{
 			_shared.Clear();
+			_references.Clear();
+			_mappings.Clear();
 			base.Dispose();
+		}
+		
+		override public void OnField(Field node)
+		{
 		}
 		
 		override public void OnInterfaceDefinition(InterfaceDefinition node)
@@ -68,6 +74,11 @@ namespace Boo.Lang.Compiler.Steps
 		
 		override public void OnEnumDefinition(EnumDefinition node)
 		{
+		}
+		
+		override public void OnConstructor(Constructor node)
+		{
+			OnMethod(node);
 		}
 		
 		override public void OnMethod(Method node)
@@ -97,14 +108,11 @@ namespace Boo.Lang.Compiler.Steps
 		
 		override public void OnGeneratorExpression(GeneratorExpression node)
 		{			
-			if (!AstUtil.IsListGenerator(node.ParentNode))
-			{
-				++_closureDepth;
-				Visit(node.Iterator);
-				Visit(node.Expression);
-				Visit(node.Filter);
-				--_closureDepth;
-			}
+			++_closureDepth;
+			Visit(node.Iterator);
+			Visit(node.Expression);
+			Visit(node.Filter);
+			--_closureDepth;
 		}
 		
 		override public void OnReferenceExpression(ReferenceExpression node)
@@ -130,7 +138,7 @@ namespace Boo.Lang.Compiler.Steps
 		void Map()
 		{
 			IType type = (IType)_sharedLocalsClass.Entity;
-			LocalVariable locals = CodeBuilder.DeclareLocal(_currentMethod, "___locals", type);
+			InternalLocal locals = CodeBuilder.DeclareLocal(_currentMethod, "___locals", type);
 			
 			foreach (ReferenceExpression reference in _references)
 			{
@@ -158,7 +166,7 @@ namespace Boo.Lang.Compiler.Steps
 			}
 		}
 		
-		void InitializeSharedParameters(Block block, LocalVariable locals)
+		void InitializeSharedParameters(Block block, InternalLocal locals)
 		{			
 			foreach (Node node in _currentMethod.Parameters)
 			{

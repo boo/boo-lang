@@ -38,10 +38,8 @@ namespace Boo.Lang.Compiler.Steps
 	public class InitializeNameResolutionService : AbstractVisitorCompilerStep
 	{
 		Hashtable _namespaces = new Hashtable();
-		
-		Hashtable _externalTypes = new Hashtable();
 
-		Boo.Lang.List _buffer = new Boo.Lang.List();		
+		Boo.Lang.List _buffer = new Boo.Lang.List();
 		
 		public InitializeNameResolutionService()
 		{
@@ -50,8 +48,9 @@ namespace Boo.Lang.Compiler.Steps
 		override public void Run()
 		{				
 			ResolveImportAssemblyReferences();
+			
+			OrganizeExternalNamespaces();
 			ResolveInternalModules();
-			OrganizeExternalNamespaces();		
 			
 			NameResolutionService.GlobalNamespace = new GlobalNamespace(_namespaces);
 		}
@@ -72,6 +71,20 @@ namespace Boo.Lang.Compiler.Steps
 			}
 		}
 		
+		Assembly FindOrLoadAssembly(string name)
+		{
+			Assembly found = Parameters.References.Find(name);
+			if (null == found)
+			{
+				found = Assembly.LoadWithPartialName(name);
+				if (null == found)
+				{
+					found = Assembly.Load(name);
+				}
+			}
+			return found;
+		}
+		
 		void ResolveImportAssemblyReferences()
 		{
 			foreach (Boo.Lang.Compiler.Ast.Module module in CompileUnit.Modules)
@@ -86,7 +99,7 @@ namespace Boo.Lang.Compiler.Steps
 					{
 						try
 						{
-							Assembly asm = Assembly.LoadWithPartialName(reference.Name);
+							Assembly asm = FindOrLoadAssembly(reference.Name);
 							Parameters.References.Add(asm);
 							reference.Entity = new TypeSystem.AssemblyReference(asm);
 						}
@@ -101,7 +114,7 @@ namespace Boo.Lang.Compiler.Steps
 		}
 		
 		void OrganizeExternalNamespaces()
-		{
+		{	
 			foreach (Assembly asm in Parameters.References)
 			{				
 				try
@@ -121,20 +134,16 @@ namespace Boo.Lang.Compiler.Steps
 			Type[] types = asm.GetTypes();				
 			foreach (Type type in types)
 			{
-				if (!type.IsPublic)
+				if (type.IsPublic)
 				{
-					continue;
-				}
-				string ns = type.Namespace;
-				if (null == ns)
-				{
-					ns = string.Empty;
-				}					
+					string ns = type.Namespace;
+					if (null == ns)
+					{
+						ns = string.Empty;
+					}					
 				
-				GetNamespace(ns).Add(type);
-					
-				List typeList = GetList(_externalTypes, type.FullName);
-				typeList.Add(type);
+					GetNamespace(ns).Add(type);
+				}
 			}
 		}
 		
@@ -161,22 +170,10 @@ namespace Boo.Lang.Compiler.Steps
 			return tag;
 		}
 		
-		List GetList(Hashtable hash, string key)
-		{
-			List list = (List)hash[key];
-			if (null == list)
-			{
-				list = new List();
-				hash[key] = list;
-			}
-			return list;
-		}
-		
 		override public void Dispose()
 		{
 			base.Dispose();
 			_namespaces.Clear();
-			_externalTypes.Clear();
 		}
 	}
 }

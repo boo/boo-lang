@@ -63,7 +63,7 @@ JEdit Catalog Entry: <MODE NAME="boo" FILE="boo-jedit42.xml" FILE_NAME_GLOB="*.b
                 >/[^[:blank:]]*?/</SEQ_REGEXP>
 
 		
-		<!--
+		
 		<SEQ TYPE="OPERATOR">:</SEQ>
 		<SEQ TYPE="OPERATOR">[</SEQ>
 		<SEQ TYPE="OPERATOR">]</SEQ>
@@ -71,7 +71,6 @@ JEdit Catalog Entry: <MODE NAME="boo" FILE="boo-jedit42.xml" FILE_NAME_GLOB="*.b
 		<SEQ TYPE="OPERATOR">}</SEQ>
 		<SEQ TYPE="OPERATOR">(</SEQ>
 		<SEQ TYPE="OPERATOR">)</SEQ>
-		-->		
 		<SEQ TYPE="OPERATOR">=~</SEQ>
 		<SEQ TYPE="OPERATOR">=</SEQ>
 		<SEQ TYPE="OPERATOR">!=</SEQ>
@@ -114,6 +113,7 @@ JEdit Catalog Entry: <MODE NAME="boo" FILE="boo-jedit42.xml" FILE_NAME_GLOB="*.b
 			<KEYWORD1>continue</KEYWORD1>
 			<KEYWORD1>def</KEYWORD1>
 			<KEYWORD1>do</KEYWORD1>
+			<KEYWORD1>elif</KEYWORD1>
 			<KEYWORD1>else</KEYWORD1>
 			<KEYWORD1>enum</KEYWORD1>
 			<KEYWORD1>ensure</KEYWORD1>
@@ -124,6 +124,7 @@ JEdit Catalog Entry: <MODE NAME="boo" FILE="boo-jedit42.xml" FILE_NAME_GLOB="*.b
 			<KEYWORD1>from</KEYWORD1>
 			<KEYWORD1>given</KEYWORD1>
 			<KEYWORD1>get</KEYWORD1>
+			<KEYWORD1>goto</KEYWORD1>
 			<KEYWORD1>if</KEYWORD1>			
 			<KEYWORD1>interface</KEYWORD1>
 			<KEYWORD1>in</KEYWORD1>
@@ -174,11 +175,12 @@ JEdit Catalog Entry: <MODE NAME="boo" FILE="boo-jedit42.xml" FILE_NAME_GLOB="*.b
 			<KEYWORD2>array</KEYWORD2>
 			<KEYWORD2>void</KEYWORD2>
 
-			<!-- builtins -->			
-			<KEYWORD1>iif</KEYWORD1>
+			<!-- builtins -->
 			<KEYWORD3>len</KEYWORD3>
 			<KEYWORD3>__addressof__</KEYWORD3>
 			<KEYWORD3>__eval__</KEYWORD3>
+			<KEYWORD3>__switch__</KEYWORD3>
+			
 			<KEYWORD3>typeof</KEYWORD3>
 			<KEYWORD3>assert</KEYWORD3>
 			<KEYWORD3>print</KEYWORD3>
@@ -201,9 +203,6 @@ JEdit Catalog Entry: <MODE NAME="boo" FILE="boo-jedit42.xml" FILE_NAME_GLOB="*.b
 			<KEYWORD3>getter</KEYWORD3>
 			<KEYWORD3>setter</KEYWORD3>
 			<KEYWORD3>property</KEYWORD3>
-
-			<!-- exceptions -->
-			<!-- KEYWORD3>ArithmeticError</KEYWORD3 -->
 			
 			<LITERAL2>false</LITERAL2>
 			<LITERAL2>null</LITERAL2>

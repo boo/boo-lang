@@ -177,6 +177,12 @@ class StatementModifier(Node):
 
 abstract class Statement(Node):
 	Modifier as StatementModifier
+	
+class GotoStatement(Statement):
+	Label as ReferenceExpression
+	
+class LabelStatement(Statement):
+	Name as string
 
 class Block(Statement):
 	Statements as StatementCollection
@@ -331,6 +337,7 @@ enum BinaryOperatorType:
 	Or
 	And
 	BitwiseOr
+	BitwiseAnd
 
 enum UnaryOperatorType:
 	None
@@ -347,6 +354,11 @@ class BinaryExpression(Expression):
 	Operator as BinaryOperatorType
 	Left as Expression
 	Right as Expression
+	
+class TernaryExpression(Expression):
+	Condition as Expression
+	TrueValue as Expression
+	FalseValue as Expression
 
 class ReferenceExpression(Expression):
 	Name as string

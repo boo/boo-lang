@@ -38,6 +38,7 @@
 			</resources>
 			
 			<references basedir="${build.dir}">
+				<include name="booish.exe" />
 				<include name="ICSharpCode.TextEditor.dll" />
 				<include name="WeifenLuo.WinFormsUI.dll" />
 				<include name="System.Windows.Forms.dll" />
@@ -87,13 +88,15 @@
 					"privatemethod.png"
 				)
 			for image in images:
-				fname = MapPath("resources/ClassBrowserIcons/${image}")
+				fname = MapPath("../resources/ClassBrowserIcons/${image}")
 				imageList.Images.Add(Image.FromFile(fname))
 			return imageList
 		
-		using imageList=CreateImageList():
-			using writer=ResourceWriter(MapPath("../build/BooExplorer.DocumentOutline.resources")):
+		using writer=ResourceWriter(MapPath("../build/BooExplorer.DocumentOutline.resources")):
+			using imageList=CreateImageList():			
 				writer.AddResource("_imageList", imageList.ImageStream)
+		using writer=ResourceWriter(MapPath("../build/BooExplorer.MainForm.resources")):
+			writer.AddResource("_icon", Icon(MapPath("../resources/boo.ico"))) 
 		</boo>
 	</target>
 	
@@ -109,31 +112,11 @@
 		
 		<mkdir dir="${build.dir}" />
 		<mkdir dir="${build.dir}/scripts" />
-		
-		<call target="update-boo-libs" if="${directory::exists(boo.dir)}" />
+		<copy todir="${build.dir}" file="../../SharpDevelop/boo.xshd" /> 
 		
 		<call target="update-sharpd-libs" if="${directory::exists(sharpd.dir)}" />
 		
-		<loadtasks assembly="${build.dir}/Boo.NAnt.dll" />
-	</target>
-	
-	<target name="update-boo-libs">
-		<copy todir="${build.dir}">
-			<fileset basedir="${boo.dir}">
-				<include name="*.dll" />
-				<include name="*.pdb" />
-				<exclude name="*.Tests.dll" />
-				<exclude name="*.Tests.pdb" />
-				<exclude name="nunit.framework.dll" />
-			</fileset>
-		</copy>		
-		<copy todir="${build.dir}" file="../../SharpDevelop/boo.xshd">
-		</copy>
-		<copy todir="${build.dir}/scripts">
-			<fileset basedir="scripts">
-				<include name="*.int" />
-			</fileset>
-		</copy>
+		<loadtasks assembly="${boo.dir}/Boo.NAnt.dll" />
 	</target>
 	
 	<target name="update-sharpd-libs">

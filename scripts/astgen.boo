@@ -458,6 +458,11 @@ namespace Boo.Lang.Compiler.Ast.Impl
 			return base.ReplaceNode(existing, newItem);
 		}
 		
+		public void ReplaceAt(int index, ${itemType} newItem)
+		{
+			base.ReplaceAt(index, newItem);
+		}
+		
 		public new ${itemType}[] ToArray()
 		{
 			return (${itemType}[])InnerList.ToArray(typeof(${itemType}));
@@ -603,10 +608,15 @@ namespace Boo.Lang.Compiler.Ast
 				}
 				catch (Exception error)
 				{
-					throw Boo.Lang.Compiler.CompilerErrorFactory.InternalError(node, error);
+					OnError(node, error);
 				}
 			}
 			return null;
+		}
+		
+		protected virtual void OnError(Node node, Exception error)
+		{
+			throw Boo.Lang.Compiler.CompilerErrorFactory.InternalError(node, error);
 		}
 		
 		public Node Visit(Node node)
@@ -782,10 +792,15 @@ namespace Boo.Lang.Compiler.Ast
 				}
 				catch (Exception error)
 				{
-					throw Boo.Lang.Compiler.CompilerErrorFactory.InternalError(node, error);
+					OnError(node, error);
 				}
 			}
 			return false;
+		}
+		
+		protected virtual void OnError(Node node, Exception error)
+		{
+			throw Boo.Lang.Compiler.CompilerErrorFactory.InternalError(node, error);
 		}
 		
 		public void Visit(Node[] array, NodeType nodeType)

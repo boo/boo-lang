@@ -35,10 +35,10 @@ class App:
 	_times = 0
 	
 	def Run():
-		f = Form(Text: "My first boo winforms app")
+		f = Form(Text: "My first boo winforms app")		
 				
 		button = Button(Text: "click me!")
-		button.Click += do:
+		button.Click += def:
 			print("clicked!")
 			++_times
 		
@@ -48,8 +48,7 @@ class App:
 			# if we are running inside boox
 			# just show a dialog
 			f.ShowDialog()
-		else:
-			f.Closed += Application.Exit
+		else:			
 			Application.Run(f)
 
 app = App()

@@ -236,13 +236,55 @@ namespace Boo.Lang.Compiler.Ast.Visitors
 			OnMethod(c);
 		}
 		
+		bool IsSimpleClosure(CallableBlockExpression node)
+		{
+			if (1 == node.Body.Statements.Count)
+			{
+				switch (node.Body.Statements[0].NodeType)
+				{
+					case NodeType.IfStatement:
+					{
+						return false;
+					}
+					
+					case NodeType.WhileStatement:
+					{
+						return false;
+					}
+					
+					case NodeType.ForStatement:
+					{
+						return false;
+					}
+				}
+				return true;
+			}
+			return false;
+		}
+		
 		override public void OnCallableBlockExpression(CallableBlockExpression node)
 		{
-			WriteKeyword("do ");
-			WriteParameterList(node.Parameters, false);
-			WriteTypeReference(node.ReturnType);
-			WriteLine(":");
-			WriteBlock(node.Body);
+			if (IsSimpleClosure(node))
+			{
+				DisableNewLine();
+				Write("{ ");
+				if (node.Parameters.Count > 0)
+				{
+					WriteCommaSeparatedList(node.Parameters);
+					Write(" | ");
+				}				
+				Visit(node.Body.Statements);
+				Write(" }");
+				EnableNewLine();
+			}			
+			else
+			{
+				WriteKeyword("def ");
+				WriteParameterList(node.Parameters, false);
+				WriteTypeReference(node.ReturnType);
+				WriteLine(":");
+				WriteBlock(node.Body);
+			}
 		}
 		
 		void WriteCallableDefinitionHeader(string keyword, CallableDefinition node)
@@ -350,39 +392,7 @@ namespace Boo.Lang.Compiler.Ast.Visitors
 		
 		override public void OnTimeSpanLiteralExpression(TimeSpanLiteralExpression node)
 		{
-			double days = node.Value.TotalDays;
-			if (days >= 1)
-			{
-				Write(days.ToString(CultureInfo.InvariantCulture) + "d");
-			}
-			else
-			{
-				double hours = node.Value.TotalHours;
-				if (hours >= 1)
-				{
-					Write(hours.ToString(CultureInfo.InvariantCulture) + "h");
-				}
-				else
-				{
-					double minutes = node.Value.TotalMinutes;
-					if (minutes >= 1)
-					{
-						Write(minutes.ToString(CultureInfo.InvariantCulture) + "m");
-					}
-					else
-					{
-						double seconds = node.Value.TotalSeconds;
-						if (seconds >= 1)
-						{
-							Write(seconds.ToString(CultureInfo.InvariantCulture) + "s");
-						}
-						else
-						{
-							Write(node.Value.TotalMilliseconds.ToString(CultureInfo.InvariantCulture) + "ms");
-						}
-					}
-				}
-			}
+			WriteTimeSpanLiteral(node.Value, _writer);
 		}
 		
 		override public void OnBoolLiteralExpression(BoolLiteralExpression node)
@@ -576,6 +586,21 @@ namespace Boo.Lang.Compiler.Ast.Visitors
 			WriteKeyword(sm.Type.ToString().ToLower());
 			Write(" ");
 			Visit(sm.Condition);
+		}
+		
+		override public void OnLabelStatement(LabelStatement node)
+		{
+			WriteIndented(":");
+			WriteLine(node.Name);
+		}
+		
+		override public void OnGotoStatement(GotoStatement node)
+		{
+			WriteIndented();
+			WriteKeyword("goto ");
+			Visit(node.Label);
+			Visit(node.Modifier);
+			WriteLine();
 		}
 		
 		override public void OnMacroStatement(MacroStatement node)
@@ -900,6 +925,11 @@ namespace Boo.Lang.Compiler.Ast.Visitors
 				{
 					return "|";
 				}
+				
+				case BinaryOperatorType.BitwiseAnd:
+				{
+					return "&";
+				}
 			}
 			throw new NotImplementedException(op.ToString());
 		}
@@ -907,6 +937,43 @@ namespace Boo.Lang.Compiler.Ast.Visitors
 		public virtual void WriteStringLiteral(string text)
 		{
 			WriteStringLiteral(text, _writer);
+		}
+		
+		public static void WriteTimeSpanLiteral(TimeSpan value, TextWriter writer)
+		{
+			double days = value.TotalDays;
+			if (days >= 1)
+			{
+				writer.Write(days.ToString(CultureInfo.InvariantCulture) + "d");
+			}
+			else
+			{
+				double hours = value.TotalHours;
+				if (hours >= 1)
+				{
+					writer.Write(hours.ToString(CultureInfo.InvariantCulture) + "h");
+				}
+				else
+				{
+					double minutes = value.TotalMinutes;
+					if (minutes >= 1)
+					{
+						writer.Write(minutes.ToString(CultureInfo.InvariantCulture) + "m");
+					}
+					else
+					{
+						double seconds = value.TotalSeconds;
+						if (seconds >= 1)
+						{
+							writer.Write(seconds.ToString(CultureInfo.InvariantCulture) + "s");
+						}
+						else
+						{
+							writer.Write(value.TotalMilliseconds.ToString(CultureInfo.InvariantCulture) + "ms");
+						}
+					}
+				}
+			}
 		}
 		
 		public static void WriteStringLiteral(string text, TextWriter writer)

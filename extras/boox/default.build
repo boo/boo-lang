@@ -1,6 +1,10 @@
 <?xml version="1.0"?>
 <project name="Boo Explorer" default="run">
 
+	<property name="boo.dir" value="${path::get-full-path('../../bin')}" />
+	
+	<include buildfile="build.properties" if="${file::exists('build.properties')}" />
+	
 	<target name="run" depends="build">
 		<exec program="build/${boox}.exe" useruntimeengine="true">
 		</exec>
@@ -29,6 +33,9 @@
 		</booc>
 	</target>
 	
+	<target name="rebuild" depends="clean, build">
+	</target>
+	
 	<target name="build" depends="select-platform">
 		<call target="${boox}" />
 	</target>
@@ -41,13 +48,18 @@
 	<target name="init">
 		<mkdir dir="build" unless="${directory::exists('build')}" />
 		<copy todir="build">
-			<fileset basedir="../../build">
+			<fileset basedir="${boo.dir}">
 				<include name="Boo.dll" />
 				<include name="Boo.Lang.Compiler.dll" />
 				<include name="Boo.AntlrParser.dll" />
 				<include name="antlr.runtime.dll" />
+				<include name="booish.exe" />
 			</fileset>
 		</copy>
-		<loadtasks assembly="../../build/Boo.NAnt.dll" />
+		<loadtasks assembly="${boo.dir}/Boo.NAnt.dll" />
+	</target>
+	
+	<target name="clean">
+		<delete dir="build" if="${directory::exists('build')}" />
 	</target>
 </project>

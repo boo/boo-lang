@@ -1,23 +1,18 @@
 """
 button = Button()
-button.Click += do ():
-	print('clicked!')
-
+button.Click += { print('clicked!') }
 if button:
-	button.Click += do ():
-		print('yes, it was!')
-
+	button.Click += { print('yes, it was!') }
 	if (3 > 2):
-		button.Click += do (sender):
-			print("\${sender} clicked!")
+		button.Click += { sender | print("\${sender} clicked!") }
 """
 button = Button()
-button.Click += do:
+button.Click += def:
 	print("clicked!")
 if button:
-	button.Click += do ():
+	button.Click += def ():
 		print("yes, it was!")
 	if 3 > 2:
-		button.Click += do (sender):
+		button.Click += def (sender):
 			print("${sender} clicked!")
 

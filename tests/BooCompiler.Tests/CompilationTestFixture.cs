@@ -157,18 +157,6 @@ namespace BooCompiler.Tests
 		}
 		
 		[Test]
-		public void BitwiseOrForEnums()
-		{
-			RunCompilerTestCase("bitwise_enum.boo");
-		}
-		
-		[Test]
-		public void BitwiseOrForInt()
-		{
-			RunCompilerTestCase("bitwise_int.boo");			
-		}
-		
-		[Test]
 		public void GreaterThanEqualForInts()
 		{
 			RunCompilerTestCase("gte_int.boo");
@@ -325,12 +313,6 @@ namespace BooCompiler.Tests
 		}
 		
 		[Test]
-		public void FieldInitializerAfterConstructor()
-		{
-			RunCompilerTestCase("field_initializer.boo");
-		}
-		
-		[Test]
 		public void OverloadedMethodsCanBeDeclaredInAnyOrder()
 		{
 			RunCompilerTestCase("logservice.boo");
@@ -364,12 +346,6 @@ namespace BooCompiler.Tests
 		public void RegularExpressionMatch()
 		{
 			RunCompilerTestCase("re1.boo");
-		}
-		
-		[Test]
-		public void EnumCanBeCastToInt()
-		{
-			RunCompilerTestCase("enum_can_be_cast_to_int.boo");
 		}
 		
 		[Test]

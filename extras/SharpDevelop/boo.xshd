@@ -111,6 +111,7 @@
 
 			<KeyWords name="SelectionStatements" bold="true" italic="false" color="Blue" >
 				<Key word="else"/>
+				<Key word="elif"/>
 				<Key word="if"/>
 				<Key word="given"/>
 				<Key word="when"/>
@@ -129,6 +130,7 @@
 				<Key word="continue"/>
 				<Key word="return"/>
 				<Key word="yield"/>
+				<Key word="goto" />
 			</KeyWords>
 
 			<KeyWords name="ExceptionHandlingStatements" bold="true" italic="false" color="Teal" >
@@ -234,6 +236,8 @@
 				<Key word="filter"/>
 				<Key word="map"/>
 				<Key word="cat"/>
+				<Key word="__eval__" />
+				<Key word="__switch__" />
 			</KeyWords>
 
 			<KeyWords name="Methods" bold="true" italic="false" color="Blue" >

@@ -46,6 +46,8 @@ namespace Boo.Lang.Compiler.TypeSystem
 		
 		protected Boo.Lang.List _buffer = new Boo.Lang.List();
 		
+		protected System.Type _generatedType;
+		
 		protected AbstractInternalType(TypeSystemServices typeSystemServices, TypeDefinition typeDefinition)
 		{
 			_typeSystemServices = typeSystemServices;
@@ -73,6 +75,14 @@ namespace Boo.Lang.Compiler.TypeSystem
 			get
 			{
 				return _typeDefinition;
+			}
+		}
+		
+		public IType NestingType
+		{
+			get
+			{
+				return _typeDefinition.ParentNode.Entity as IType;
 			}
 		}
 		
@@ -157,6 +167,14 @@ namespace Boo.Lang.Compiler.TypeSystem
 			}
 		}
 		
+		virtual public bool IsFinal
+		{
+			get
+			{
+				return _typeDefinition.IsFinal || IsValueType;
+			}
+		}
+		
 		public bool IsInterface
 		{
 			get
@@ -173,11 +191,11 @@ namespace Boo.Lang.Compiler.TypeSystem
 			}
 		}
 		
-		public bool IsValueType
+		virtual public bool IsValueType
 		{
 			get
 			{
-				return IsEnum;
+				return false;
 			}
 		}
 		
@@ -281,6 +299,19 @@ namespace Boo.Lang.Compiler.TypeSystem
 				_buffer.Clear();				
 			}
 			return _members;
+		}
+		
+		public System.Type GeneratedType
+		{
+			get
+			{
+				return _generatedType;
+			}
+			
+			set
+			{
+				_generatedType = value;
+			}
 		}
 		
 		override public string ToString()

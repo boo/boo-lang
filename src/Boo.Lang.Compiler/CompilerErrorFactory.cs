@@ -486,6 +486,66 @@ namespace Boo.Lang.Compiler
 			return new CompilerError("BCE0091", node.LexicalInfo, eventName);
 		}
 		
+		public static CompilerError InvalidRaiseArgument(Node node, string typeName)
+		{
+			return new CompilerError("BCE0092", node.LexicalInfo, typeName);
+		}
+		
+		public static CompilerError CannotBranchIntoEnsure(Node node)
+		{
+			return new CompilerError("BCE0093", node.LexicalInfo);
+		}
+		
+		public static CompilerError CannotBranchIntoExcept(Node node)
+		{
+			return new CompilerError("BCE0094", node.LexicalInfo);
+		}
+		
+		public static CompilerError NoSuchLabel(Node node, string label)
+		{
+			return new CompilerError("BCE0095", node.LexicalInfo, label);
+		}
+		
+		public static CompilerError LabelAlreadyDefined(Node node, string methodName, string label)
+		{
+			return new CompilerError("BCE0096", node.LexicalInfo, methodName, label);
+		}
+		
+		public static CompilerError CannotBranchIntoTry(Node node)
+		{
+			return new CompilerError("BCE0097", node.LexicalInfo);
+		}
+		
+		public static CompilerError InvalidSwitch(Node node)
+		{
+			return new CompilerError("BCE0098", node.LexicalInfo);
+		}
+		
+		public static CompilerError YieldInsideTryBlock(Node node)
+		{
+			return new CompilerError("BCE0099", node.LexicalInfo);
+		}
+		
+		public static CompilerError YieldInsideConstructor(Node node)
+		{
+			return new CompilerError("BCE0100", node.LexicalInfo);
+		}
+		
+		public static CompilerError InvalidGeneratorReturnType(Node node)
+		{
+			return new CompilerError("BCE0101", node.LexicalInfo);
+		}
+		
+		public static CompilerError GeneratorCantReturnValue(Node node)
+		{
+			return new CompilerError("BCE0102", node.LexicalInfo);
+		}
+		
+		public static CompilerError CannotExtendFinalType(Node node, string typeName)
+		{
+			return new CompilerError("BCE0103", node.LexicalInfo, typeName);
+		}
+		
 		public static string ToStringList(System.Collections.IEnumerable names)
 		{
 			StringBuilder builder = new StringBuilder();

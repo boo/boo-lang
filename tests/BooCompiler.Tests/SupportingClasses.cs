@@ -150,11 +150,21 @@ namespace BooCompiler.Tests
 		
 		public event EventHandler Click;
 		
+		public static event EventHandler Idle; 
+		
 		public void RaiseClick()
 		{
 			if (null != Click)
 			{
 				Click(this, EventArgs.Empty);
+			}
+		}
+		
+		public static void RaiseIdle()
+		{
+			if (null != Idle)
+			{
+				Idle(null, EventArgs.Empty);
 			}
 		}
 	}
@@ -263,6 +273,20 @@ namespace BooCompiler.Tests
 	{
 		public NoParameterlessConstructor(object param)
 		{
+		}
+	}
+	
+	public abstract class AbstractClass
+	{
+	}
+	
+	public abstract class AnotherAbstractClass
+	{
+		protected abstract string Foo();
+		
+		public virtual string Bar()
+		{
+			return "Bar";
 		}
 	}
 }

@@ -136,10 +136,12 @@ OR
 		<keyword>break</keyword>
 		<keyword>cast</keyword>
 		<keyword>continue</keyword>
+		<keyword>elif</keyword>
 		<keyword>else</keyword>
 		<keyword>except</keyword>
 		<keyword>ensure</keyword>
 		<keyword>for</keyword>
+		<keyword>goto</keyword>
 		<keyword>if</keyword>
 		<keyword>in</keyword>
 		<keyword>is</keyword>
@@ -154,6 +156,8 @@ OR
 	</keyword-list>
 
 	<keyword-list name = "Builtins" style = "Others" case-sensitive="true">
+		<keyword>__eval__</keyword>
+		<keyword>__switch__</keyword>
 		<keyword>enumerate</keyword>
 		<keyword>filter</keyword>
 		<keyword>len</keyword>

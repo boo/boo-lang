@@ -34,6 +34,10 @@ namespace Boo.Lang.Compiler.TypeSystem
 
 	public class InternalMethod : IInternalEntity, IMethod, INamespace
 	{
+		public static readonly ReferenceExpression[] EmptyReferenceExpressionArray = new ReferenceExpression[0];
+		
+		public static readonly InternalLabel[] EmptyInternalLabelArray = new InternalLabel[0];
+		
 		protected TypeSystemServices _typeSystemServices;
 		
 		protected Boo.Lang.Compiler.Ast.Method _method;
@@ -46,11 +50,15 @@ namespace Boo.Lang.Compiler.TypeSystem
 		
 		protected IParameter[] _parameters;
 		
-		public ExpressionCollection ReturnExpressions;
+		protected ExpressionCollection _returnExpressions;
 		
-		public ExpressionCollection SuperExpressions;
+		protected ExpressionCollection _yieldExpressions;
 		
-		public ExpressionCollection References;
+		protected ExpressionCollection _superExpressions;
+		
+		protected Boo.Lang.List _labelReferences;
+		
+		protected Boo.Lang.List _labels;
 		
 		internal InternalMethod(TypeSystemServices typeSystemServices, Boo.Lang.Compiler.Ast.Method method)
 		{			
@@ -58,8 +66,6 @@ namespace Boo.Lang.Compiler.TypeSystem
 			_method = method;
 			if (method.NodeType != NodeType.Constructor)
 			{
-				SuperExpressions = new ExpressionCollection();
-				ReturnExpressions = new ExpressionCollection();
 				if (null == _method.ReturnType)
 				{
 					if (_method.DeclaringType.NodeType == NodeType.ClassDefinition)
@@ -232,6 +238,127 @@ namespace Boo.Lang.Compiler.TypeSystem
 			}
 		}
 		
+		public bool IsGenerator
+		{
+			get
+			{
+				return null != _yieldExpressions;
+			}
+		}
+		
+		public ExpressionCollection ReturnExpressions
+		{
+			get
+			{
+				return _returnExpressions;
+			}
+		}
+		
+		public ExpressionCollection YieldExpressions
+		{
+			get
+			{
+				return _yieldExpressions;
+			}
+		}
+		
+		public ExpressionCollection SuperExpressions
+		{
+			get
+			{
+				return _superExpressions;
+			}
+		}
+		
+		public ReferenceExpression[] LabelReferences
+		{
+			get
+			{
+				if (null == _labelReferences)
+				{
+					return EmptyReferenceExpressionArray;
+				}
+				return (ReferenceExpression[])_labelReferences.ToArray(typeof(ReferenceExpression));
+			}
+		}
+		
+		public InternalLabel[] Labels
+		{
+			get
+			{
+				if (null == _labels)
+				{
+					return EmptyInternalLabelArray;
+				}
+				return (InternalLabel[])_labels.ToArray(typeof(InternalLabel));
+			}
+		}
+		
+		public void AddYieldExpression(Expression expression)
+		{
+			if (null == _yieldExpressions)
+			{
+				_yieldExpressions = new ExpressionCollection();
+			}
+			_yieldExpressions.Add(expression);
+		}
+		
+		public void AddReturnExpression(Expression expression)
+		{
+			if (null == _returnExpressions)
+			{
+				_returnExpressions = new ExpressionCollection();
+			}
+			_returnExpressions.Add(expression);
+		}
+		
+		public void AddSuperExpression(SuperLiteralExpression expression)
+		{
+			if (null == _superExpressions)
+			{
+				_superExpressions = new ExpressionCollection();
+			}
+			_superExpressions.Add(expression);
+		}
+		
+		public void AddLabelReference(ReferenceExpression node)
+		{
+			if (null == _labelReferences)
+			{
+				_labelReferences = new Boo.Lang.List();
+			}
+			_labelReferences.Add(node);
+		}
+		
+		public void AddLabel(InternalLabel node)
+		{
+			if (null == node)
+			{
+				throw new ArgumentNullException("node");
+			}
+			
+			if (null == _labels)
+			{
+				_labels = new Boo.Lang.List();
+			}
+			_labels.Add(node);
+		}
+		
+		public InternalLabel ResolveLabel(string name)
+		{
+			if (null != _labels)
+			{
+				foreach (InternalLabel label in _labels)
+				{
+					if (name == label.Name)
+					{
+						return label;
+					}
+				}
+			}
+			return null;
+		}
+		
 		public Boo.Lang.Compiler.Ast.Local ResolveLocal(string name)
 		{
 			foreach (Boo.Lang.Compiler.Ast.Local local in _method.Locals)
@@ -262,7 +389,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 		}
 		
 		public bool Resolve(Boo.Lang.List targetList, string name, EntityType flags)
-		{
+		{			
 			if (NameResolutionService.IsFlagSet(flags, EntityType.Local))
 			{
 				Boo.Lang.Compiler.Ast.Local local = ResolveLocal(name);
@@ -282,6 +409,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 					return true;
 				}
 			}
+
 			return false;
 		}
 		
@@ -294,44 +422,5 @@ namespace Boo.Lang.Compiler.TypeSystem
 		{
 			return _typeSystemServices.GetSignature(this);
 		}
-	}
-	
-	public class InternalConstructor : InternalMethod, IConstructor
-	{
-		bool _hasSuperCall = false;
-		
-		public InternalConstructor(TypeSystemServices typeSystemServices,
-		                                  Constructor constructor) : base(typeSystemServices, constructor)
-		{
-		}
-		  
-		public bool HasSuperCall
-		{
-			get
-			{
-				return _hasSuperCall;
-			}
-			
-			set
-			{
-				_hasSuperCall = value;
-			}
-		}
-		
-		override public IType ReturnType
-		{
-			get
-			{
-				return _typeSystemServices.VoidType;
-			}
-		}
-	      
-	    override public EntityType EntityType
-	    {
-	    	get
-	    	{
-	    		return EntityType.Constructor;
-	    	}
-	    }
 	}
 }

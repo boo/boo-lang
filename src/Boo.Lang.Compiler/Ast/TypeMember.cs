@@ -105,6 +105,22 @@ namespace Boo.Lang.Compiler.Ast
 			}			
 		}
 		
+		public bool IsOverride
+		{
+			get
+			{
+				return IsModifierSet(TypeMemberModifiers.Override);
+			}
+		}
+		
+		public bool IsVirtual
+		{
+			get
+			{
+				return IsModifierSet(TypeMemberModifiers.Virtual);
+			}
+		}
+		
 		public bool IsStatic
 		{
 			get

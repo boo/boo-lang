@@ -91,7 +91,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 		IMethod GetRaiseMethod();
 	}
 	
-	public interface IField : IMember
+	public interface IField : IAccessibleMember
 	{	
 		bool IsInitOnly
 		{
@@ -121,6 +121,11 @@ namespace Boo.Lang.Compiler.TypeSystem
 	public interface IType : ITypedEntity, INamespace
 	{	
 		bool IsClass
+		{
+			get;
+		}
+		
+		bool IsAbstract
 		{
 			get;
 		}
@@ -201,7 +206,15 @@ namespace Boo.Lang.Compiler.TypeSystem
 	{		
 	}
 	
-	public interface IMethod : IMember
+	public interface IAccessibleMember : IMember
+	{
+		bool IsProtected
+		{
+			get;
+		}
+	}
+	
+	public interface IMethod : IAccessibleMember
 	{		
 		IParameter[] GetParameters();		
 		
@@ -211,6 +224,11 @@ namespace Boo.Lang.Compiler.TypeSystem
 		}
 		
 		ICallableType CallableType
+		{
+			get;
+		}
+		
+		bool IsAbstract
 		{
 			get;
 		}

@@ -38,7 +38,9 @@ import Boo.Lang.Compiler
 
 abstract class AbstractBooTask(Task):
 	
-	_references = FileSet()
+	_references = FileSet()	
+	
+	_pipeline as string
 	
 	def constructor():
 		baseAssemblyFolder = Path.GetDirectoryName(GetType().Assembly.Location)
@@ -51,9 +53,20 @@ abstract class AbstractBooTask(Task):
 			return _references
 		set:
 			_references = value
+			
+	[TaskAttribute("pipeline")]
+	Pipeline:
+		get:
+			return _pipeline
+		set:
+			_pipeline = value
 	
 	protected def RunCompiler(compiler as BooCompiler):
-		AddReferences(compiler.Parameters)		
+		AddReferences(compiler.Parameters)
+		if _pipeline:
+			compiler.Parameters.Pipeline = CompilerPipeline.GetPipeline(_pipeline)
+		else:
+			compiler.Parameters.Pipeline = GetDefaultPipeline()				
 		result = compiler.Run()
 		CheckCompilationResult(result)
 		return result
@@ -89,10 +102,15 @@ abstract class AbstractBooTask(Task):
 		verbose = context.Parameters.TraceSwitch.TraceInfo
 		for error in errors:
 			LogError(error.ToString(verbose))
+		for warning in context.Warnings:
+			LogWarning(warning.ToString());
 			
 		if len(errors):
 			LogInfo("${len(errors)} error(s).")
 			raise BuildException("boo compilation error", Location)
+			
+	abstract def GetDefaultPipeline() as CompilerPipeline:
+		pass
 
 	def GetFrameworkDirectory():
 		return Project.TargetFramework.FrameworkAssemblyDirectory.ToString()
@@ -101,10 +119,13 @@ abstract class AbstractBooTask(Task):
 		LogVerbose(message)
 
 	def LogInfo(message):
-		self.Log(Level.Info, "${LogPrefix}${message}")
+		self.Log(Level.Info, "${message}")
 		
 	def LogVerbose(message):
-		self.Log(Level.Verbose, "${LogPrefix}${message}")
+		self.Log(Level.Verbose, "${message}")
+		
+	def LogWarning(message):
+		self.Log(Level.Warning, "${message}")
 		
 	def LogError(message):
-		self.Log(Level.Error, "${LogPrefix}${message}")
+		self.Log(Level.Error, "${message}")

@@ -33,176 +33,73 @@ namespace Boo.Lang.Compiler.Steps
 	using Boo.Lang.Compiler;
 	using Boo.Lang.Compiler.Ast;
 	using Boo.Lang.Compiler.TypeSystem;
-	
+
 	public class ProcessClosures : AbstractTransformerCompilerStep
 	{
 		Method _currentMethod;
-		
-		ClassDefinition _sharedLocalsClass;
-		
-		Hashtable _mappings = new Hashtable();
-		
-		List _references = new List();
-		
-		List _shared = new List();
-		
-		int _closureDepth;
 		
 		override public void Run()
 		{
 			if (0 == Errors.Count)
 			{
 				Visit(CompileUnit);
-				
-				using (ClosurePostProcessor pp = new ClosurePostProcessor())
-				{
-					pp.Initialize(_context);
-					pp.Run();
-				}
 			}
-		}
-		
-		override public void Dispose()
-		{
-			_shared.Clear();
-			base.Dispose();
 		}
 		
 		override public void OnMethod(Method node)
-		{	
-			_references.Clear();			
-			_mappings.Clear();
+		{
 			_currentMethod = node;
-			_sharedLocalsClass = null;
-			_closureDepth = 0;
-			
 			Visit(node.Body);
-			
-			CreateSharedLocalsClass();
-			if (null != _sharedLocalsClass)
-			{
-				node.DeclaringType.Members.Add(_sharedLocalsClass);				
-				Map();
-			}
 		}
 		
 		override public void OnCallableBlockExpression(CallableBlockExpression node)
 		{
-			++_closureDepth;
-			Visit(node.Body);
-			--_closureDepth;
-		}
-		
-		override public void OnReferenceExpression(ReferenceExpression node)
-		{
-			if (_closureDepth > 0)
-			{
-				ILocalEntity local = node.Entity as ILocalEntity;
-				if (null != local)
-				{
-					if (!local.IsPrivateScope &&
-						(
-							_currentMethod.Locals.ContainsEntity(local) ||
-							_currentMethod.Parameters.ContainsEntity(local)
-						))
-					{
-						local.IsShared = true;						
-					}
-				}
-			}
-			_references.Add(node);
-		}
-		
-		void Map()
-		{
-			IType type = (IType)_sharedLocalsClass.Entity;
-			LocalVariable locals = CodeBuilder.DeclareLocal(_currentMethod, "__locals__", type);
+			InternalMethod closureEntity = (InternalMethod)GetEntity(node);
 			
-			foreach (ReferenceExpression reference in _references)
-			{
-				IField mapped = (IField)_mappings[reference.Entity];
-				if (null != mapped)
-				{
-					reference.ParentNode.Replace(
-						reference,
-						CodeBuilder.CreateMemberReference(
-							CodeBuilder.CreateReference(locals),
-							mapped));
-				}
-			}
-			
-			Block initializationBlock = new Block();
-			initializationBlock.Add(CodeBuilder.CreateAssignment(
-						CodeBuilder.CreateReference(locals),
-						CodeBuilder.CreateConstructorInvocation(type.GetConstructors()[0])));
-			InitializeSharedParameters(initializationBlock, locals);
-			_currentMethod.Body.Statements.Insert(0, initializationBlock);			
-						
-			foreach (IEntity entity in _mappings.Keys)
-			{
-				_currentMethod.Locals.RemoveByEntity(entity);
-			}
-		}
-		
-		void InitializeSharedParameters(Block block, LocalVariable locals)
-		{			
-			foreach (Node node in _currentMethod.Parameters)
-			{
-				InternalParameter param = (InternalParameter)node.Entity;
-				if (param.IsShared)
-				{
-					block.Add(
-						CodeBuilder.CreateAssignment(
-							CodeBuilder.CreateMemberReference(
-								CodeBuilder.CreateReference(locals),
-								(IField)_mappings[param]),
-							CodeBuilder.CreateReference(param)));
-				}
-			}
-		}
-		
-		void CreateSharedLocalsClass()
-		{
-			_shared.Clear();
-			
-			CollectSharedLocalEntities(_currentMethod.Locals);
-			CollectSharedLocalEntities(_currentMethod.Parameters);			
-			
-			if (_shared.Count > 0)
-			{
-				BooClassBuilder builder = CodeBuilder.CreateClass(
-											string.Format("__locals{0}__", _context.AllocIndex()));
-				builder.AddBaseType(TypeSystemServices.ObjectType);
+			using (ForeignReferenceCollector collector = new ForeignReferenceCollector())
+			{			
+				collector.ForeignMethod = _currentMethod;
+				collector.Initialize(_context);
+				collector.Visit(closureEntity.Method.Body);
 				
-				int i=0;
-				foreach (ILocalEntity local in _shared)
+				if (collector.ContainsForeignLocalReferences)
+				{	
+					ReplaceCurrentNode(CreateClosureClass(collector, closureEntity));			
+				}			
+				else
 				{
-					Field field = builder.AddField(
-									string.Format("__{0}_{1}", local.Name, i),
-									local.Type);
-					field.Modifiers = TypeMemberModifiers.Internal;
-					++i;
-					
-					_mappings[local] = field.Entity;
+					ReplaceCurrentNode(CodeBuilder.CreateMemberReference(closureEntity));
 				}
-				
-				builder.AddConstructor().Body.Add(
-					CodeBuilder.CreateSuperConstructorInvocation(TypeSystemServices.ObjectType));
-					
-				_sharedLocalsClass = builder.ClassDefinition;
 			}
 		}
 		
-		void CollectSharedLocalEntities(NodeCollection nodes)
+		Expression CreateClosureClass(ForeignReferenceCollector collector, InternalMethod closure)
 		{
-			foreach (Node node in nodes)
-			{
-				ILocalEntity local = (ILocalEntity)node.Entity;
-				if (local.IsShared)
+			Method method = closure.Method;
+			TypeDefinition parent = method.DeclaringType;
+			parent.Members.Remove(method);
+			
+			BooClassBuilder builder = collector.CreateSkeletonClass(method.Name);
+			parent.Members.Add(builder.ClassDefinition);
+			builder.ClassDefinition.Members.Add(method);			
+			method.Name = "Invoke";	
+			
+			if (method.IsStatic)
+			{	
+				// need to adjust paremeter indexes (parameter 0 is now self)
+				foreach (ParameterDeclaration parameter in method.Parameters)
 				{
-					_shared.Add(local);
+					((InternalParameter)parameter.Entity).Index += 1;
 				}
 			}
+			
+			method.Modifiers = TypeMemberModifiers.Public;
+			
+			collector.AdjustReferences();
+			return CodeBuilder.CreateMemberReference(
+					collector.CreateConstructorInvocationWithReferencedEntities(
+							builder.Entity),
+					closure);
 		}
 	}
 }

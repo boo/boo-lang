@@ -34,17 +34,17 @@ namespace Boo.Lang.Compiler.TypeSystem
 
 	public class InternalMethod : IInternalEntity, IMethod, INamespace
 	{
-		TypeSystemServices _typeSystemServices;
+		protected TypeSystemServices _typeSystemServices;
 		
-		Boo.Lang.Compiler.Ast.Method _method;
+		protected Boo.Lang.Compiler.Ast.Method _method;
 		
-		IMethod _override;
+		protected IMethod _override;
 		
-		ICallableType _type;
+		protected ICallableType _type;
 		
-		IType _declaringType;
+		protected IType _declaringType;
 		
-		IParameter[] _parameters;
+		protected IParameter[] _parameters;
 		
 		public ExpressionCollection ReturnExpressions;
 		
@@ -52,9 +52,9 @@ namespace Boo.Lang.Compiler.TypeSystem
 		
 		public ExpressionCollection References;
 		
-		internal InternalMethod(TypeSystemServices manager, Boo.Lang.Compiler.Ast.Method method)
+		internal InternalMethod(TypeSystemServices typeSystemServices, Boo.Lang.Compiler.Ast.Method method)
 		{			
-			_typeSystemServices = manager;
+			_typeSystemServices = typeSystemServices;
 			_method = method;
 			if (method.NodeType != NodeType.Constructor)
 			{
@@ -99,6 +99,22 @@ namespace Boo.Lang.Compiler.TypeSystem
 			get
 			{
 				return _method.IsPublic;
+			}
+		}
+		
+		public bool IsProtected
+		{
+			get
+			{
+				return _method.IsProtected;
+			}
+		}
+		
+		public bool IsAbstract
+		{
+			get
+			{
+				return _method.IsAbstract;
 			}
 		}
 		
@@ -200,7 +216,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 			return _parameters;
 		}
 		
-		public IType ReturnType
+		public virtual IType ReturnType
 		{
 			get
 			{					
@@ -284,8 +300,8 @@ namespace Boo.Lang.Compiler.TypeSystem
 	{
 		bool _hasSuperCall = false;
 		
-		public InternalConstructor(TypeSystemServices tagManager,
-		                                  Constructor constructor) : base(tagManager, constructor)
+		public InternalConstructor(TypeSystemServices typeSystemServices,
+		                                  Constructor constructor) : base(typeSystemServices, constructor)
 		{
 		}
 		  
@@ -299,6 +315,14 @@ namespace Boo.Lang.Compiler.TypeSystem
 			set
 			{
 				_hasSuperCall = value;
+			}
+		}
+		
+		override public IType ReturnType
+		{
+			get
+			{
+				return _typeSystemServices.VoidType;
 			}
 		}
 	      

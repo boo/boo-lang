@@ -183,6 +183,39 @@ namespace Boo.Lang.Compiler.TypeSystem
 			PreparePrimitives();
 		}
 		
+		public IType GetMostGenericType(IType current, IType candidate)
+		{
+			if (current.IsAssignableFrom(candidate))
+			{
+				return current;
+			}
+			
+			if (candidate.IsAssignableFrom(current))
+			{
+				return candidate;
+			}
+			
+			if (IsNumberOrBool(current) && IsNumberOrBool(candidate))
+			{
+				return GetPromotedNumberType(current, candidate);
+			}
+			
+			IType obj = ObjectType;			
+			if (current.IsClass && candidate.IsClass)
+			{
+				if (current ==  obj || candidate == obj)
+				{
+					return obj;
+				}
+				if (current.GetTypeDepth() < candidate.GetTypeDepth())
+				{
+					return GetMostGenericType(current.BaseType, candidate);
+				}			
+				return GetMostGenericType(current, candidate.BaseType);
+			}			
+			return obj;
+		}
+		
 		public IType GetPromotedNumberType(IType left, IType right)
 		{
 			if (left == DoubleType ||
@@ -419,6 +452,11 @@ namespace Boo.Lang.Compiler.TypeSystem
 				type == this.ULongType;
 		}
 		
+		public bool IsNumberOrBool(IType type)
+		{
+			return BoolType == type || IsNumber(type);
+		}
+		
 		public bool IsNumber(IType type)
 		{
 			return
@@ -477,6 +515,19 @@ namespace Boo.Lang.Compiler.TypeSystem
 		public static bool IsError(IEntity tag)
 		{
 			return EntityType.Error == tag.EntityType;
+		}
+		
+		public static TypeMemberModifiers GetAccess(IAccessibleMember member)
+		{
+			if (member.IsPublic)
+			{
+				return TypeMemberModifiers.Public;
+			}
+			else if (member.IsProtected)
+			{
+				return TypeMemberModifiers.Protected;
+			}
+			return TypeMemberModifiers.Private;
 		}
 		
 		public static IEntity GetEntity(Node node)
@@ -638,8 +689,20 @@ namespace Boo.Lang.Compiler.TypeSystem
 		
 		public string GetSignature(IMethod method)
 		{
+			return GetSignature(method, true);
+		}
+		
+		public string GetSignature(IMethod method, bool includeFullName)
+		{
 			_buffer.Length = 0;
-			_buffer.Append(method.FullName);
+			if (includeFullName)
+			{
+				_buffer.Append(method.FullName);
+			}
+			else
+			{
+				_buffer.Append(method.Name);
+			}
 			_buffer.Append("(");
 			
 			IParameter[] parameters = method.GetParameters();
@@ -679,6 +742,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 		
 		void PreparePrimitives()
 		{
+			AddPrimitiveType("duck", DuckType);
 			AddPrimitiveType("void", VoidType);
 			AddPrimitiveType("bool", BoolType);
 			AddPrimitiveType("date", DateTimeType);
@@ -780,7 +844,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 		{
 			Boo.Lang.Compiler.Ast.Module module = GetAnonymousTypesModule();
 			
-			string name = string.Format("__callable{0}__", module.Members.Count);
+			string name = string.Format("___callable{0}", module.Members.Count);
 			ClassDefinition cd = CreateCallableDefinition(name);
 			cd.Modifiers |= TypeMemberModifiers.Public;
 			cd.LexicalInfo = sourceNode.LexicalInfo;

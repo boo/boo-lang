@@ -181,6 +181,7 @@ namespace Boo.Lang.Compiler.Steps
 			
 			DefineTypes();			
 			DefineResources();
+			DefineAssemblyAttributes();
 			DefineEntryPoint();			
 		}
 		
@@ -229,7 +230,7 @@ namespace Boo.Lang.Compiler.Steps
 				{
 					foreach (TypeReference baseTypeRef in typedef.BaseTypes)
 					{
-						InternalType tag = GetType(baseTypeRef) as InternalType;
+						AbstractInternalType tag = GetType(baseTypeRef) as AbstractInternalType;
 						if (null != tag)
 						{
 							CreateType(created, tag.TypeDefinition);
@@ -1084,47 +1085,7 @@ namespace Boo.Lang.Compiler.Steps
 		
 		void EmitAnd(BinaryExpression node)
 		{
-			EmitLogicalOperator(node, OpCodes.Brtrue, OpCodes.Brfalse); 
-			/*
-			IType type = GetType(node);
-			Visit(node.Left);
-			
-			IType lhsType = PopType();
-			
-			IType lhsType = PopType();
-			if (null != lhsType && lhsType.IsValueType && !type.IsValueType)
-			{
-				Label lhsWasTrue = _il.DefineLabel();
-				Label end = _il.DefineLabel();
-				
-				_il.Emit(OpCodes.Dup);
-				_il.Emit(OpCodes.Brtrue, lhsWasTrue);
-				EmitCastIfNeeded(type, lhsType);
-				_il.Emit(OpCodes.Br, end);
-				
-				_il.MarkLabel(lhsWasTrue);
-				_il.Emit(OpCodes.Pop);
-				Visit(node.Right);
-				EmitCastIfNeeded(type, PopType());
-				
-				_il.MarkLabel(end);
-			}
-			else
-			{
-				EmitCastIfNeeded(type, lhsType);
-				
-				_il.Emit(OpCodes.Dup);
-				EmitToBoolIfNeeded(type);
-				
-				_il.Emit(OpCodes.Brfalse, end);
-				
-				_il.Emit(OpCodes.Pop);
-				Visit(node.Right);
-				EmitCastIfNeeded(type, PopType());
-				_il.MarkLabel(end);				
-			}
-			
-			PushType(type);*/
+			EmitLogicalOperator(node, OpCodes.Brtrue, OpCodes.Brfalse);
 		}
 		
 		void EmitOr(BinaryExpression node)
@@ -1352,7 +1313,6 @@ namespace Boo.Lang.Compiler.Steps
 				IType targetType = target.ExpressionType;
 				if (targetType.IsValueType)
 				{	
-					
 					if (mi.DeclaringType == Types.Object)
 					{
 						Visit(node.Target); 
@@ -1373,7 +1333,13 @@ namespace Boo.Lang.Compiler.Steps
 					// pushes target reference
 					Visit(node.Target); PopType();					
 				}
+				
+				if (NodeType.SuperLiteralExpression == target.NodeType)
+				{
+					code = OpCodes.Call;
+				}
 			}
+			
 			PushArguments(methodInfo, node.Arguments);
 			_il.EmitCall(code, mi, null);
 			
@@ -1900,6 +1866,12 @@ namespace Boo.Lang.Compiler.Steps
 			PushType(node.ExpressionType);
 		}
 		
+		override public void OnSuperLiteralExpression(SuperLiteralExpression node)
+		{
+			_il.Emit(OpCodes.Ldarg_0);
+			PushType(node.ExpressionType);
+		}
+		
 		override public void OnNullLiteralExpression(NullLiteralExpression node)
 		{
 			_il.Emit(OpCodes.Ldnull);
@@ -2044,9 +2016,8 @@ namespace Boo.Lang.Compiler.Steps
 		}
 		
 		void SetProperty(Node sourceNode, IProperty property, Expression reference, Expression value, bool leaveValueOnStack)
-		{
-			PropertyInfo pi = GetPropertyInfo(property);			
-			MethodInfo setMethod = pi.GetSetMethod(true);
+		{						
+			MethodInfo setMethod = GetMethodInfo(property.GetSetMethod());
 			
 			if (null != reference)
 			{
@@ -2064,7 +2035,7 @@ namespace Boo.Lang.Compiler.Steps
 			if (leaveValueOnStack)
 			{
 				_il.Emit(OpCodes.Dup);
-				local = _il.DeclareLocal(pi.PropertyType);
+				local = _il.DeclareLocal(GetSystemType(property.Type));
 				_il.Emit(OpCodes.Stloc, local);
 			}
 			
@@ -2447,9 +2418,7 @@ namespace Boo.Lang.Compiler.Steps
 					}
 					else
 					{
-						Type type = GetSystemType(expectedType);
-						_il.Emit(OpCodes.Unbox, type);
-						_il.Emit(OpCodes.Ldobj, type);
+						EmitUnbox(expectedType);
 					}
 				}
 				else
@@ -2467,6 +2436,73 @@ namespace Boo.Lang.Compiler.Steps
 						_il.Emit(OpCodes.Box, GetSystemType(actualType));
 					}
 				}
+			}
+		}
+		
+		void EmitUnbox(IType expectedType)
+		{
+			if (TypeSystemServices.IsNumberOrBool(expectedType))
+			{
+				_il.EmitCall(OpCodes.Call, GetUnboxMethod(expectedType), null);
+			}
+			else
+			{
+				Type type = GetSystemType(expectedType);
+				_il.Emit(OpCodes.Unbox, type);
+				_il.Emit(OpCodes.Ldobj, type);
+			}
+		}
+		
+		MethodInfo GetUnboxMethod(IType type)
+		{
+			return typeof(RuntimeServices).GetMethod(GetUnboxMethodName(type));
+		}
+		
+		string GetUnboxMethodName(IType type)
+		{
+			if (type == TypeSystemServices.ByteType)
+			{
+				return "UnboxByte";
+			}
+			else if (type == TypeSystemServices.ShortType)
+			{
+				return "UnboxInt16";
+			}
+			else if (type == TypeSystemServices.UShortType)
+			{
+				return "UnboxUInt16";
+			}	
+			if (type == TypeSystemServices.IntType)
+			{
+				return "UnboxInt32";
+			}
+			else if (type == TypeSystemServices.UIntType)
+			{
+				return "UnboxUInt32";
+			}
+			else if (type == TypeSystemServices.LongType)
+			{
+				return "UnboxInt64";
+			}
+			else if (type == TypeSystemServices.ULongType)
+			{
+				return "UnboxUInt64";
+			}
+			else if (type == TypeSystemServices.SingleType)
+			{
+				return "UnboxSingle";
+			}
+			else if (type == TypeSystemServices.DoubleType)
+			{
+				return "UnboxDouble";
+			}
+			else if (type == TypeSystemServices.BoolType)
+			{
+				return "UnboxBoolean";
+			}
+			else
+			{
+				throw new NotImplementedException(string.Format("Numeric promotion for {0} not implemented!", type));				
 			}
 		}
 		
@@ -2528,6 +2564,17 @@ namespace Boo.Lang.Compiler.Steps
 			EmitCastIfNeeded(elementType, PopType());
 			_il.Emit(opcode);
 		}		
+		
+		void DefineAssemblyAttributes()
+		{
+			foreach (Boo.Lang.Compiler.Ast.Module module in CompileUnit.Modules)
+			{
+				foreach (Boo.Lang.Compiler.Ast.Attribute attribute in module.AssemblyAttributes)
+				{
+					_asmBuilder.SetCustomAttribute(GetCustomAttributeBuilder(attribute));
+				}
+			}
+		}
 		
 		void DefineEntryPoint()
 		{

@@ -281,10 +281,12 @@ tokens
 }
 
 protected
-start returns [Module module]
+start[CompileUnit cu] returns [Module module]
 	{
 		module = new Module();		
 		module.LexicalInfo = new LexicalInfo(getFilename(), 0, 0, 0);
+		
+		cu.Modules.Add(module);
 	}:
 	(options { greedy=true;}: EOS!)*
 	docstring[module]
@@ -293,6 +295,7 @@ start returns [Module module]
 	(import_directive[module])*
 	(type_member[module.Members])*	
 	globals[module]
+	(assembly_attribute[module] eos)*
 	EOF!
 	;
 			
@@ -461,12 +464,10 @@ attribute
 	{		
 		antlr.Token id = null;
 		Boo.Lang.Compiler.Ast.Attribute attr = null;
-	}
-	:	
+	}:	
 	id=identifier
 	{
-		attr = new Boo.Lang.Compiler.Ast.Attribute(ToLexicalInfo(id));
-		attr.Name = id.getText();
+		attr = new Boo.Lang.Compiler.Ast.Attribute(ToLexicalInfo(id), id.getText());
 		_attributes.Add(attr);
 	} 
 	(
@@ -474,6 +475,23 @@ attribute
 		parameter_list[attr]
 		RPAREN!
 	)?
+	;
+	
+protected
+assembly_attribute[Module module]
+	{
+		antlr.Token id = null;
+		Boo.Lang.Compiler.Ast.Attribute attr = null;
+	}:
+	ASSEMBLY_ATTRIBUTE_BEGIN!
+	id=identifier { attr = new Boo.Lang.Compiler.Ast.Attribute(ToLexicalInfo(id), id.getText()); }
+	(
+		LPAREN!
+		parameter_list[attr]
+		RPAREN!
+	)?
+	RBRACK!
+	{ module.AssemblyAttributes.Add(attr); }
 	;
 			
 protected
@@ -553,9 +571,9 @@ interface_method [TypeMemberCollection container]
 		TypeReference rt = null;
 		bool variableArguments = false;
 	}: 
-	t:DEF! id:ID
+	DEF! id:ID
 	{
-		m = new Method(ToLexicalInfo(t));
+		m = new Method(ToLexicalInfo(id));
 		m.Name = id.getText();
 		AddAttributes(m.Attributes);
 		container.Add(m);
@@ -631,7 +649,7 @@ event_declaration [TypeMemberCollection container]
 	t:EVENT!
 	id:ID AS! tr=type_reference eos
 	{
-		e = new Event(ToLexicalInfo(t), id.getText(), tr);
+		e = new Event(ToLexicalInfo(id), id.getText(), tr);
 		e.Modifiers = _modifiers;
 		AddAttributes(e.Attributes);
 		container.Add(e);
@@ -647,8 +665,8 @@ method [TypeMemberCollection container]
 	}: 
 	t:DEF!
 	(
-		id:ID { m = new Method(ToLexicalInfo(t)); m.Name = id.getText(); } |
-		c:CONSTRUCTOR! { m = new Constructor(ToLexicalInfo(t)); }
+		id:ID { m = new Method(ToLexicalInfo(id)); m.Name = id.getText(); } |
+		c:CONSTRUCTOR! { m = new Constructor(ToLexicalInfo(c)); }
 	)	
 	{
 		m.Modifiers = _modifiers;
@@ -910,8 +928,8 @@ stmt [StatementCollection container]
 		s=try_stmt |
 		s=given_stmt |
 		{IsValidMacroArgument(LA(2))}? s=macro_stmt |
-		(slicing_expression (ASSIGN|DO))=> s=assignment_or_method_invocation_with_block_stmt |
-		(RETURN DO) => s=return_callable_stmt |
+		(slicing_expression (ASSIGN|(DO|DEF)))=> s=assignment_or_method_invocation_with_block_stmt |
+		(RETURN (DO|DEF)) => s=return_callable_stmt |
 		(		
 			(				
 				s=return_stmt |
@@ -1012,8 +1030,12 @@ callable_expression returns [Expression e]
 		e = null;
 		CallableBlockExpression cbe = null;
 		TypeReference rt = null;
+		Token anchor = null;
 	}:
-	anchor:DO!
+	(
+		(doAnchor:DO! { anchor = doAnchor; }) |
+		(defAnchor:DEF! { anchor = defAnchor; })
+	)
 	{
 		e = cbe = new CallableBlockExpression(ToLexicalInfo(anchor));
 	}
@@ -1446,7 +1468,7 @@ assignment_or_method_invocation_with_block_stmt returns [Statement stmt]
 		(
 			op:ASSIGN
 			(
-				(DO)=>rhs=callable_expression |
+				(DO|DEF)=>rhs=callable_expression |
 				(
 					rhs=array_or_expression
 					(			
@@ -2153,7 +2175,14 @@ LPAREN : '(' { EnterSkipWhitespaceRegion(); };
 	
 RPAREN : ')' { LeaveSkipWhitespaceRegion(); };
 
-LBRACK : '[' { EnterSkipWhitespaceRegion(); };
+protected
+ASSEMBLY_ATTRIBUTE_BEGIN: "assembly:";
+
+LBRACK : '[' { EnterSkipWhitespaceRegion(); }
+	(
+		("assembly:")=> "assembly:" { $setType(ASSEMBLY_ATTRIBUTE_BEGIN); } |
+	)
+	;
 
 RBRACK : ']' { LeaveSkipWhitespaceRegion(); };
 

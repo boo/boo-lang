@@ -90,6 +90,14 @@ namespace Boo.Lang.Compiler
 			}
 		}
 		
+		protected CompilerWarningCollection Warnings
+		{
+			get
+			{
+				return _context.Warnings;
+			}
+		}
+		
 		protected TypeSystem.TypeSystemServices TypeSystemServices
 		{
 			get

@@ -81,6 +81,19 @@ BCE0079=__addressof__ builtin function can only be used in delegate constructors
 BCE0080='{0}' builtin function cannot be used as an expression.
 BCE0081=A raise statement with no arguments is not allowed outside an exception handler.
 BCE0082='{0}' is not callable. Event type must be callable.
+BCE0083=Static constructors must be public.
+BCE0084=Static constructors can not declare parameters.
+BCE0085=Can't create instance of abstract class '{0}'.
+BCE0086=Can't create instance of interface '{0}'.
+BCE0087=Can't create instance of enum '{0}'.
+BCE0088=Sorry but the '{0}' prefix is reserved by the compiler. Friends?
+BCE0089=Type '{0}' already has a definition for '{1}'.
+BCE0090=Derived method '{0}' can not reduce the accessiblity of '{1}' from '{2}' to '{3}'.
+BCE0091=Event reference '{0}' cannot be used as an expression.
+
+;Compiler warnings
+BCW0001=Type '{0}' does not provide an implementation for '{1}' and will be marked abstract
+
 
 ; BooC Command Line Errors
 BCE0500=Response file '{0}' listed more than once.
@@ -93,6 +106,7 @@ Boo.Lang.Compiler.GlobalNamespaceIsNotSet=Global namespace is not set!
 
 ;BooC Messages
 BooC.Errors={0} error(s).
+BooC.Warnings={0} warning(s).
 BooC.ProcessingTime={0} module(s) processed in {1}ms after {2}ms of environment setup.
 BooC.FatalError=Fatal error: {0}.
 BooC.InvalidOption=Invalid option: {0}.

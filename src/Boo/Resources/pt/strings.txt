@@ -81,6 +81,18 @@ BCE0079=Função embutida __addressof__ só pode ser utilizada em construtores d
 BCE0080=Função embutida '{0}' não pode ser utilizada como expressão.
 BCE0081=Sentença raise sem argumentos não é permitida fora de um tratador de exceção (except).
 BCE0082=O tipo '{0}' não é callable. Somente tipos callable podem ser utilizados em eventos..
+BCE0083=Construtores estáticos devem ser públicos.
+BCE0084=Construtores estáticos não podem declarar parâmetros.
+BCE0085=Não é possível criar uma instância da classe abstrata '{0}'.
+BCE0086=Não é possível criar uma instância da interface '{0}'.
+BCE0087=Não é possível criar uma instância do enum '{0}'.
+BCE0088=O prefixo '{0}' é reservado para o compilador.
+BCE0089=O tipo '{0}' já possui uma definição para '{1}'.
+BCE0090=Método derivado '{0}' não pode reduzir a acessibilidade do método '{1}' de '{2}' para '{3}'.
+BCE0091=Referência ao evento '{0}' não pode ser utilizado como uma expressão.
+
+;Compiler warnings
+BCW0001=O tipo '{0}' não possui uma implementação para '{1}' e será marcado como abstrato.
 
 ; BooC Command Line Errors
 BCE0500=Arquivo '{0}' listado mais de uma vez.
@@ -96,6 +108,7 @@ Boo.Lang.Compiler.GlobalNamespaceIsNotSet=O namespace global não foi configurad
 
 ;BooC Messages
 BooC.Errors={0} erro(s).
+BooC.Warnings={0} aviso(s).
 BooC.ProcessingTime={0} módulo(s) processado(s) em {1}ms após {2}ms para configuração do ambiente de compilação.
 BooC.FatalError=Erro fatal: {0}.
 BooC.InvalidOption=Opção inválida: {0}.

@@ -40,7 +40,7 @@ namespace BooCompiler.Tests
 	[TestFixture]
 	public class LocalizationTestCase
 	{
-		const string TestCase = "foo def";
+		const string TestCase = "foo class";
 		
 		[Test]
 		public void TestNeutralCulture()
@@ -74,8 +74,8 @@ namespace BooCompiler.Tests
 				
 				CompilerErrorCollection errors = compiler.Run().Errors;
 	
-				Assertion.AssertEquals(1, errors.Count);
-				Assertion.AssertEquals(message, errors[0].Message);
+				Assert.AreEqual(1, errors.Count);
+				Assert.AreEqual(message, errors[0].Message);
 			}
 			finally
 			{

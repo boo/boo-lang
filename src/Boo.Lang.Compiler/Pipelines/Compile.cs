@@ -35,6 +35,7 @@ namespace Boo.Lang.Compiler.Pipelines
 	{
 		public Compile()
 		{			
+			Add(new PreErrorChecking());
 			Add(new InitializeNameResolutionService());
 			Add(new IntroduceGlobalNamespaces());
 			Add(new TransformCallableDefinitions());
@@ -51,12 +52,13 @@ namespace Boo.Lang.Compiler.Pipelines
 			Add(new BindBaseTypes());
 			
 			Add(new BindTypeMembers());			
-			Add(new ProcessMethodBodies());
+			Add(new HuntDucks());
 			Add(new StricterErrorChecking());
 			
+			Add(new ProcessSharedLocals()); 
 			Add(new ProcessClosures());
 			Add(new ProcessGenerators());
-			Add(new CheckInterfaceImplementations());
+			
 			Add(new InjectCallableConversions());
 			Add(new ImplementICallableOnCallableDefinitions());			
 		}

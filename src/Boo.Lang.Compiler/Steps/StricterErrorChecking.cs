@@ -29,12 +29,16 @@
 namespace Boo.Lang.Compiler.Steps
 {
 	using System;
+	using System.Collections;
+	using Boo.Lang;
 	using Boo.Lang.Compiler;
 	using Boo.Lang.Compiler.Ast;
 	using Boo.Lang.Compiler.TypeSystem;
 	
 	public class StricterErrorChecking : AbstractVisitorCompilerStep
 	{
+		Hashtable _members = new Hashtable();
+		
 		override public void Run()
 		{
 			if (0 == Errors.Count)
@@ -43,7 +47,169 @@ namespace Boo.Lang.Compiler.Steps
 			}
 		}
 		
-		override public void OnMethodInvocationExpression(MethodInvocationExpression node)
+		override public void Dispose()
+		{
+			_members.Clear();
+			base.Dispose();
+		}
+		
+		override public void LeaveEnumDefinition(EnumDefinition node)
+		{
+			_members.Clear();
+			foreach (TypeMember member in node.Members)
+			{
+				if (_members.ContainsKey(member.Name))
+				{
+					MemberNameConflict(member);
+				}
+				else
+				{
+					_members[member.Name] = member;
+				}
+			}
+		}
+		
+		override public void LeaveClassDefinition(ClassDefinition node)
+		{
+			CheckMembers(node);
+		}
+		
+		override public void LeaveInterfaceDefinition(InterfaceDefinition node)
+		{
+			CheckMembers(node);
+		}
+		
+		void CheckMembers(TypeDefinition node)
+		{
+			_members.Clear();
+			
+			foreach (TypeMember member in node.Members)
+			{
+				List list = GetMemberList(member.Name);
+				switch (member.NodeType)
+				{
+					case NodeType.Constructor:
+					case NodeType.Method:
+					{
+						CheckMethodMember(list, (Method)member);
+						break;
+					}
+					
+					default:
+					{
+						CheckMember(list, member);
+						break;
+					}
+				}
+				list.Add(member);
+			}
+		}
+		
+		void CheckMember(List existing, TypeMember member)
+		{
+			if (existing.Count > 0)
+			{
+				MemberNameConflict(member);
+			}
+		}
+		
+		void CheckMethodMember(List existing, TypeMember member)
+		{
+			NodeType expectedNodeType = member.NodeType;
+			foreach (TypeMember existingMember in existing)
+			{
+				if (expectedNodeType != existingMember.NodeType)
+				{
+					MemberNameConflict(member);
+				}
+				else
+				{
+					if (existingMember.IsStatic == member.IsStatic)
+					{
+						if (AreParametersTheSame(existingMember, member))
+						{
+							MemberConflict(member, TypeSystemServices.GetSignature((IMethod)member.Entity, false));
+						}
+					}
+				}
+			}
+		}
+		
+		bool AreParametersTheSame(TypeMember lhs, TypeMember rhs)
+		{
+			IParameter[] lhsParameters = ((InternalMethod)lhs.Entity).GetParameters();
+			IParameter[] rhsParameters = ((InternalMethod)rhs.Entity).GetParameters();
+			if (lhsParameters.Length != rhsParameters.Length)
+			{
+				return false;
+			}
+			for (int i=0; i<lhsParameters.Length; ++i)
+			{
+				if (lhsParameters[i].Type != rhsParameters[i].Type)
+				{
+					return false;
+				}
+			}
+			return true;
+		}
+		
+		void MemberNameConflict(TypeMember member)
+		{
+			MemberConflict(member, member.Name);
+		}
+		
+		void MemberConflict(TypeMember member, string memberName)
+		{
+			Error(CompilerErrorFactory.MemberNameConflict(member, member.DeclaringType.FullName, memberName));
+		}
+		
+		List GetMemberList(string name)
+		{
+			List list = (List)_members[name];
+			if (null == list)
+			{
+				list = new List();
+				_members[name] = list;
+			}
+			return list;
+		}
+		
+		override public void LeaveMethod(Method node)
+		{
+			InternalMethod derived = (InternalMethod)node.Entity;
+			IMethod super = derived.Override;
+			if (null != super)
+			{
+				TypeMemberModifiers derivedAccess = TypeSystemServices.GetAccess(derived);
+				TypeMemberModifiers superAccess = TypeSystemServices.GetAccess(super);
+				if (derivedAccess < superAccess)
+				{
+					Error(CompilerErrorFactory.DerivedMethodCannotReduceAccess(
+								node,
+								derived.FullName,
+								super.FullName,
+								derivedAccess,
+								superAccess));
+				}
+			}
+		}
+		
+		override public void LeaveConstructor(Constructor node)
+		{
+			if (node.IsStatic)
+			{
+				if (!node.IsPublic)
+				{
+					Error(CompilerErrorFactory.StaticConstructorMustBePublic(node));
+				}
+				if (node.Parameters.Count != 0)
+				{
+					Error(CompilerErrorFactory.StaticConstructorCannotDeclareParameters(node));
+				}
+			}
+		}
+		
+		override public void LeaveMethodInvocationExpression(MethodInvocationExpression node)
 		{
 			if (IsAddressOfBuiltin(node.Target))
 			{
@@ -61,21 +227,15 @@ namespace Boo.Lang.Compiler.Steps
 			{
 				if (IsDelegateConstructorInvocation(mie))
 				{
-					return mie.Arguments[2] == node;
+					return mie.Arguments[1] == node;
 				}
 			}
 			return false;
 		}
 		
-		bool IsConstructorReference(Expression expression)
-		{
-			return expression is ReferenceExpression &&
-				EntityType.Constructor == expression.Entity.EntityType;
-		}
-		
 		bool IsDelegateConstructorInvocation(MethodInvocationExpression node)
 		{
-			IConstructor constructor = node.Target as IConstructor;
+			IConstructor constructor = node.Target.Entity as IConstructor;
 			if (null != constructor)
 			{
 				return constructor.DeclaringType is ICallableType;
@@ -85,8 +245,7 @@ namespace Boo.Lang.Compiler.Steps
 		
 		bool IsAddressOfBuiltin(Expression node)
 		{
-			BuiltinFunction function = node.Entity as BuiltinFunction; 
-			return null != function && BuiltinFunctionType.AddressOf == function.FunctionType;
+			return BuiltinFunction.AddressOf == node.Entity;
 		}
 	}
 }

@@ -53,6 +53,15 @@ namespace Boo.Lang.Compiler.TypeSystem
 			}
 		}
 		
+		public Boo.Lang.Compiler.Ast.Attribute CreateAttribute(IConstructor constructor, Expression arg)
+		{
+			Boo.Lang.Compiler.Ast.Attribute attribute = new Boo.Lang.Compiler.Ast.Attribute();
+			attribute.Name = constructor.DeclaringType.FullName;
+			attribute.Entity = constructor;
+			attribute.Arguments.Add(arg);
+			return attribute;
+		}
+		
 		public BooClassBuilder CreateClass(string name)
 		{
 			return new BooClassBuilder(this, name);
@@ -71,6 +80,15 @@ namespace Boo.Lang.Compiler.TypeSystem
 			expression.Type = CreateTypeReference(type);
 			expression.Target = target;
 			expression.ExpressionType = type;
+			return expression;
+		}
+		
+		public Expression CreateTypeofExpression(IType type)
+		{
+			TypeofExpression expression = new TypeofExpression();
+			expression.Type = CreateTypeReference(type);
+			expression.ExpressionType = _tss.TypeType;
+			expression.Entity = type;
 			return expression;
 		}
 		
@@ -379,6 +397,15 @@ namespace Boo.Lang.Compiler.TypeSystem
 			return method;
 		}
 		
+		public Property CreateProperty(string name, IType type)
+		{
+			Property property = new Property(name);
+			property.Modifiers = TypeMemberModifiers.Public;
+			property.Type = CreateTypeReference(type);
+			property.Entity = new InternalProperty(_tss, property);
+			return property;
+		}
+		
 		public Field CreateField(string name, IType type)
 		{
 			Field field = new Field();
@@ -422,7 +449,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 			IParameter[] parameters = baseMethod.GetParameters();
 			for (int i=0; i<parameters.Length; ++i)
 			{
-				method.Parameters.Add(new ParameterDeclaration("arg" + i, CreateTypeReference(parameters[i].Type)));
+				method.Parameters.Add(CreateParameterDeclaration(i + 1, "arg" + i, parameters[i].Type));
 			}
 			method.ReturnType = CreateTypeReference(baseMethod.ReturnType);			
 			method.Entity = new InternalMethod(_tss, method);

@@ -87,14 +87,11 @@ class BooTask(AbstractBooTask):
 		set:
 			_src = value
 			
-	override protected def ExecuteTask():
+	override def ExecuteTask():
 		
 		compiler = BooCompiler()
 		parameters = compiler.Parameters
 		parameters.OutputType = CompilerOutputType.Library
-		parameters.Pipeline = CompileToMemory()
-		parameters.Pipeline.Insert(1, PrepareScriptStep())
-		
 		if _src:
 			parameters.Input.Add(FileInput(_src.ToString()))
 		else:
@@ -114,6 +111,11 @@ class BooTask(AbstractBooTask):
 			script.Run()
 		except x:
 			raise BuildException(x.Message, Location, x)
+			
+	override def GetDefaultPipeline():
+		pipeline = CompileToMemory()
+		pipeline.Insert(1, PrepareScriptStep())
+		return pipeline
 			
 	private def getSourceCode():
 		codeNode = self.XmlNode.SelectSingleNode("code")

@@ -48,22 +48,6 @@ namespace Boo.Lang.Compiler.Ast
 			Name = name;
 		}
 		
-		public bool IsOverride
-		{
-			get
-			{
-				return IsModifierSet(TypeMemberModifiers.Override);
-			}
-		}
-		
-		public bool IsVirtual
-		{
-			get
-			{
-				return IsModifierSet(TypeMemberModifiers.Virtual);
-			}
-		}
-		
 		public bool IsRuntime
 		{
 			get

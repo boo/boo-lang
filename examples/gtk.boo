@@ -36,7 +36,8 @@ window = Window("Button Tester",
 				DefaultHeight: 150,
 				DeleteEvent: Application.Quit)
 				
-window.Add(Button("Click Me!", Clicked: <print("button clicked!")>))
+window.Add(Button("Click Me!",
+				Clicked: <print("button clicked!")>))
 window.ShowAll()
 
 Application.Run()

@@ -32,7 +32,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 	using Boo.Lang.Compiler;
 	using Boo.Lang.Compiler.Ast;
 	
-	public class InternalCallableType : InternalType, ICallableType
+	public class InternalCallableType : InternalClass, ICallableType
 	{
 		CallableSignature _signature;
 		

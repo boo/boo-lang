@@ -50,7 +50,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 			_codeBuilder = codeBuilder;
 			_cd = new ClassDefinition();
 			_cd.Name = name;
-			_cd.Entity = new InternalType(_codeBuilder.TypeSystemServices, _cd);
+			_cd.Entity = new InternalClass(_codeBuilder.TypeSystemServices, _cd);
 		}
 		
 		public BooCodeBuilder CodeBuilder
@@ -101,6 +101,11 @@ namespace Boo.Lang.Compiler.TypeSystem
 			{
 				_cd.LexicalInfo = value;
 			}
+		}
+		
+		public void AddAttribute(Boo.Lang.Compiler.Ast.Attribute attribute)
+		{
+			_cd.Attributes.Add(attribute);
 		}
 		
 		public void AddBaseType(IType type)

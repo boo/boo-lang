@@ -441,6 +441,51 @@ namespace Boo.Lang.Compiler
 			return new CompilerError("BCE0082", node.LexicalInfo, typeName);
 		}
 		
+		public static CompilerError StaticConstructorMustBePublic(Node node)
+		{
+			return new CompilerError("BCE0083", node.LexicalInfo);
+		}
+		
+		public static CompilerError StaticConstructorCannotDeclareParameters(Node node)
+		{
+			return new CompilerError("BCE0084", node.LexicalInfo);
+		}
+		
+		public static CompilerError CantCreateInstanceOfAbstractType(Node node, string typeName)
+		{
+			return new CompilerError("BCE0085", node.LexicalInfo, typeName);
+		}
+		
+		public static CompilerError CantCreateInstanceOfInterface(Node node, string typeName)
+		{
+			return new CompilerError("BCE0086", node.LexicalInfo, typeName);
+		}
+		
+		public static CompilerError CantCreateInstanceOfEnum(Node node, string typeName)
+		{
+			return new CompilerError("BCE0087", node.LexicalInfo, typeName);
+		}
+		
+		public static CompilerError ReservedPrefix(Node node, string prefix)
+		{
+			return new CompilerError("BCE0088", node.LexicalInfo, prefix); 
+		}
+		
+		public static CompilerError MemberNameConflict(Node node, string typeName, string memberName)
+		{
+			return new CompilerError("BCE0089", node.LexicalInfo, typeName, memberName);
+		}
+		
+		public static CompilerError DerivedMethodCannotReduceAccess(Node node, string derivedMethod, string superMethod, TypeMemberModifiers derivedAccess, TypeMemberModifiers superAccess)
+		{
+			return new CompilerError("BCE0090", node.LexicalInfo, derivedMethod, superMethod, superAccess.ToString().ToLower(), derivedAccess.ToString().ToLower());
+		}
+		
+		public static CompilerError EventIsNotAnExpression(Node node, string eventName)
+		{
+			return new CompilerError("BCE0091", node.LexicalInfo, eventName);
+		}
+		
 		public static string ToStringList(System.Collections.IEnumerable names)
 		{
 			StringBuilder builder = new StringBuilder();

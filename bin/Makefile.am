@@ -1,11 +1,11 @@
 boodir = $(prefix)/lib/boo
 boo_DATA = booc.exe booi.exe booish.exe booc.rsp
 
-BOO_GAC_DLLS = Boo.dll \
+BOO_GAC_DLLS = Boo.Lang.dll \
 	       Boo.Lang.Compiler.dll \
 	       Boo.Lang.Parser.dll \
 	       Boo.Lang.Interpreter.dll \
-	       Boo.CodeDom.dll
+	       Boo.Lang.CodeDom.dll
 
 install-data-hook:
 	for lib in $(BOO_GAC_DLLS); do					\

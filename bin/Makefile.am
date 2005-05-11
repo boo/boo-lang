@@ -2,6 +2,7 @@ boodir = $(prefix)/lib/boo
 boo_DATA = booc.exe booi.exe booish.exe booc.rsp
 
 BOO_GAC_DLLS = Boo.Lang.dll \
+               Boo.Lang.Useful.dll \
 	       Boo.Lang.Compiler.dll \
 	       Boo.Lang.Parser.dll \
 	       Boo.Lang.Interpreter.dll \

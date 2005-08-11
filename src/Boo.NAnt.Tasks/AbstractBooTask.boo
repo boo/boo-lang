@@ -29,6 +29,7 @@
 namespace Boo.NAnt
 
 import System
+import System.Text
 import System.Diagnostics
 import System.IO
 import NAnt.Core
@@ -42,11 +43,6 @@ abstract class AbstractBooTask(Task):
 	
 	_pipeline as string
 	
-	def constructor():
-		baseAssemblyFolder = Path.GetDirectoryName(GetType().Assembly.Location)
-		System.Reflection.Assembly.LoadFrom(
-			Path.Combine(baseAssemblyFolder, "Boo.Lang.Parser.dll"))
-			
 	[BuildElement("references")]
 	References:
 		get:
@@ -96,7 +92,7 @@ abstract class AbstractBooTask(Task):
 				parameters.References.Add(asm)
 			except x:
 				raise BuildException(
-					Boo.ResourceManager.Format("BCE0041", reference),
+					Boo.Lang.ResourceManager.Format("BCE0041", reference),
 					Location,
 					x)
 	
@@ -132,3 +128,12 @@ abstract class AbstractBooTask(Task):
 		
 	def LogError(message):
 		self.Log(Level.Error, "${message}")
+		
+def read(fname as string):
+	using reader=File.OpenText(fname):
+		return reader.ReadToEnd()
+	
+def write(fname as string, contents as string):
+	using writer=StreamWriter(fname, false, System.Text.Encoding.UTF8):
+		writer.Write(contents)
+

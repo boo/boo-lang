@@ -89,6 +89,16 @@ namespace Boo.Lang.Compiler.TypeSystem
 		IMethod GetAddMethod();
 		IMethod GetRemoveMethod();
 		IMethod GetRaiseMethod();
+
+		bool IsAbstract
+		{
+			get;
+		}
+
+		bool IsVirtual
+		{
+			get;
+		}
 	}
 	
 	public interface IField : IAccessibleMember
@@ -259,6 +269,10 @@ namespace Boo.Lang.Compiler.TypeSystem
 	}
 	
 	public interface IConstructor : IMethod
+	{		
+	}
+
+	public interface IDestructor : IMethod
 	{		
 	}
 }

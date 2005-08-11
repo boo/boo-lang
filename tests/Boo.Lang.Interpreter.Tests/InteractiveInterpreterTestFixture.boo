@@ -38,20 +38,6 @@ class InteractiveInterpreterTestFixture:
 	
 	public static LifeTheUniverseAndEverything = 42
 	
-	class ConsoleCapture(IDisposable):	
-		_console = StringWriter()
-		_old
-		
-		def constructor():
-			_old = Console.Out
-			Console.SetOut(_console)
-			
-		override def ToString():
-			return _console.ToString()
-		
-		def Dispose():
-			Console.SetOut(_old)
-
 	_interpreter as InteractiveInterpreter
 	
 	[SetUp]
@@ -71,6 +57,14 @@ class InteractiveInterpreterTestFixture:
 			Eval("print(name);print(age)")
 		newLine = Environment.NewLine
 		Assert.AreEqual("boo${newLine}3${newLine}", console.ToString())
+		
+	[Test]
+	def LoopEvalCapturesConsoleOut():
+		lines = []
+		_interpreter.Print = { line | lines.Add(line) }
+		_interpreter.LoopEval("System.Console.WriteLine('Hello, world')")
+		Assert.AreEqual(1, len(lines))
+		Assert.AreEqual("Hello, world", lines[0])
 		
 	[Test]
 	def Unpacking():
@@ -151,6 +145,18 @@ p as object = Person(Name: 'John')
 		assert "John" == _interpreter.GetValue("name")
 		
 	[Test]
+	def TreatObjectsAsDucksCanBeDisabled():
+		Eval("""
+class Person:
+	[property(Name)] _name = ''
+	
+p as object = Person(Name: 'John')
+""")
+		_interpreter.Ducky = false
+		result = _interpreter.Eval("name = p.Name")
+		assert 1 == len(result.Errors)
+		
+	[Test]
 	def InterpreterRememberDeclaredTypes():
 		Eval("i as object = 3")
 		assert 3 == _interpreter.GetValue("i")
@@ -206,10 +212,12 @@ class Language:
 	
 		Eval("language = Language()")
 		language as duck = _interpreter.GetValue("language")
+		assert language is not null
 		assert 'boo' == language.Name
 		
 		Eval("language = Language(Name: 'portuguese')")
 		language = _interpreter.GetValue("language")
+		assert language is not null
 		assert 'portuguese' == language.Name
 
 	[Test]
@@ -387,12 +395,7 @@ dummy()""")
 			pass
 		
 	[Test]
-	def Help():
-		
-		buffer = System.IO.StringWriter()
-		buffer.WriteLine()		
-		_interpreter.Print = { item | buffer.WriteLine(item) }		
-		_interpreter.help(Customer)
+	def HelpOnClass():
 		
 		expected = """
 class Customer(object):
@@ -418,6 +421,25 @@ class Customer(object):
     event Changed as System.EventHandler
 
 """
+		assertHelp(expected, Customer)
+		
+	[Test]
+	def HelpOnInterface():
+			
+		expected = """
+interface IDisposable():
+
+    def Dispose() as void
+
+"""
+		assertHelp(expected, System.IDisposable)
+		
+	def assertHelp(expected as string, type as System.Type):
+		buffer = System.IO.StringWriter()
+		buffer.WriteLine()		
+		_interpreter.Print = { item | buffer.WriteLine(item) }		
+		_interpreter.help(type)
+		
 		actual = buffer.ToString().Replace("\r\n", "\n")
 		
 		# mono compatibility fix

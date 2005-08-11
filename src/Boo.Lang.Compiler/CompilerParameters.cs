@@ -1,4 +1,4 @@
-﻿#region license
+#region license
 // Copyright (c) 2004, Rodrigo B. de Oliveira (rbo@acm.org)
 // All rights reserved.
 // 
@@ -56,6 +56,10 @@ namespace Boo.Lang.Compiler
 		
 		bool _debug;
 		
+		bool _ducky;
+		
+		bool _generateInMemory;
+		
 		public readonly TraceSwitch TraceSwitch = new TraceSwitch("booc", "boo compiler");
 
 		public CompilerParameters()
@@ -73,6 +77,7 @@ namespace Boo.Lang.Compiler
 			_outputType = CompilerOutputType.ConsoleApplication;
 			_outputWriter = System.Console.Out;
 			_debug = true;
+			_generateInMemory = true;
 		}
 
 		/// <summary>
@@ -182,6 +187,19 @@ namespace Boo.Lang.Compiler
 			}
 		}
 		
+		public bool GenerateInMemory
+		{
+			get
+			{
+				return _generateInMemory;
+			}
+			
+			set
+			{
+				_generateInMemory = value;
+			}
+		}
+		
 		public TextWriter OutputWriter
 		{
 			get
@@ -209,6 +227,22 @@ namespace Boo.Lang.Compiler
 			set
 			{
 				_debug = value;
+			}
+		}
+		
+		/// <summary>
+		/// Use duck instead of object as the most generic type.
+		/// </summary>
+		public bool Ducky
+		{
+			get
+			{
+				return _ducky;
+			}
+			
+			set
+			{
+				_ducky = value;
 			}
 		}
 	}

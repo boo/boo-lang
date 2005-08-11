@@ -43,7 +43,7 @@ namespace Boo.Lang.Compiler.Ast
 			Name = name;
 		}
 		
-		public Property(Method getter, Method setter, TypeReference type) : base(getter, setter, type)
+		public Property(Method getter, Method setter, TypeReference type) : base(getter, setter, type, null)
 		{
 		}
 		

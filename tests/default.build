@@ -9,13 +9,7 @@
 			<formatter type="Plain" />
 			<test>
 				<assemblies basedir="build">				
-					<include name="Boo.Tests.dll" />
-					<include name="Boo.Lang.Parser.Tests.dll" />
-					<include name="Boo.Lang.Compiler.Tests.dll" />
-					<include name="Boo.Lang.Interpreter.Tests.dll" />
-					<include name="BooCompiler.Tests.dll" />					
-					<include name="BooCompilerResources.Tests.dll" />					
-					<include name="Regression.Tests.dll" />					
+					<include name="*.Tests.dll" />					
 				</assemblies>
 			</test>
 		</nunit2>
@@ -37,7 +31,8 @@
 		
 		<csc
 			target="library"
-			output="build/BooCompiler.Tests.dll">
+			output="build/BooCompiler.Tests.dll"
+			unsafe="true">
 			
 			<sources>
 				<include name="BooCompiler.Tests/**/*.cs" />
@@ -49,11 +44,12 @@
 				<include name="build/AttributesTestFixture.cs" />
 				<include name="build/SemanticsTestFixture.cs" />
 				<include name="build/MacrosTestFixture.cs" />
+				<include name="build/DuckyTestFixture.cs" />
 			</sources>
 			
 			<references basedir="build">
 				<include name="${nunit.framework.dll}" />
-				<include name="Boo.dll" />
+				<include name="Boo.Lang.dll" />
 				<include name="Boo.Lang.Compiler.dll" />
 				<include name="BooModules.dll" />
 			</references>
@@ -61,14 +57,28 @@
 	
 		<booc
 			target="library"
-			output="build/Boo.Tests.dll">
+			output="build/Boo.Lang.Tests.dll">
 
-			<sources basedir="Boo.Tests">
+			<sources basedir="Boo.Lang.Tests">
 				<include name="**/*.boo" />
 			</sources>
 
 			<references>
 				<include name="${nunit.framework.dll}" />
+			</references>
+		</booc>
+		
+		<booc
+			target="library"
+			output="build/Boo.Lang.Useful.Tests.dll">
+
+			<sources basedir="Boo.Lang.Useful.Tests">
+				<include name="**/*.boo" />
+			</sources>
+
+			<references basedir="build">
+				<include name="${nunit.framework.dll}" />
+				<include name="Boo.Lang.Useful.dll" />
 			</references>
 		</booc>
 		
@@ -108,6 +118,20 @@
 			
 			<references basedir="build">
 				<include name="Boo.Lang.Interpreter.dll" />
+				<include name="${nunit.framework.dll}" />
+			</references>
+		</booc>
+		
+		<booc
+			target="library"
+			output="build/Boo.Lang.CodeDom.Tests.dll">
+			
+			<sources basedir="Boo.Lang.CodeDom.Tests">
+				<include name="**/*.boo" />
+			</sources>
+			
+			<references basedir="build">
+				<include name="Boo.Lang.CodeDom.dll" />
 				<include name="${nunit.framework.dll}" />
 			</references>
 		</booc>

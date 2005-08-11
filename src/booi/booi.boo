@@ -73,24 +73,32 @@ def Main(argv as (string)):
 		return -1
 		
 	compiler = BooCompiler()
-	
 	compiler.Parameters.Pipeline = CompileToMemory()	
 	
-	if "-" == argv[0]:
-		compiler.Parameters.Input.Add(StringInput("<stdin>", consume(Console.In)))
-	else:
-		compiler.Parameters.Input.Add(FileInput(argv[0]))
+	for arg in argv:
+		if "-" == arg:
+			compiler.Parameters.Input.Add(StringInput("<stdin>", consume(Console.In)))
+			break
+		elif "-ducky" == arg:
+			compiler.Parameters.Ducky = true
+		elif "-w" == arg:
+			printWarnings = true
+		else:
+			compiler.Parameters.Input.Add(FileInput(arg))
+			break
 	
 	resolver = AssemblyResolver()
 	AppDomain.CurrentDomain.AssemblyResolve += resolver.AssemblyResolve
 	result = compiler.Run()
+	if printWarnings and len(result.Warnings):
+		print(result.Warnings.ToString())
 	if len(result.Errors):
 		print(result.Errors.ToString(true))
 		return -1
 	else:	
 		try: 
 			resolver.AddAssembly(result.GeneratedAssembly)
-			result.GeneratedAssemblyEntryPoint.Invoke(null, (argv[1:],))			
+			result.GeneratedAssembly.EntryPoint.Invoke(null, (argv[1:],))			
 		except x as TargetInvocationException:
 			print(x.InnerException)
 			return -1

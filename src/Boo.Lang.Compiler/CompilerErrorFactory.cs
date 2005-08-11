@@ -1,10 +1,10 @@
 ﻿#region license
 // Copyright (c) 2004, Rodrigo B. de Oliveira (rbo@acm.org)
 // All rights reserved.
-// 
+//
 // Redistribution and use in source and binary forms, with or without modification,
 // are permitted provided that the following conditions are met:
-// 
+//
 //     * Redistributions of source code must retain the above copyright notice,
 //     this list of conditions and the following disclaimer.
 //     * Redistributions in binary form must reproduce the above copyright notice,
@@ -13,7 +13,7 @@
 //     * Neither the name of Rodrigo B. de Oliveira nor the names of its
 //     contributors may be used to endorse or promote products derived from this
 //     software without specific prior written permission.
-// 
+//
 // THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
 // ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
 // WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
@@ -99,7 +99,7 @@ namespace Boo.Lang.Compiler
 		public static CompilerError AstAttributeMustBeExternal(Node node, string attributeType)
 		{
 			return new CompilerError("BCE0010", node.LexicalInfo, attributeType);
-		}		
+		}
 		
 		public static CompilerError StepExecutionError(Exception error, ICompilerStep step)
 		{
@@ -145,10 +145,10 @@ namespace Boo.Lang.Compiler
 		{
 			return new CompilerError("BCE0019", node.LexicalInfo, node.Name, namespace_);
 		}
-		
-		public static CompilerError MemberNeedsInstance(Node node, string memberName)
+
+		public static CompilerError InstanceRequired(Node node, string typeName, string memberName)
 		{
-			return new CompilerError("BCE0020", node.LexicalInfo, memberName);
+			return new CompilerError("BCE0020", node.LexicalInfo, typeName, memberName);
 		}
 		
 		public static CompilerError InvalidNamespace(Import import)
@@ -209,6 +209,11 @@ namespace Boo.Lang.Compiler
 		public static CompilerError ExpressionMustBeExecutedForItsSideEffects(Node node)
 		{
 			return new CompilerError("BCE0034", node.LexicalInfo);
+		}
+
+		public static CompilerError ConflictWithInheritedMember(Node node, string member, string baseMember)
+		{
+			return new CompilerError("BCE0035", node.LexicalInfo, member, baseMember);
 		}
 		
 		public static CompilerError InvalidTypeof(Node node)
@@ -315,11 +320,15 @@ namespace Boo.Lang.Compiler
 		{
 			return new CompilerError("BCE0057", node.LexicalInfo, name);
 		}
-		
+
+		/*
+		 * 
+		 * Deprecated
 		public static CompilerError ObjectRequired(Node node)
 		{
 			return new CompilerError("BCE0058", node.LexicalInfo);
 		}
+		*/
 		
 		public static CompilerError InvalidLockMacroArguments(Node node)
 		{
@@ -376,9 +385,9 @@ namespace Boo.Lang.Compiler
 			return new CompilerError("BCE0069", node.LexicalInfo, interfaceName, baseType);
 		}
 		
-		public static CompilerError RecursiveMethodWithoutReturnType(Node node)
+		public static CompilerError UnresolvedDependency(Node node, string source, string target)
 		{
-			return new CompilerError("BCE0070", node.LexicalInfo);
+			return new CompilerError("BCE0070", node.LexicalInfo, source, target);
 		}
 		
 		public static CompilerError InheritanceCycle(Node node, string typeName)
@@ -468,7 +477,7 @@ namespace Boo.Lang.Compiler
 		
 		public static CompilerError ReservedPrefix(Node node, string prefix)
 		{
-			return new CompilerError("BCE0088", node.LexicalInfo, prefix); 
+			return new CompilerError("BCE0088", node.LexicalInfo, prefix);
 		}
 		
 		public static CompilerError MemberNameConflict(Node node, string typeName, string memberName)
@@ -571,6 +580,51 @@ namespace Boo.Lang.Compiler
 			return new CompilerError("BCE0108", node.LexicalInfo);
 		}
 		
+		public static CompilerError InvalidArrayRank(Node node, string arrayName, int real, int given)
+		{
+			return new CompilerError("BCE0109", node.LexicalInfo, arrayName, real, given);
+		}
+		
+		public static CompilerError NotANamespace(Node node, string name)
+		{
+			return new CompilerError("BCE0110", node.LexicalInfo, name);
+		}
+
+		public static CompilerError InvalidDestructorModifier(Node node)
+		{
+			return new CompilerError("BCE0111", node.LexicalInfo);
+		}
+		
+		public static CompilerError CantHaveDestructorParameters(Node node)
+		{
+			return new CompilerError("BCE0112", node.LexicalInfo);
+		}
+		
+		public static CompilerError InvalidCharLiteral(Node node, string value)
+		{
+			return new CompilerError("BCE0113", node.LexicalInfo, value);
+		}
+		
+		public static CompilerError InvalidInterfaceForInterfaceMember(Node node, string value)
+		{
+			return new CompilerError("BCE0114", node.LexicalInfo, value);
+		}
+
+		public static CompilerError InterfaceImplForInvalidInterface(Node node, string iface, string item)
+		{
+			return new CompilerError("BCE0115", node.LexicalInfo, iface, item);
+		}
+		
+		public static CompilerError ExplicitImplMustNotHaveModifiers(Node node, string iface, string item)
+		{
+			return new CompilerError("BCE0116", node.LexicalInfo, iface, item);
+		}
+
+		public static CompilerError FieldIsReadonly(Node node, string name)
+		{
+			return new CompilerError("BCE0117", node.LexicalInfo, name);
+		}
+		
 		public static string ToStringList(System.Collections.IEnumerable names)
 		{
 			StringBuilder builder = new StringBuilder();
@@ -588,7 +642,7 @@ namespace Boo.Lang.Compiler
 		public static string ToAssemblyQualifiedNameList(List types)
 		{
 			StringBuilder builder = new StringBuilder();
-			builder.Append(((Type)types[0]).AssemblyQualifiedName);			
+			builder.Append(((Type)types[0]).AssemblyQualifiedName);
 			for (int i=1; i<types.Count; ++i)
 			{
 				builder.Append(", ");
@@ -613,7 +667,7 @@ namespace Boo.Lang.Compiler
 			}
 			sb.Append(")");
 			return sb.ToString();
-		}		
+		}
 
 		public static string ToNameList(System.Reflection.MemberInfo[] members)
 		{

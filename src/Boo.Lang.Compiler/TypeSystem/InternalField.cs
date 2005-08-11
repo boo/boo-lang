@@ -28,18 +28,15 @@
 
 namespace Boo.Lang.Compiler.TypeSystem
 {
-	using System;
 	using Boo.Lang.Compiler.Ast;
 	
 	public class InternalField : IInternalEntity, IField
 	{
-		TypeSystemServices _typeSystemServices;
 		Field _field;
 		object _staticValue;
 		
-		public InternalField(TypeSystemServices tagManager, Field field)
+		public InternalField(Field field)
 		{
-			_typeSystemServices = tagManager;
 			_field = field;
 		}
 		
@@ -95,7 +92,9 @@ namespace Boo.Lang.Compiler.TypeSystem
 		{
 			get
 			{
-				return TypeSystemServices.GetType(_field.Type);
+				return null != _field.Type 
+					? TypeSystemServices.GetType(_field.Type)
+					: Unknown.Default;
 			}
 		}
 		

@@ -41,7 +41,7 @@ class MainForm(Form):
 	_timer as Timer
 	
 	[getter(Settings)]
-	_settings = LoadSettings()
+	_settings as BooxSettings = LoadSettings()
 
 	[getter(DocumentOutline)]
 	_documentOutline = BooExplorer.DocumentOutline()
@@ -93,6 +93,10 @@ class MainForm(Form):
 		self.Text = "Boo Explorer"
 		self.IsMdiContainer = true
 
+		_container.Add(_interactiveConsole)
+		_container.Add(_documentOutline)
+		_container.Add(_taskList)
+		_container.Add(_outputPane)
 		_container.Add(_dockPanel)
 		_container.Add(_status)
 		
@@ -107,6 +111,7 @@ class MainForm(Form):
 		_timer.Enabled = true
 		
 	override def Dispose(flag as bool):
+		SaveDockState()
 		_container.Dispose()
 		super(flag)
 		
@@ -373,10 +378,6 @@ class MainForm(Form):
 			editor.Open(content) if File.Exists(content)
 			return editor
 		raise ArgumentException("Invalid persistence string: ${persistString}")
-		
-	override protected def OnClosed(args as EventArgs):		
-		SaveDockState()
-		super(args)
 
 	override protected def OnClosing(args as CancelEventArgs):
 		super(args)

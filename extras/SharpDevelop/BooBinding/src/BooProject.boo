@@ -42,7 +42,7 @@ class BooProject(AbstractProject):
 	def constructor(info as ProjectCreateInformation, projectOptions as XmlElement):
 		parserService as IParserService = ServiceManager.Services.GetService(typeof(IParserService))
 		booDir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location)
-		parserService.AddReferenceToCompletionLookup(self, ProjectReference(ReferenceType.Assembly, Path.Combine(booDir, "Boo.dll")))
+		parserService.AddReferenceToCompletionLookup(self, ProjectReference(ReferenceType.Assembly, Path.Combine(booDir, "Boo.Lang.dll")))
 		if info != null:
 			Name = info.ProjectName;
 			debugConf as BooCompilerParameters = CreateConfiguration("Debug")
@@ -58,8 +58,12 @@ class BooProject(AbstractProject):
 				if projectOptions != null:
 					target = projectOptions.GetAttribute("Target")
 					pauseConsoleOutput = projectOptions.GetAttribute("PauseConsoleOutput")
+					duckTypingByDefault = projectOptions.GetAttribute("duckTypingByDefault")
 					
 					if target != null and target != "":
 						parameter.CompileTarget = Enum.Parse(typeof(CompileTarget), target)
 					if pauseConsoleOutput != null and pauseConsoleOutput != "":
 						parameter.PauseConsoleOutput = Boolean.Parse(pauseConsoleOutput)
+					if duckTypingByDefault != null and duckTypingByDefault != "":
+						parameter.DuckTypingByDefault = Boolean.Parse(duckTypingByDefault)
+				

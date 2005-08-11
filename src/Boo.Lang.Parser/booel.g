@@ -35,7 +35,7 @@ options
 	defaultErrorHandler = false;
 	testLiterals = false;
 	importVocab = Boo;	
-	k = 2;
+	k = 3;
 	charVocabulary='\u0003'..'\uFFFE';
 	// without inlining some bitset tests, ANTLR couldn't do unicode;
 	// They need to make ANTLR generate smaller bitsets;
@@ -115,7 +115,19 @@ DIVISION:
 	;
 
 
-CMP_OPERATOR : '<' | "<=" | '>' | ">=" | "!~" | "!=";
+LESS_THAN: '<';
+
+SHIFT_LEFT: "<<";
+
+INPLACE_SHIFT_LEFT: "<<=";
+
+GREATER_THAN: '>';
+
+SHIFT_RIGHT: ">>";
+
+INPLACE_SHIFT_RIGHT: ">>=";
+
+CMP_OPERATOR :  "<=" | ">=" | "!~" | "!=";
 
 ASSIGN : '=' ( ('=' | '~') { $setType(CMP_OPERATOR); } )?;
 
@@ -137,11 +149,23 @@ protected
 SQS_ESC : '\\'! ( SESC | '\'' );
 
 protected
-SESC : 
-				( 'r' {$setText("\r"); }) |
-				( 'n' {$setText("\n"); }) |
-				( 't' {$setText("\t"); }) |
-				( '\\' {$setText("\\"); });
+SESC: 
+				( 'r'! {$setText("\r"); }) |
+				( 'n'! {$setText("\n"); }) |
+				( 't'! {$setText("\t"); }) |
+				( 'a'! {text.Length = _begin; text.Append("\a"); }) |
+				( 'b'! {text.Length = _begin; text.Append("\b"); }) |
+				( 'f'! {text.Length = _begin; text.Append("\f"); }) |
+				( '0'! {text.Length = _begin; text.Append("\0"); }) |
+				( 'u'!
+					HEXDIGIT HEXDIGIT HEXDIGIT HEXDIGIT
+					{
+						char ch = (char)int.Parse(text.ToString(_begin, 4), System.Globalization.NumberStyles.HexNumber);
+						text.Length = _begin;
+						text.Append(ch);
+					}
+				) |
+				( '\\'! {$setText("\\"); });
 
 protected
 RE_LITERAL : '/' (RE_CHAR)+ '/';

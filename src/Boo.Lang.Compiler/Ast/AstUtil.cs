@@ -30,6 +30,42 @@ namespace Boo.Lang.Compiler.Ast
 {	
 	public class AstUtil
 	{
+		public static Node GetMemberAnchor(Node node)
+		{
+			MemberReferenceExpression member = node as MemberReferenceExpression;
+			return member != null ? member.Target : node;
+		}
+
+		public static bool IsPostUnaryOperator(UnaryOperatorType op)
+		{
+			return UnaryOperatorType.PostIncrement == op ||
+				UnaryOperatorType.PostDecrement == op;
+		}
+
+		public static bool IsIncDec(Node node)
+		{
+			if (node.NodeType == NodeType.UnaryExpression)
+			{
+				UnaryOperatorType op = ((UnaryExpression)node).Operator;
+				return UnaryOperatorType.Increment == op ||
+					UnaryOperatorType.PostIncrement == op ||
+					UnaryOperatorType.Decrement == op ||
+					UnaryOperatorType.PostDecrement == op;
+			}
+			return false;
+		}
+
+		public static bool IsAssignment(Expression node)
+		{
+			if (node.NodeType == NodeType.BinaryExpression)
+			{
+				BinaryOperatorType binaryOperator = ((BinaryExpression)node).Operator;
+				return IsAssignmentOperator(binaryOperator);
+			}
+			return false;
+		}
+
+
 		public static ClassDefinition GetParentClass(Node node)
 		{
 			Node parent = node.ParentNode;
@@ -81,17 +117,36 @@ namespace Boo.Lang.Compiler.Ast
 		
 		public static bool IsListGenerator(Node node)
 		{			
-			if (NodeType.ListLiteralExpression == node.NodeType)
-			{
-				return IsListGenerator((ListLiteralExpression)node);
-			}
-			return false;
+			return NodeType.ListLiteralExpression == node.NodeType
+				? IsListGenerator((ListLiteralExpression)node)
+				: false;
 		}
 		
 		public static bool IsListGenerator(ListLiteralExpression node)
 		{
-			return 1 == node.Items.Count &&
-				NodeType.GeneratorExpression == node.Items[0].NodeType;
+			if (1 == node.Items.Count)
+			{
+				NodeType itemType = node.Items[0].NodeType;
+				return NodeType.GeneratorExpression == itemType;
+			}
+			return false;
+		}
+		
+		public static bool IsListMultiGenerator(Node node)
+		{			
+			return NodeType.ListLiteralExpression == node.NodeType
+				? IsListMultiGenerator((ListLiteralExpression)node)
+				: false;
+		}
+
+		public static bool IsListMultiGenerator(ListLiteralExpression node)
+		{
+			if (1 == node.Items.Count)
+			{
+				NodeType itemType = node.Items[0].NodeType;
+				return NodeType.ExtendedGeneratorExpression == itemType;
+			}
+			return false;
 		}		
 		
 		public static bool IsTargetOfMethodInvocation(Expression node)
@@ -133,8 +188,8 @@ namespace Boo.Lang.Compiler.Ast
 				if (node == be.Left)
 				{
 					BinaryOperatorType op = be.Operator;
-					return op == BinaryOperatorType.InPlaceAdd ||
-							op == BinaryOperatorType.InPlaceSubtract;
+					return op == BinaryOperatorType.InPlaceAddition ||
+							op == BinaryOperatorType.InPlaceSubtraction;
 				}
 			}
 			return false;
@@ -143,10 +198,14 @@ namespace Boo.Lang.Compiler.Ast
 		public static bool IsAssignmentOperator(BinaryOperatorType op)
 		{
 			return BinaryOperatorType.Assign == op ||
-					BinaryOperatorType.InPlaceAdd == op ||
-					BinaryOperatorType.InPlaceSubtract == op ||
+					BinaryOperatorType.InPlaceAddition == op ||
+					BinaryOperatorType.InPlaceSubtraction == op ||
 					BinaryOperatorType.InPlaceMultiply == op ||
-					BinaryOperatorType.InPlaceDivide == op;
+					BinaryOperatorType.InPlaceDivision == op ||
+					BinaryOperatorType.InPlaceBitwiseAnd == op ||
+					BinaryOperatorType.InPlaceBitwiseOr == op ||
+					BinaryOperatorType.InPlaceShiftLeft == op ||
+					BinaryOperatorType.InPlaceShiftRight == op;
 		}
 		
 		public static Constructor CreateConstructor(Node lexicalInfoProvider, TypeMemberModifiers modifiers)

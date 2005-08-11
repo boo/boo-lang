@@ -28,14 +28,16 @@
 
 namespace Boo.Lang.Compiler.Pipelines
 {
-	using System;
 	using Boo.Lang.Compiler.Steps;
 	
 	public class Compile : ResolveExpressions
 	{
 		public Compile()
-		{				
+		{	
+			Add(new ProcessAssignmentsToValueTypeMembers());
+			Add(new ExpandProperties());
 			Add(new StricterErrorChecking());
+			Add(new RemoveDeadCode());
 			Add(new NormalizeIterationStatements());
 			
 			Add(new ProcessSharedLocals());			

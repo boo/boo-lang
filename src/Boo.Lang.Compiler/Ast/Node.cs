@@ -30,7 +30,7 @@ namespace Boo.Lang.Compiler.Ast
 {
 	using System;
 	using System.Collections;
-	using System.IO;
+	using System.Xml.Serialization;
 
 	/// <summary>
 	/// Base class for every node in the AST.
@@ -48,7 +48,7 @@ namespace Boo.Lang.Compiler.Ast
 		
 		protected Boo.Lang.Compiler.TypeSystem.IEntity _entity;
 		
-		protected System.Collections.Hashtable _properties;
+		protected System.Collections.Hashtable _annotations;
 		
 		protected bool _isSynthetic;
 
@@ -79,6 +79,8 @@ namespace Boo.Lang.Compiler.Ast
 		/// <summary>
 		/// true when the node was constructed by the compiler.
 		/// </summary>
+		[XmlAttribute]
+		[System.ComponentModel.DefaultValue(false)]
 		public bool IsSynthetic
 		{
 			get
@@ -92,6 +94,7 @@ namespace Boo.Lang.Compiler.Ast
 			}
 		}
 		
+		[XmlIgnore]
 		public Boo.Lang.Compiler.TypeSystem.IEntity Entity
 		{
 			get
@@ -109,11 +112,11 @@ namespace Boo.Lang.Compiler.Ast
 		{
 			get
 			{
-				if (null == _properties)
+				if (null == _annotations)
 				{
 					return null;
 				}
-				return _properties[key];
+				return _annotations[key];
 			}
 			
 			set
@@ -123,11 +126,26 @@ namespace Boo.Lang.Compiler.Ast
 					throw new ArgumentNullException("key");
 				}
 				
-				if (null == _properties)
+				if (null == _annotations)
 				{
-					_properties = new Hashtable();
+					_annotations = new Hashtable();
 				}
-				_properties[key] = value;
+				_annotations[key] = value;
+			}
+		}
+		
+		public bool ContainsAnnotation(object key)
+		{
+			return (null == _annotations)
+				? false
+				: _annotations.ContainsKey(key);
+		}
+		
+		public void RemoveAnnotation(object key)
+		{
+			if (null != _annotations)
+			{
+				_annotations.Remove(key);
 			}
 		}
 		
@@ -152,7 +170,7 @@ namespace Boo.Lang.Compiler.Ast
 			}
 		}
 
-		[System.Xml.Serialization.XmlIgnore]
+		[XmlIgnore]
 		public LexicalInfo LexicalInfo
 		{
 			get
@@ -211,12 +229,23 @@ namespace Boo.Lang.Compiler.Ast
 		
 		public abstract object Clone();
 		
+		public virtual void ClearTypeSystemBindings()
+		{
+			_annotations = null;
+			_entity = null;
+		}
+		
 		public abstract NodeType NodeType
 		{
 			get;
 		}
 		
 		override public string ToString()
+		{
+			return ToCodeString();
+		}
+		
+		public string ToCodeString()
 		{
 			System.IO.StringWriter writer = new System.IO.StringWriter();
 			new Visitors.BooPrinterVisitor(writer).Visit(this);

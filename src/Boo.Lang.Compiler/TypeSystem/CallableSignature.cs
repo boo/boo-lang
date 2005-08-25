@@ -36,22 +36,28 @@ namespace Boo.Lang.Compiler.TypeSystem
 		IParameter[] _parameters;
 		IType _returnType;
 		int _hashCode;
-		
+		bool _acceptVarArgs;
+
 		public CallableSignature(IMethod method)
 		{
 			if (null == method)
 			{
 				throw new ArgumentNullException("method");
 			}
-			Initialize(method.GetParameters(), method.ReturnType);
+			Initialize(method.GetParameters(), method.ReturnType, method.AcceptVarArgs);
 		}
-		
+
 		public CallableSignature(IParameter[] parameters, IType returnType)
 		{
-			Initialize(parameters, returnType);
+			Initialize(parameters, returnType, false);
 		}
 		
-		void Initialize(IParameter[] parameters, IType returnType)
+		public CallableSignature(IParameter[] parameters, IType returnType, bool acceptVarArgs)
+		{
+			Initialize(parameters, returnType, acceptVarArgs);
+		}
+
+		private void Initialize(IParameter[] parameters, IType returnType, bool acceptVarArgs)
 		{
 			if (null == parameters)
 			{
@@ -63,6 +69,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 			}
 			_parameters = parameters;
 			_returnType = returnType;
+			_acceptVarArgs = acceptVarArgs;
 			InitializeHashCode();
 		}
 		
@@ -81,6 +88,14 @@ namespace Boo.Lang.Compiler.TypeSystem
 				return _returnType;
 			}
 		}
+
+		public bool AcceptVarArgs
+		{
+			get
+			{
+				return _acceptVarArgs;
+			}
+		}
 		
 		override public int GetHashCode()
 		{
@@ -90,11 +105,9 @@ namespace Boo.Lang.Compiler.TypeSystem
 		override public bool Equals(object other)
 		{
 			CallableSignature rhs = other as CallableSignature;
-			if (null == rhs)
-			{
-				return false;
-			}
-			if (_returnType != rhs._returnType)
+			if (null == rhs
+				|| _returnType != rhs._returnType
+				|| _acceptVarArgs != rhs._acceptVarArgs)
 			{
 				return false;
 			}
@@ -107,6 +120,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 			for (int i=0; i<_parameters.Length; ++i)
 			{
 				if (i > 0) { buffer.Append(", "); }
+				if (_acceptVarArgs && i == _parameters.Length-1) buffer.Append('*');
 				buffer.Append(_parameters[i].Type.FullName);
 			}
 			buffer.Append(") as ");
@@ -132,7 +146,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 		
 		void InitializeHashCode()
 		{
-			_hashCode = 1;
+			_hashCode = _acceptVarArgs ? 1 : 2;
 			foreach (IParameter parameter in _parameters)
 			{
 				_hashCode ^= parameter.Type.GetHashCode();

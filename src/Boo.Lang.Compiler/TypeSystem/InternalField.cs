@@ -29,7 +29,7 @@
 namespace Boo.Lang.Compiler.TypeSystem
 {
 	using Boo.Lang.Compiler.Ast;
-	
+
 	public class InternalField : IInternalEntity, IField
 	{
 		Field _field;
@@ -77,6 +77,22 @@ namespace Boo.Lang.Compiler.TypeSystem
 			get
 			{
 				return _field.IsProtected;
+			}
+		}
+
+		public bool IsPrivate
+		{
+			get
+			{
+				return _field.IsPrivate;
+			}
+		}
+
+		public bool IsInternal
+		{
+			get
+			{
+				return _field.IsInternal;
 			}
 		}
 		
@@ -155,6 +171,11 @@ namespace Boo.Lang.Compiler.TypeSystem
 		override public string ToString()
 		{
 			return FullName;
+		}
+
+		public bool IsDuckTyped
+		{
+			get { return false; }
 		}
 	}
 }

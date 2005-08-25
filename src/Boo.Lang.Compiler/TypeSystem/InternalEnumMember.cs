@@ -28,9 +28,8 @@
 
 namespace Boo.Lang.Compiler.TypeSystem
 {
-	using System;
 	using Boo.Lang.Compiler.Ast;
-	
+
 	public class InternalEnumMember : IInternalEntity, IField
 	{
 		EnumMember _member;
@@ -87,6 +86,22 @@ namespace Boo.Lang.Compiler.TypeSystem
 				return true;
 			}
 		}
+
+		public bool IsInternal
+		{
+			get
+			{
+				return false;
+			}
+		}
+
+		public bool IsPrivate
+		{
+			get
+			{
+				return false;
+			}
+		}
 		
 		public bool IsInitOnly
 		{
@@ -134,6 +149,11 @@ namespace Boo.Lang.Compiler.TypeSystem
 			{
 				return _member;
 			}
+		}
+
+		public bool IsDuckTyped
+		{
+			get { return false; }
 		}
 	}
 }

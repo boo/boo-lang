@@ -109,6 +109,28 @@ def WriteAssignmentsFromParameters(writer as TextWriter, fields as List):
 	for field as Field in fields:
 		writer.Write("""
 			${field.Name} = ${GetParameterName(field)};""")
+			
+def WriteMatchesImpl(writer as TextWriter, node as ClassDefinition):
+	writer.WriteLine("""
+		override public bool Matches(Node node)
+		{	
+			${node.Name} other = node as ${node.Name};
+			if (null == other) return false;""")
+	
+	for field as Field in GetAllFields(node):
+		fieldName = GetPrivateName(field)
+		fieldType = ResolveFieldType(field)
+		if fieldType is null or IsEnum(fieldType):
+			writer.WriteLine("""
+			if (${fieldName} != other.${fieldName}) return false;""")
+			continue
+		writer.WriteLine("""
+			if (!Node.Matches(${fieldName}, other.${fieldName})) return false;""")
+	
+	writer.WriteLine("""
+			return true;
+		}
+	""");
 	
 def WriteClassImpl(node as ClassDefinition):
 	
@@ -178,6 +200,8 @@ namespace Boo.Lang.Compiler.Ast.Impl
 				return NodeType.${node.Name};
 			}
 		}""")
+		
+			WriteMatchesImpl(writer, node)
 		
 			writer.WriteLine("""
 		override public bool Replace(Node existing, Node newNode)
@@ -455,6 +479,10 @@ namespace Boo.Lang.Compiler.Ast.Impl
 		{
 		}
 		
+		protected ${node.Name}Impl(Node parent, Boo.Lang.List list) : base(parent, list)
+		{
+		}
+		
 		public ${itemType} this[int index]
 		{
 			get
@@ -502,6 +530,11 @@ namespace Boo.Lang.Compiler.Ast.Impl
 		public void ReplaceAt(int index, ${itemType} newItem)
 		{
 			base.ReplaceAt(index, newItem);
+		}
+		
+		public ${itemType}Collection PopRange(int begin)
+		{
+			return new ${itemType}Collection(_parent, InnerList.PopRange(begin));
 		}
 		
 		public new ${itemType}[] ToArray()
@@ -596,8 +629,12 @@ namespace Boo.Lang.Compiler.Ast
 						writer.WriteLine("""
 				${field.Type} current${field.Name}Value = node.${field.Name};
 				if (null != current${field.Name}Value)
-				{											
-					node.${field.Name} = (${field.Type})VisitNode(current${field.Name}Value);
+				{			
+					${field.Type} newValue = (${field.Type})VisitNode(current${field.Name}Value);
+					if (!object.ReferenceEquals(newValue, current${field.Name}Value))
+					{
+						node.${field.Name} = newValue;
+					}
 				}""")
 				
 				writer.WriteLine("""
@@ -630,7 +667,12 @@ namespace Boo.Lang.Compiler.Ast
 			_resultingNode = replacement;
 		}
 		
-		public Node VisitNode(Node node)
+		protected virtual void OnNode(Node node)
+		{
+			node.Accept(this);
+		}
+		
+		public virtual Node VisitNode(Node node)
 		{
 			if (null != node)
 			{
@@ -638,7 +680,7 @@ namespace Boo.Lang.Compiler.Ast
 				{
 					Node saved = _resultingNode;
 					_resultingNode = node;
-					node.Accept(this);
+					OnNode(node);
 					Node result = _resultingNode;
 					_resultingNode = saved;
 					return result;

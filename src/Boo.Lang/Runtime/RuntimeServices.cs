@@ -40,6 +40,7 @@ namespace Boo.Lang.Runtime
 		static readonly Type RuntimeServicesType = typeof(RuntimeServices);
 		
 		const BindingFlags DefaultBindingFlags = BindingFlags.Public |
+												BindingFlags.NonPublic |
 												BindingFlags.OptionalParamBinding |
 												BindingFlags.Static |
 												BindingFlags.FlattenHierarchy |
@@ -856,7 +857,7 @@ namespace Boo.Lang.Runtime
 					return ArrayEqualityImpl(lhsa, rhsa);
 				}
 			}
-			return lhs.Equals(rhs);
+			return lhs.Equals(rhs) || rhs.Equals(lhs);
 		}
 
 		public static bool op_Equality(Array lhs, Array rhs)
@@ -1342,6 +1343,7 @@ namespace Boo.Lang.Runtime
 				case TypeCode.Double: return true;
 				case TypeCode.Boolean: return true;
 				case TypeCode.Decimal: return true;
+				case TypeCode.Char: return true;
 			}
 			return false;
 		}
@@ -1372,6 +1374,15 @@ namespace Boo.Lang.Runtime
 				return (SByte)value;
 			}
 			return CheckNumericPromotion(value).ToSByte(null);
+		}
+
+		public static char UnboxChar(object value)
+		{
+			if (value is char)
+			{
+				return (char)value;
+			}
+			return CheckNumericPromotion(value).ToChar(null);
 		}
 
 		public static Int16 UnboxInt16(object value)

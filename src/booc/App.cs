@@ -27,6 +27,7 @@
 #endregion
 
 using System;
+using System.Text;
 using System.Collections;
 using System.Diagnostics;
 using System.IO;
@@ -54,12 +55,29 @@ namespace BooC
 		[STAThread]
 		static int Main(string[] args)
 		{
-			return new App().Run(args);
+			if (((IList)args).Contains("-utf8"))
+			{
+				using (StreamWriter writer = new StreamWriter(Console.OpenStandardOutput(), Encoding.UTF8))
+				{
+					Console.SetOut(writer);
+
+					// leave the byte order mark in its own line
+					Console.WriteLine(); 
+
+					return new App().Run(args);
+				}
+			}
+			else
+			{
+				return new App().Run(args);
+			}
 		}
 		
 		public int Run(string[] args)
 		{
 			int resultCode = -1;
+			
+			AppDomain.CurrentDomain.AssemblyResolve += new ResolveEventHandler(AssemblyResolve);
 			
 			try
 			{
@@ -67,6 +85,7 @@ namespace BooC
 				
 				BooCompiler compiler = new BooCompiler();
 				_options = compiler.Parameters;
+				_options.GenerateInMemory = false;
 				
 				ParseOptions(args, _options);
 				if (0 == _options.Input.Count)
@@ -143,9 +162,10 @@ namespace BooC
 					_options.Input.Add(new StringInput("<stdin>", Consume(Console.In)));
 				}
 				else
-				{
+				{	
 					if (IsFlag(arg))
 					{
+						if ("-utf8" == arg) continue;
 						switch (arg[1])
 						{
 							case 'v':
@@ -184,8 +204,21 @@ namespace BooC
 									{
 										case "resource":
 										{
-											string resourceFile = arg.Substring(arg.IndexOf(":") + 1);
-											_options.Resources.Add(new FileResource(resourceFile));
+											string resourceFile;
+											int start = arg.IndexOf(":") + 1;
+											int comma = arg.LastIndexOf(',');
+											if (comma >= 0)
+											{
+												resourceFile = arg.Substring(start, comma-start);
+												string resourceName = arg.Substring(comma+1);
+												_options.Resources.Add(new NamedFileResource(resourceFile, resourceName));
+
+											}
+											else
+											{
+												resourceFile = arg.Substring(start);
+												_options.Resources.Add(new FileResource(resourceFile));
+											}
 											break;
 										}
 
@@ -305,6 +338,39 @@ namespace BooC
 										break;
 									}
 									
+									default:
+									{
+										InvalidOption(arg);
+										break;
+									}
+								}
+								break;
+							}
+							
+							case 'e':
+							{
+								switch (arg.Substring(1,8))
+								{
+									case "embedres":
+									{
+										// TODO: Add check for runtime support for "mono resources"
+										string resourceFile;
+										int start = arg.IndexOf(":") + 1;
+										int comma = arg.LastIndexOf(',');
+										if (comma >= 0)
+										{
+											resourceFile = arg.Substring(start, comma-start);
+											string resourceName = arg.Substring(comma+1);
+											_options.Resources.Add(new NamedEmbeddedFileResource(resourceFile, resourceName));
+										}
+										else
+										{
+											resourceFile = arg.Substring(start);
+											_options.Resources.Add(new EmbeddedFileResource(resourceFile));
+										}
+										break;
+									}
+
 									default:
 									{
 										InvalidOption(arg);
@@ -481,6 +547,18 @@ namespace BooC
 			{
 				AddFilesForPath(dirName, _options);
 			}
+		}
+		
+		static public Assembly AssemblyResolve(object sender, ResolveEventArgs args)
+		{
+			string simpleName = args.Name.Split(',')[0];
+			string fileName = Path.Combine(Environment.CurrentDirectory, 
+							simpleName + ".dll");
+			if (File.Exists(fileName))
+			{
+				return Assembly.LoadFile(fileName);
+			}
+			return null;
 		}
 	}
 }

@@ -204,6 +204,11 @@
                     BuildAction = "Compile"
                 />
                 <File
+                    RelPath = "ICompilerResourceWriter.cs"
+                    SubType = "Code"
+                    BuildAction = "Compile"
+                />
+                <File
                     RelPath = "ICompilerStep.cs"
                     SubType = "Code"
                     BuildAction = "Compile"
@@ -220,6 +225,11 @@
                 />
                 <File
                     RelPath = "Ast\AsExpression.cs"
+                    SubType = "Code"
+                    BuildAction = "Compile"
+                />
+                <File
+                    RelPath = "Ast\AstLiteralExpression.cs"
                     SubType = "Code"
                     BuildAction = "Compile"
                 />
@@ -407,10 +417,6 @@
                     RelPath = "Ast\ExtendedGeneratorExpression.cs"
                     SubType = "Code"
                     BuildAction = "Compile"
-                />
-                <File
-                    RelPath = "Ast\ExtendedGeneratorExpression.cs~"
-                    BuildAction = "None"
                 />
                 <File
                     RelPath = "Ast\Field.cs"
@@ -799,6 +805,11 @@
                 />
                 <File
                     RelPath = "Ast\Impl\AsExpressionImpl.cs"
+                    SubType = "Code"
+                    BuildAction = "Compile"
+                />
+                <File
+                    RelPath = "Ast\Impl\AstLiteralExpressionImpl.cs"
                     SubType = "Code"
                     BuildAction = "Compile"
                 />
@@ -1363,6 +1374,11 @@
                     BuildAction = "Compile"
                 />
                 <File
+                    RelPath = "Pipelines\CheckForErrors.cs"
+                    SubType = "Code"
+                    BuildAction = "Compile"
+                />
+                <File
                     RelPath = "Pipelines\Compile.cs"
                     SubType = "Code"
                     BuildAction = "Compile"
@@ -1418,7 +1434,22 @@
                     BuildAction = "Compile"
                 />
                 <File
+                    RelPath = "Resources\EmbeddedFileResource.cs"
+                    SubType = "Code"
+                    BuildAction = "Compile"
+                />
+                <File
                     RelPath = "Resources\FileResource.cs"
+                    SubType = "Code"
+                    BuildAction = "Compile"
+                />
+                <File
+                    RelPath = "Resources\NamedEmbeddedFileResource.cs"
+                    SubType = "Code"
+                    BuildAction = "Compile"
+                />
+                <File
+                    RelPath = "Resources\NamedFileResource.cs"
                     SubType = "Code"
                     BuildAction = "Compile"
                 />
@@ -1478,6 +1509,16 @@
                     BuildAction = "Compile"
                 />
                 <File
+                    RelPath = "Steps\CheckMemberNames.cs"
+                    SubType = "Code"
+                    BuildAction = "Compile"
+                />
+                <File
+                    RelPath = "Steps\CheckMembersProtectionLevel.cs"
+                    SubType = "Code"
+                    BuildAction = "Compile"
+                />
+                <File
                     RelPath = "Steps\DumpReferences.cs"
                     SubType = "Code"
                     BuildAction = "Compile"
@@ -1488,12 +1529,22 @@
                     BuildAction = "Compile"
                 />
                 <File
+                    RelPath = "Steps\ExpandAstLiterals.cs"
+                    SubType = "Code"
+                    BuildAction = "Compile"
+                />
+                <File
                     RelPath = "Steps\ExpandMacros.cs"
                     SubType = "Code"
                     BuildAction = "Compile"
                 />
                 <File
                     RelPath = "Steps\ExpandProperties.cs"
+                    SubType = "Code"
+                    BuildAction = "Compile"
+                />
+                <File
+                    RelPath = "Steps\ExpandVarArgsMethodInvocations.cs"
                     SubType = "Code"
                     BuildAction = "Compile"
                 />
@@ -1724,6 +1775,11 @@
                 />
                 <File
                     RelPath = "TypeSystem\ExternalCallableType.cs"
+                    SubType = "Code"
+                    BuildAction = "Compile"
+                />
+                <File
+                    RelPath = "TypeSystem\ExternalConstructor.cs"
                     SubType = "Code"
                     BuildAction = "Compile"
                 />

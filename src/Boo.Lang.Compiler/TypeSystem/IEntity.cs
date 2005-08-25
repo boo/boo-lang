@@ -26,10 +26,6 @@
 // THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #endregion
 
-using System;
-using System.Collections;
-using Boo.Lang.Compiler.Ast;
-
 namespace Boo.Lang.Compiler.TypeSystem
 {
 	public interface IEntity
@@ -59,7 +55,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 	}
 	
 	public interface ITypedEntity : IEntity
-	{
+	{	
 		IType Type
 		{
 			get;			
@@ -68,6 +64,11 @@ namespace Boo.Lang.Compiler.TypeSystem
 	
 	public interface IMember : ITypedEntity
 	{
+		bool IsDuckTyped
+		{
+			get;
+		}
+
 		IType DeclaringType
 		{
 			get;
@@ -119,10 +120,8 @@ namespace Boo.Lang.Compiler.TypeSystem
 		}
 	}
 	
-	public interface IProperty : IMember
-	{
-		IParameter[] GetParameters();
-		
+	public interface IProperty : IMember, IEntityWithParameters
+	{	
 		IMethod GetGetMethod();
 		
 		IMethod GetSetMethod();
@@ -236,18 +235,39 @@ namespace Boo.Lang.Compiler.TypeSystem
 		{
 			get;
 		}
-	}
-	
-	public interface IMethod : IAccessibleMember
-	{		
-		IParameter[] GetParameters();		
-		
-		IType ReturnType
+
+		bool IsInternal
 		{
 			get;
 		}
-		
+
+		bool IsPrivate
+		{
+			get;
+		}
+	}
+
+	public interface IEntityWithParameters : IEntity
+	{
+		IParameter[] GetParameters();
+
+		bool AcceptVarArgs
+		{
+			get;
+		}
+	}
+
+	public interface IMethodBase : IAccessibleMember, IEntityWithParameters
+	{
 		ICallableType CallableType
+		{
+			get;
+		}
+	}
+	
+	public interface IMethod : IMethodBase
+	{	
+		IType ReturnType
 		{
 			get;
 		}
@@ -268,11 +288,11 @@ namespace Boo.Lang.Compiler.TypeSystem
 		}
 	}
 	
-	public interface IConstructor : IMethod
+	public interface IConstructor : IMethodBase
 	{		
 	}
 
-	public interface IDestructor : IMethod
+	public interface IDestructor : IMethodBase
 	{		
 	}
 }

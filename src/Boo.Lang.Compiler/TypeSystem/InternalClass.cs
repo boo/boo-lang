@@ -28,16 +28,11 @@
 
 namespace Boo.Lang.Compiler.TypeSystem
 {
-	using System;
-	using Boo.Lang;
 	using Boo.Lang.Compiler.Ast;
-	using System.Reflection;
-	
+
 	public class InternalClass : AbstractInternalType
 	{
 		IConstructor[] _constructors;
-		
-		IType _baseType;
 		
 		int _typeDepth = -1;
 		
@@ -58,35 +53,25 @@ namespace Boo.Lang.Compiler.TypeSystem
 		{
 			get
 			{
-				if (null == _baseType)
+				foreach (TypeReference baseType in _typeDefinition.BaseTypes)
 				{
-					foreach (TypeReference baseType in _typeDefinition.BaseTypes)
+					IType entity = (IType)baseType.Entity;
+					if (null != entity && !entity.IsInterface)
 					{
-						IType entity = (IType)baseType.Entity;
-						if (null != entity && !entity.IsInterface)
-						{
-							_baseType = entity;
-							break;
-						}
+						return entity;
 					}
 				}
-				return _baseType;
+				return null;
 			}
 		}
 		
-		override public bool Resolve(Boo.Lang.List targetList, string name, EntityType flags)
+		override public bool Resolve(List targetList, string name, EntityType flags)
 		{
 			bool found = base.Resolve(targetList, name, flags);
-			if (!found || TypeSystemServices.ContainsMethodsOnly(targetList))
+			IType baseType = this.BaseType;
+			if (null != baseType)
 			{
-				IType baseType = this.BaseType;
-				if (null != baseType)
-				{
-					if (baseType.Resolve(targetList, name, flags))
-					{
-						found = true;
-					}
-				}
+				found |= baseType.Resolve(targetList, name, flags);
 			}
 			return found;
 		}

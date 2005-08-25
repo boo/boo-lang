@@ -40,6 +40,7 @@ using Boo.Lang.Runtime;
 using Boo.Lang.Compiler.Ast;
 using Boo.Lang.Compiler;
 using Boo.Lang.Compiler.TypeSystem;
+using Module = Boo.Lang.Compiler.Ast.Module;
 
 namespace Boo.Lang.Compiler.Steps
 {
@@ -62,8 +63,10 @@ namespace Boo.Lang.Compiler.Steps
 	public class EmitAssembly : AbstractVisitorCompilerStep
 	{
 		static ConstructorInfo DebuggableAttribute_Constructor = typeof(System.Diagnostics.DebuggableAttribute).GetConstructor(new Type[] { Types.Bool, Types.Bool });
+
+		static ConstructorInfo DuckTypedAttribute_Constructor = Types.DuckTypedAttribute.GetConstructor(new Type[0]);
 		
-		static ConstructorInfo ParamArrayAttribute_Constructor = typeof(System.ParamArrayAttribute).GetConstructor(new Type[0]);
+		static ConstructorInfo ParamArrayAttribute_Constructor = Types.ParamArrayAttribute.GetConstructor(new Type[0]);
 		
 		static MethodInfo RuntimeServices_NormalizeArrayIndex = Types.RuntimeServices.GetMethod("NormalizeArrayIndex");
 		
@@ -104,7 +107,7 @@ namespace Boo.Lang.Compiler.Steps
 		IType _returnType;
 		int _tryBlock; // are we in a try block?
 		bool _checked = true;
-		bool _rawarrayindexing = false;
+		bool _rawArrayIndexing = false;
 		Hashtable _typeCache = new Hashtable();
 		
 		// keeps track of types on the IL stack
@@ -387,7 +390,7 @@ namespace Boo.Lang.Compiler.Steps
 			_returnType = null;
 			_tryBlock = 0;
 			_checked = true;
-			_rawarrayindexing = false;
+			_rawArrayIndexing = false;
 			_types.Clear();
 			_typeCache.Clear();
 			_builders.Clear();
@@ -400,22 +403,28 @@ namespace Boo.Lang.Compiler.Steps
 		
 		override public void OnModule(Boo.Lang.Compiler.Ast.Module module)
 		{
+			InitializeDebugInfoWriter(module);
+			Visit(module.Members);
+		}
+
+		private void InitializeDebugInfoWriter(Module module)
+		{
+			if (!Parameters.Debug) return;
 			string fname = module.LexicalInfo.FileName;
 			if (null != fname)
 			{
 				_symbolDocWriter = _moduleBuilder.DefineDocument(
-										fname,
-										Guid.Empty,
-										Guid.Empty,
-										SymDocumentType.Text);
+					fname,
+					Guid.Empty,
+					Guid.Empty,
+					SymDocumentType.Text);
 			}
 			else
 			{
 				_symbolDocWriter = null;
 			}
-			Visit(module.Members);
 		}
-		
+
 		override public void OnEnumDefinition(EnumDefinition node)
 		{
 			Type baseType = typeof(int);
@@ -486,15 +495,14 @@ namespace Boo.Lang.Compiler.Steps
 			}
 			
 			MethodBuilder methodBuilder = GetMethodBuilder(method);
-
 			if (null != method.ExplicitInfo)
 			{
 				IMethod ifaceMethod = (IMethod)method.ExplicitInfo.Entity;
 				MethodInfo ifaceInfo = GetMethodInfo(ifaceMethod);
-				MethodInfo implInfo = GetMethodInfo ((IMethod)method.Entity);
+				MethodInfo implInfo = GetMethodInfo((IMethod)method.Entity);
 
 				TypeBuilder typeBuilder = GetTypeBuilder((ClassDefinition)method.DeclaringType);
-				typeBuilder.DefineMethodOverride (implInfo, ifaceInfo);
+				typeBuilder.DefineMethodOverride(implInfo, ifaceInfo);
 			}
 
 			_il = methodBuilder.GetILGenerator();
@@ -505,7 +513,7 @@ namespace Boo.Lang.Compiler.Steps
 			{
 				_returnValueLocal = _il.DeclareLocal(GetSystemType(_returnType));
 			}
-			
+
 			DefineLabels(method);
 			Visit(method.Locals);
 			Visit(method.Body);
@@ -519,7 +527,7 @@ namespace Boo.Lang.Compiler.Steps
 			}
 			_il.Emit(OpCodes.Ret);
 		}
-		
+
 		override public void OnBlock(Block block)
 		{
 			bool current = _checked;
@@ -530,18 +538,18 @@ namespace Boo.Lang.Compiler.Steps
 				_checked = (bool)objChecked;
 			}
 			
-			bool current_indexing = _rawarrayindexing;
+			bool currentArrayIndexing = _rawArrayIndexing;
 			object objRawArrayIndexing = block["rawarrayindexing"];
 			
 			if (objRawArrayIndexing is bool)
 			{
-				_rawarrayindexing = (bool)objRawArrayIndexing;
+				_rawArrayIndexing = (bool)objRawArrayIndexing;
 			}
 
 			Visit(block.Statements);
 
 			_checked = current;
-			_rawarrayindexing = current_indexing;
+			_rawArrayIndexing = currentArrayIndexing;
 		}
 		
 		void DefineLabels(Method method)
@@ -607,8 +615,21 @@ namespace Boo.Lang.Compiler.Steps
 				Visit(node.Exception); PopType();
 				_il.Emit(OpCodes.Throw);
 			}
+			EmitNopDebugInfo(node);
 		}
-		
+
+		private void EmitNopDebugInfo(Statement node)
+		{
+			// HACK: workaround - mono reports the position of
+			// raise as being the position of the next instruction
+			// after it
+			if (CanEmitDebugInfo())
+			{
+				EmitDebugInfo(node);
+				_il.Emit(OpCodes.Nop);
+			}
+		}
+
 		override public void OnTryStatement(TryStatement node)
 		{
 			++_tryBlock;
@@ -651,6 +672,8 @@ namespace Boo.Lang.Compiler.Steps
 			// the stack sane
 			DiscardValueOnStack();
 			AssertStackIsEmpty("stack must be empty after a statement!");
+
+			EmitNopDebugInfo(node);
 		}
 		
 		void DiscardValueOnStack()
@@ -1926,7 +1949,7 @@ namespace Boo.Lang.Compiler.Steps
 		void EmitNormalizedArrayIndex(Expression index)
 		{
 			bool isNegative = false;
-			if (CanBeNegative(index, ref isNegative) && (!_rawarrayindexing))
+			if (CanBeNegative(index, ref isNegative) && (!_rawArrayIndexing))
 			{
 				if (isNegative)
 				{
@@ -2472,17 +2495,13 @@ namespace Boo.Lang.Compiler.Steps
 		
 		void EmitDebugInfo(Node startNode, Node endNode)
 		{
-			if (null == _symbolDocWriter)
-			{
-				return;
-			}
+			if (!CanEmitDebugInfo()) return;
 			
 			LexicalInfo start = startNode.LexicalInfo;
 			if (start.IsValid)
 			{
 				try
-				{
-					//_il.Emit(OpCodes.Nop);
+				{	
 					_il.MarkSequencePoint(_symbolDocWriter, start.Line, 0, start.Line+1, 0);
 				}
 				catch (Exception x)
@@ -2491,14 +2510,19 @@ namespace Boo.Lang.Compiler.Steps
 				}
 			}
 		}
-		
+
+		private bool CanEmitDebugInfo()
+		{
+			return null != _symbolDocWriter;
+		}
+
 		bool IsBoolOrInt(IType type)
 		{
 			return TypeSystemServices.BoolType == type ||
 				TypeSystemServices.IntType == type;
 		}
 		
-		void PushArguments(IMethod entity, ExpressionCollection args)
+		void PushArguments(IMethodBase entity, ExpressionCollection args)
 		{
 			IParameter[] parameters = entity.GetParameters();
 			for (int i=0; i<args.Count; ++i)
@@ -2727,9 +2751,10 @@ namespace Boo.Lang.Compiler.Steps
 		
 		void EmitUnbox(IType expectedType)
 		{
-			if (TypeSystemServices.IsNumberOrBool(expectedType))
+			string unboxMethodName = GetUnboxMethodName(expectedType);
+			if (null != unboxMethodName)
 			{
-				_il.EmitCall(OpCodes.Call, GetUnboxMethod(expectedType), null);
+				_il.EmitCall(OpCodes.Call, GetRuntimeMethod(unboxMethodName), null);
 			}
 			else
 			{
@@ -2739,9 +2764,9 @@ namespace Boo.Lang.Compiler.Steps
 			}
 		}
 		
-		MethodInfo GetUnboxMethod(IType type)
+		MethodInfo GetRuntimeMethod(string methodName)
 		{
-			return typeof(RuntimeServices).GetMethod(GetUnboxMethodName(type));
+			return Types.RuntimeServices.GetMethod(methodName);
 		}
 		
 		string GetUnboxMethodName(IType type)
@@ -2794,10 +2819,11 @@ namespace Boo.Lang.Compiler.Steps
 			{
 				return "UnboxBoolean";
 			}
-			else
+			else if (type == TypeSystemServices.CharType)
 			{
-				throw new NotImplementedException(string.Format("Numeric promotion for {0} not implemented!", type));
+				return "UnboxChar";
 			}
+			return null;
 		}
 		
 		OpCode GetNumericPromotionOpCode(IType type)
@@ -2889,7 +2915,7 @@ namespace Boo.Lang.Compiler.Steps
 		{
 			return new CustomAttributeBuilder(
 								DebuggableAttribute_Constructor,
-								new object[] { true, false });
+								new object[] { true, true });
 		}
 		
 		void DefineEntryPoint()
@@ -3369,6 +3395,12 @@ namespace Boo.Lang.Compiler.Steps
 			{
 				builder.SetCustomAttribute(GetCustomAttributeBuilder(attribute));
 			}
+
+			bool isDuckTyped = GetEntity(property).IsDuckTyped;
+			if (isDuckTyped)
+			{
+				builder.SetCustomAttribute(CreateDuckTypedCustomAttribute());
+			}
 			
 			SetBuilder(property, builder);
 		}
@@ -3394,6 +3426,10 @@ namespace Boo.Lang.Compiler.Steps
 				if (last == i && parameters.VariableNumber)
 				{
 					SetParamArrayAttribute(paramBuilder);
+				}
+				foreach (Boo.Lang.Compiler.Ast.Attribute attribute in parameters[i].Attributes)
+				{
+					paramBuilder.SetCustomAttribute(GetCustomAttributeBuilder(attribute));
 				}
 			}
 			
@@ -3461,9 +3497,19 @@ namespace Boo.Lang.Compiler.Steps
 			{
 				builder.SetCustomAttribute(GetCustomAttributeBuilder(attribute));
 			}
+
+			if (GetEntity(method).IsDuckTyped)
+			{
+				builder.SetCustomAttribute(CreateDuckTypedCustomAttribute());
+			}
 			return builder;
 		}
-		
+
+		private CustomAttributeBuilder CreateDuckTypedCustomAttribute()
+		{
+			return new CustomAttributeBuilder(DuckTypedAttribute_Constructor, new object[0]);
+		}
+
 		void DefineConstructor(TypeBuilder typeBuilder, Method constructor)
 		{
 			ConstructorBuilder builder = typeBuilder.DefineConstructor(GetMethodAttributes(constructor),
@@ -3758,8 +3804,39 @@ namespace Boo.Lang.Compiler.Steps
 		{
 			foreach (ICompilerResource resource in Parameters.Resources)
 			{
-				IResourceWriter writer = _moduleBuilder.DefineResource(resource.Name, resource.Description);
-				resource.WriteResources(writer);
+				resource.WriteResource(_sreResourceService);
+			}
+		}
+
+		SREResourceService _sreResourceService;
+
+		class SREResourceService : IResourceService
+		{
+			AssemblyBuilder _asmBuilder;
+			ModuleBuilder _moduleBuilder;
+
+			public SREResourceService (AssemblyBuilder asmBuilder, ModuleBuilder modBuilder)
+			{
+				this._asmBuilder = asmBuilder;
+				this._moduleBuilder = modBuilder;
+			}
+
+			public bool EmbedFile(string resourceName, string fname)
+			{
+				MethodInfo embed_res = typeof (System.Reflection.Emit.AssemblyBuilder).GetMethod(
+					"EmbedResourceFile", BindingFlags.Instance|BindingFlags.Public|BindingFlags.NonPublic,
+					null, CallingConventions.Any, new Type[] { typeof(string), typeof(string) }, null);
+				if (embed_res != null)
+				{
+					embed_res.Invoke(this._asmBuilder, new object[] { resourceName, fname });
+					return true;
+				}
+				return false;
+			}
+
+			public IResourceWriter DefineResource(string resourceName, string resourceDescription)
+			{
+				return this._moduleBuilder.DefineResource(resourceName, resourceDescription);
 			}
 		}
 		
@@ -3783,6 +3860,7 @@ namespace Boo.Lang.Compiler.Steps
 				_asmBuilder.SetCustomAttribute(CreateDebuggableAttribute());
 			}
 			_moduleBuilder = _asmBuilder.DefineDynamicModule(asmName.Name, Path.GetFileName(outputFile), true);
+			_sreResourceService = new SREResourceService (_asmBuilder, _moduleBuilder);
 			ContextAnnotations.SetAssemblyBuilder(Context, _asmBuilder);
 			
 			Context.GeneratedAssemblyFileName = outputFile;

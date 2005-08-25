@@ -64,7 +64,7 @@ namespace Boo.Lang.Compiler.Ast.Visitors
 		}
 		#endregion
 		
-		#region IVisitor Members
+		#region IAstVisitor Members
 
 		override public void OnModule(Module m)
 		{
@@ -82,8 +82,6 @@ namespace Boo.Lang.Compiler.Ast.Visitors
 				WriteLine();
 			}
 
-			// m.Globals iria causar um Indent()
-			// invlido
 			if (null != m.Globals)
 			{
 				Visit(m.Globals.Statements);
@@ -147,6 +145,11 @@ namespace Boo.Lang.Compiler.Ast.Visitors
 				Visit(b.Statements);
 			}
 			Dedent();
+		}
+		
+		override public void OnAttribute(Attribute att)
+		{
+			WriteAttribute(att);
 		}
 		
 		override public void OnClassDefinition(ClassDefinition c)
@@ -353,6 +356,13 @@ namespace Boo.Lang.Compiler.Ast.Visitors
 			Write(p.Name);
 			WriteTypeReference(p.Type);
 		}
+		
+		override public void OnTypeofExpression(TypeofExpression node)
+		{
+			Write("typeof(");
+			Visit(node.Type);
+			Write(")");
+		}
 
 		override public void OnSimpleTypeReference(SimpleTypeReference t)
 		{
@@ -385,7 +395,7 @@ namespace Boo.Lang.Compiler.Ast.Visitors
 			Write(".");
 			Write(e.Name);
 		}
-		
+
 		override public void OnAsExpression(AsExpression e)
 		{
 			Write("(");
@@ -438,7 +448,8 @@ namespace Boo.Lang.Compiler.Ast.Visitors
 		
 		override public void OnUnaryExpression(UnaryExpression node)
 		{
-			bool addParens = NodeType.ExpressionStatement != node.ParentNode.NodeType;
+			bool addParens = NodeType.ExpressionStatement != node.ParentNode.NodeType
+				&& !IsMethodInvocationArg(node);
 			if (addParens)
 			{
 				Write("(");
@@ -458,6 +469,12 @@ namespace Boo.Lang.Compiler.Ast.Visitors
 			{
 				Write(")");
 			}
+		}
+
+		private bool IsMethodInvocationArg(UnaryExpression node)
+		{
+			MethodInvocationExpression parent = node.ParentNode as MethodInvocationExpression;
+			return null != parent && node != parent.Target;
 		}
 
 		override public void OnBinaryExpression(BinaryExpression e)
@@ -594,6 +611,25 @@ namespace Boo.Lang.Compiler.Ast.Visitors
 			}
 			Write(e.Value);
 		}
+		
+		override public void OnAstLiteralExpression(AstLiteralExpression e)
+		{
+			WriteIndented();
+			WriteKeyword("ast");
+			if (e.Node is Expression)
+			{
+				Write(" { ");
+				Visit(e.Node);
+				Write(" }");
+			}
+			else
+			{
+				WriteLine(":");
+				Indent();
+				Visit(e.Node);
+				Dedent();
+			}
+		}
 
 		override public void OnStringLiteralExpression(StringLiteralExpression e)
 		{
@@ -620,6 +656,10 @@ namespace Boo.Lang.Compiler.Ast.Visitors
 		override public void OnDoubleLiteralExpression(DoubleLiteralExpression e)
 		{
 			Write(e.Value.ToString("########0.0##########", CultureInfo.InvariantCulture));
+			if (e.IsSingle)
+			{
+				Write("F");
+			}
 		}
 
 		override public void OnReferenceExpression(ReferenceExpression node)
@@ -854,6 +894,10 @@ namespace Boo.Lang.Compiler.Ast.Visitors
 		{
 			switch (op)
 			{
+				case UnaryOperatorType.Explode:
+				{
+					return "*";
+				}
 				case UnaryOperatorType.PostIncrement:
 				case UnaryOperatorType.Increment:
 				{
@@ -1232,28 +1276,33 @@ namespace Boo.Lang.Compiler.Ast.Visitors
 			Write(")");
 		}
 		
+		void WriteAttribute(Attribute attribute)
+		{
+			WriteIndented("[");
+			Write(attribute.Name);
+			if (attribute.Arguments.Count > 0 ||
+			    attribute.NamedArguments.Count > 0)
+			{
+				Write("(");
+				WriteCommaSeparatedList(attribute.Arguments);
+				if (attribute.NamedArguments.Count > 0)
+				{
+					if (attribute.Arguments.Count > 0)
+					{
+						Write(", ");
+					}
+					WriteCommaSeparatedList(attribute.NamedArguments);
+				}
+				Write(")");
+			}
+			Write("]");
+		}
+		
 		void WriteAttributes(AttributeCollection attributes, bool addNewLines)
 		{
 			foreach (Boo.Lang.Compiler.Ast.Attribute attribute in attributes)
 			{
-				WriteIndented("[");
-				Write(attribute.Name);
-				if (attribute.Arguments.Count > 0 ||
-				    attribute.NamedArguments.Count > 0)
-				{
-					Write("(");
-					WriteCommaSeparatedList(attribute.Arguments);
-					if (attribute.NamedArguments.Count > 0)
-					{
-						if (attribute.Arguments.Count > 0)
-						{
-							Write(", ");
-						}
-						WriteCommaSeparatedList(attribute.NamedArguments);
-					}
-					Write(")");
-				}
-				Write("]");
+				Visit(attribute);
 				if (addNewLines)
 				{
 					WriteLine();

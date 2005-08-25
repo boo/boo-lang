@@ -30,16 +30,6 @@ namespace Boo.Lang.Compiler
 {	
 	public interface ICompilerResource
 	{
-		string Name
-		{
-			get;
-		}
-		
-		string Description
-		{
-			get;
-		}
-		
-		void WriteResources(System.Resources.IResourceWriter writer);
+		void WriteResource(IResourceService resourceService);
 	}
 }

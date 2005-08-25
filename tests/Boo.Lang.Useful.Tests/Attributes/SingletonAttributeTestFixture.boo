@@ -27,36 +27,39 @@
 #endregion
 
 
-namespace Boo.Lang.Useful.Attributes.Tests
+namespace Boo.Lang.Useful.Tests.Attributes
 
-import System
-import System.Reflection
-import System.Threading
-import Boo.Lang.Useful.Attributes
 import NUnit.Framework
 
 [TestFixture]
-class SingletonAttributeTestFixture:
+class SingletonAttributeTestFixture(AbstractAttributeTestFixture):
 """
 @author Sorin Ionescu (sorin.ionescu@gmail.com)
 @author Rodrigo B. de Oliveira
+"""	
+	[Test]
+	def TestSingleton():
+		code = """
+import Useful.Attributes
+
+[Singleton]
+class SingletonObject:
+	pass
 """
+		expected = """
+import Useful.Attributes
 
-	
-	[Singleton]
-	class SingletonObject:
-		pass
+public final class SingletonObject(System.Object):
 
-	[Test]
-	def TestPrivateConstructor():
-		ctors = typeof(SingletonObject).GetConstructors(BindingFlags.Instance|BindingFlags.NonPublic)
-		Assert.AreEqual(1, len(ctors))
-		assert ctors[0].IsPrivate
+	private def constructor():
+		super()
 
-	[Test]
-	def TestInstanceNotNull():
-		assert SingletonObject.Instance is not null
+	private static ___instance as SingletonObject
 
-	[Test]
-	def TestInstance():
-		assert SingletonObject.Instance is SingletonObject.Instance
+	public static Instance as SingletonObject:
+		public static get:
+			if (SingletonObject.___instance is null):
+				SingletonObject.___instance = SingletonObject()
+			return SingletonObject.___instance
+"""
+		RunTestCase(expected, code)

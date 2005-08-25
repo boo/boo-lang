@@ -35,7 +35,7 @@ namespace Boo.Lang.Compiler.Resources
 	
 	public class FileResource : ICompilerResource
 	{
-		string _fname;
+		protected string _fname;
 		
 		public FileResource(string fname)
 		{
@@ -54,7 +54,7 @@ namespace Boo.Lang.Compiler.Resources
 			}
 		}
 		
-		public string Name
+		public virtual string Name
 		{
 			get
 			{
@@ -62,7 +62,7 @@ namespace Boo.Lang.Compiler.Resources
 			}
 		}
 		
-		public string Description
+		public virtual string Description
 		{
 			get
 			{
@@ -70,10 +70,11 @@ namespace Boo.Lang.Compiler.Resources
 			}
 		}
 		
-		public void WriteResources(System.Resources.IResourceWriter writer)
-		{
-			using (ResourceReader reader = new ResourceReader(_fname))
+		public void WriteResource(IResourceService service)
+		{	
+			using (ResourceReader reader = new ResourceReader(this.FileName))
 			{
+				IResourceWriter writer = service.DefineResource(this.Name,  this.Description);
 				IDictionaryEnumerator e = reader.GetEnumerator();
 				while (e.MoveNext())
 				{

@@ -1,4 +1,8 @@
-﻿#region license
+﻿using System;
+using System.IO;
+using System.Xml.Serialization;
+
+#region license
 // Copyright (c) 2004, Rodrigo B. de Oliveira (rbo@acm.org)
 // All rights reserved.
 // 
@@ -154,6 +158,12 @@ namespace Boo.Lang.Compiler.Ast
 			return node.ParentNode.NodeType == NodeType.MethodInvocationExpression &&
 					node == ((MethodInvocationExpression)node.ParentNode).Target;
 		}
+
+		public static bool IsTargetOfMemberReference(Expression node)
+		{
+			return node.ParentNode.NodeType == NodeType.MemberReferenceExpression &&
+				node == ((MemberReferenceExpression)node.ParentNode).Target;
+		}
 		
 		public static bool IsTargetOfSlicing(Expression node)
 		{
@@ -216,7 +226,7 @@ namespace Boo.Lang.Compiler.Ast
 			return constructor;
 		}
 		
-		public static Expression CreateReferenceExpression(string fullname)
+		public static ReferenceExpression CreateReferenceExpression(string fullname)
 		{
 			string[] parts = fullname.Split('.');
 			ReferenceExpression expression = new ReferenceExpression(parts[0]);
@@ -242,9 +252,28 @@ namespace Boo.Lang.Compiler.Ast
 			mie.IsSynthetic = true;
 			return mie;
 		}
+
+		public static bool IsExplodeExpression(Node node)
+		{
+			UnaryExpression e = node as UnaryExpression;
+			return null == e ? false : e.Operator == UnaryOperatorType.Explode;
+		}
 		
 		private AstUtil()
 		{
+		}
+
+		public static string ToXml(Node node)
+		{
+			StringWriter writer = new StringWriter();
+			XmlSerializer serializer = new XmlSerializer(node.GetType());
+			serializer.Serialize(writer, node);
+			return writer.ToString();
+		}
+
+		public static Node FromXml(Type type, string code)
+		{
+			return (Node)new XmlSerializer(type).Deserialize(new StringReader(code));
 		}
 	}
 }

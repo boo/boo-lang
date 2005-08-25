@@ -1,4 +1,6 @@
-﻿#region license
+﻿using System;
+
+#region license
 // Copyright (c) 2003, 2004, 2005 Rodrigo B. de Oliveira (rbo@acm.org)
 // All rights reserved.
 // 
@@ -273,7 +275,7 @@ namespace Boo.Lang.Compiler.Steps
 					&& IsCorrectExplicitMemberImplOrNoExplicitMemberAtAll(member, entity))
 				{
 					Method method = (Method)member;
-					if (TypeSystemServices.CheckOverrideSignature((IMethod)GetEntity(method), entity))
+					if (TypeSystemServices.CheckOverrideSignature(GetEntity(method), entity))
 					{	
 						if (IsUnknown(method.ReturnType))
 						{
@@ -321,15 +323,32 @@ namespace Boo.Lang.Compiler.Steps
 		
 		void AbstractMemberNotImplemented(ClassDefinition node, TypeReference baseTypeRef, IMember member)
 		{
-			if (!node.IsAbstract)
+			if (IsValueType(node))
+			{
+				Error(CompilerErrorFactory.ValueTypeCantHaveAbstractMember(baseTypeRef, node.FullName, GetAbstractMemberSignature(member)));
+			}
+			else if (!node.IsAbstract)
 			{
 				Warnings.Add(
 					CompilerWarningFactory.AbstractMemberNotImplemented(baseTypeRef,
-					node.FullName, member.FullName));
+					node.FullName, GetAbstractMemberSignature(member)));
 				_newAbstractClasses.AddUnique(node);
 			}
 		}
-		
+
+		private bool IsValueType(ClassDefinition node)
+		{
+			return ((IType)node.Entity).IsValueType;
+		}
+
+		private string GetAbstractMemberSignature(IMember member)
+		{
+			IMethod method = member as IMethod;
+			return method != null
+				? TypeSystemServices.GetSignature(method)
+				: member.FullName;
+		}
+
 		void ResolveInterfaceMembers(ClassDefinition node,
 			TypeReference baseTypeRef,
 			IType baseType)

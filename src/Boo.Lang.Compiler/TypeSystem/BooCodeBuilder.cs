@@ -27,10 +27,14 @@
 #endregion
 
 namespace Boo.Lang.Compiler.TypeSystem
-{	
+{
 	using System;
+	using System.Collections;
+	using System.Diagnostics;
+	using System.Reflection;
 	using Boo.Lang.Compiler.Ast;
-	
+	using Attribute = Boo.Lang.Compiler.Ast.Attribute;
+
 	public class BooCodeBuilder
 	{
 		protected TypeSystemServices _tss;
@@ -68,7 +72,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 
 		public Statement CreateFieldAssignment(Field node, Expression initializer)
 		{
-			InternalField fieldEntity = (InternalField)TypeSystemServices.GetEntity(node);
+			InternalField fieldEntity = (InternalField)TypeSystem.TypeSystemServices.GetEntity(node);
 			
 			ExpressionStatement stmt = new ExpressionStatement(initializer.LexicalInfo);
 			Expression context = node.IsStatic
@@ -80,9 +84,9 @@ namespace Boo.Lang.Compiler.TypeSystem
 			return stmt;
 		}
 		
-		public Boo.Lang.Compiler.Ast.Attribute CreateAttribute(IConstructor constructor, Expression arg)
+		public Attribute CreateAttribute(IConstructor constructor, Expression arg)
 		{
-			Boo.Lang.Compiler.Ast.Attribute attribute = new Boo.Lang.Compiler.Ast.Attribute();
+			Attribute attribute = new Attribute();
 			attribute.Name = constructor.DeclaringType.FullName;
 			attribute.Entity = constructor;
 			attribute.Arguments.Add(arg);
@@ -123,6 +127,11 @@ namespace Boo.Lang.Compiler.TypeSystem
 			expression.Entity = type;
 			return expression;
 		}
+
+		public Expression CreateTypeofExpression(System.Type type)
+		{
+			return CreateTypeofExpression(_tss.Map(type));
+		}
 		
 		public InternalLabel CreateLabelStatement(Node sourceNode, string name)
 		{
@@ -136,7 +145,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 			return reference;
 		}
 		
-		public Statement CreateSwitch(Expression offset, System.Collections.IEnumerable labels)
+		public Statement CreateSwitch(Expression offset, IEnumerable labels)
 		{
 			MethodInvocationExpression sw = new MethodInvocationExpression();
 			sw.Target = new ReferenceExpression("__switch__");
@@ -160,7 +169,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 			return mie;
 		}
 		
-		public MethodInvocationExpression CreateMethodInvocation(Expression target, System.Reflection.MethodInfo method)
+		public MethodInvocationExpression CreateMethodInvocation(Expression target, MethodInfo method)
 		{
 			return CreateMethodInvocation(target, _tss.Map(method));
 		}
@@ -175,7 +184,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 			return CreateMethodInvocation(target, property.GetSetMethod(), value);
 		}
 		
-		public MethodInvocationExpression CreateMethodInvocation(System.Reflection.MethodInfo staticMethod, Expression arg)
+		public MethodInvocationExpression CreateMethodInvocation(MethodInfo staticMethod, Expression arg)
 		{
 			return CreateMethodInvocation(_tss.Map(staticMethod), arg);
 		}
@@ -225,12 +234,12 @@ namespace Boo.Lang.Compiler.TypeSystem
 			return mie;
 		}
 		
-		public Boo.Lang.Compiler.Ast.TypeReference CreateTypeReference(System.Type type)
+		public TypeReference CreateTypeReference(Type type)
 		{
 			return CreateTypeReference(_tss.Map(type));
 		}
 		
-		public Boo.Lang.Compiler.Ast.TypeReference CreateTypeReference(IType tag)
+		public TypeReference CreateTypeReference(IType tag)
 		{
 			TypeReference typeReference = null;
 			
@@ -355,6 +364,11 @@ namespace Boo.Lang.Compiler.TypeSystem
 			expression.LexicalInfo = info;
 			return expression;
 		}
+
+		public ReferenceExpression CreateReference(LexicalInfo li, System.Type type)
+		{
+			return CreateReference(li, _tss.Map(type));
+		}
 		
 		public ReferenceExpression CreateReference(IType type)
 		{
@@ -443,8 +457,13 @@ namespace Boo.Lang.Compiler.TypeSystem
 		
 		public ArrayLiteralExpression CreateObjectArray(ExpressionCollection items)
 		{
+			return CreateArray(_tss.ObjectArrayType, items);
+		}
+
+		public ArrayLiteralExpression CreateArray(IType arrayType, ExpressionCollection items)
+		{
 			ArrayLiteralExpression array = new ArrayLiteralExpression();
-			array.ExpressionType = _tss.ObjectArrayType;
+			array.ExpressionType = arrayType;
 			array.Items.Extend(items);
 			_tss.MapToConcreteExpressionTypes(array.Items);
 			return array;
@@ -474,7 +493,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 		
 		public ReferenceExpression CreateReference(ParameterDeclaration parameter)
 		{
-			return CreateReference((InternalParameter)TypeSystemServices.GetEntity(parameter));
+			return CreateReference((InternalParameter)TypeSystem.TypeSystemServices.GetEntity(parameter));
 		}
 		
 		public ReferenceExpression CreateReference(InternalParameter parameter)
@@ -501,6 +520,14 @@ namespace Boo.Lang.Compiler.TypeSystem
 			ParameterDeclaration parameter = new ParameterDeclaration(name, CreateTypeReference(type));
 			parameter.Entity = new InternalParameter(parameter, index);
 			return parameter;
+		}
+		
+		public Constructor CreateConstructor(TypeMemberModifiers modifiers)
+		{
+			Constructor constructor = new Constructor();
+			constructor.Modifiers = modifiers;
+			constructor.Entity = new InternalConstructor(_tss, constructor);
+			return constructor;
 		}
 		
 		public MethodInvocationExpression CreateConstructorInvocation(ClassDefinition cd)
@@ -536,7 +563,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 		public Statement CreateSuperConstructorInvocation(IType baseType)
 		{			
 			IConstructor defaultConstructor = _tss.GetDefaultConstructor(baseType);
-			System.Diagnostics.Debug.Assert(null != defaultConstructor);
+			Debug.Assert(null != defaultConstructor);
 			return CreateSuperConstructorInvocation(defaultConstructor);
 		}
 		
@@ -620,10 +647,11 @@ namespace Boo.Lang.Compiler.TypeSystem
 			return CreateRuntimeMethod(name, CreateTypeReference(returnType));
 		}
 		
-		public Method CreateRuntimeMethod(string name, IType returnType, IParameter[] parameters)
+		public Method CreateRuntimeMethod(string name, IType returnType, IParameter[] parameters, bool variableArguments)
 		{
 			Method method = CreateRuntimeMethod(name, returnType);
 			DeclareParameters(method, 0, parameters);
+			method.Parameters.VariableNumber = variableArguments;
 			return method;
 		}
 		

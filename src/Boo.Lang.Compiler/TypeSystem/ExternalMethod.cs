@@ -30,21 +30,40 @@ namespace Boo.Lang.Compiler.TypeSystem
 {
 	using System;
 	using System.Reflection;
-	
+
 	public class ExternalMethod : IMethod
 	{
-		TypeSystemServices _typeSystemServices;
+		protected TypeSystemServices _typeSystemServices;
 		
 		MethodBase _mi;
 		
 		IParameter[] _parameters;
 		
 		ICallableType _type;
+
+		int _acceptVarArgs = -1;
+
+		int _isDuckTyped = -1;
 		
 		internal ExternalMethod(TypeSystemServices manager, MethodBase mi)
 		{
 			_typeSystemServices = manager;
 			_mi = mi;
+		}
+
+		public bool IsDuckTyped
+		{
+			get
+			{
+				if (-1 == _isDuckTyped)
+				{
+					_isDuckTyped =
+						!ReturnType.IsValueType && Attribute.IsDefined(_mi, Types.DuckTypedAttribute)
+						? 1
+						: 0;
+				}
+				return 1 == _isDuckTyped;
+			}
 		}
 		
 		public IType DeclaringType
@@ -75,7 +94,15 @@ namespace Boo.Lang.Compiler.TypeSystem
 		{
 			get
 			{
-				return _mi.IsFamily;
+				return _mi.IsFamily || _mi.IsFamilyOrAssembly;
+			}
+		}
+
+		public bool IsPrivate
+		{
+			get
+			{
+				return _mi.IsPrivate;
 			}
 		}
 		
@@ -84,6 +111,14 @@ namespace Boo.Lang.Compiler.TypeSystem
 			get
 			{
 				return _mi.IsAbstract;
+			}
+		}
+
+		public bool IsInternal
+		{
+			get
+			{
+				return _mi.IsAssembly;
 			}
 		}
 		
@@ -118,6 +153,29 @@ namespace Boo.Lang.Compiler.TypeSystem
 				return _mi.DeclaringType.FullName + "." + _mi.Name;
 			}
 		}
+
+		public bool AcceptVarArgs
+		{
+			get
+			{
+				if (_acceptVarArgs == -1)
+				{
+					ParameterInfo[] parameters = _mi.GetParameters();
+
+					_acceptVarArgs =
+						parameters.Length > 0 && IsParamArray(parameters[parameters.Length-1]) ? 1 : 0;
+				}
+				return _acceptVarArgs == 1;
+			}
+		}
+
+		private bool IsParamArray(ParameterInfo parameter)
+		{
+			/* Hack to fix problem with mono-1.1.8.* and older */
+			return Attribute.IsDefined(parameter, Types.ParamArrayAttribute)
+				|| parameter.GetCustomAttributes(Types.ParamArrayAttribute, false).Length > 0;
+		}
+
 		
 		public virtual EntityType EntityType
 		{
@@ -156,7 +214,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 			return _parameters;
 		}
 		
-		public IType ReturnType
+		public virtual IType ReturnType
 		{
 			get
 			{
@@ -195,29 +253,6 @@ namespace Boo.Lang.Compiler.TypeSystem
 		override public string ToString()
 		{
 			return _typeSystemServices.GetSignature(this);
-		}
-	}
-	
-	public class ExternalConstructor : ExternalMethod, IConstructor
-	{
-		public ExternalConstructor(TypeSystemServices manager, ConstructorInfo ci) : base(manager, ci)
-		{			
-		}
-		
-		override public EntityType EntityType
-		{
-			get
-			{
-				return EntityType.Constructor;
-			}
-		}
-		
-		public ConstructorInfo ConstructorInfo
-		{
-			get
-			{
-				return (ConstructorInfo)MethodInfo;
-			}
 		}
 	}
 }

@@ -35,6 +35,8 @@ namespace Boo.Lang.Compiler.TypeSystem
 		System.Reflection.PropertyInfo _property;
 		
 		IParameter[] _parameters;
+
+		int _isDuckTyped = -1;
 		
 		public ExternalProperty(TypeSystemServices tagManager, System.Reflection.PropertyInfo property)
 		{
@@ -57,6 +59,21 @@ namespace Boo.Lang.Compiler.TypeSystem
 				return GetAccessor().IsStatic;
 			}
 		}
+		public bool IsDuckTyped
+		{
+			get
+			{
+				if (-1 == _isDuckTyped)
+				{
+					_isDuckTyped =
+						!_property.PropertyType.IsValueType && System.Attribute.IsDefined(_property, Types.DuckTypedAttribute)
+						? 1
+						: 0;
+				}
+				return 1 == _isDuckTyped;
+			}
+		}
+
 		
 		public bool IsPublic
 		{
@@ -106,6 +123,14 @@ namespace Boo.Lang.Compiler.TypeSystem
 				return _property;
 			}
 		}
+
+		public bool AcceptVarArgs
+		{
+			get
+			{
+				return false;
+			}
+		}
 		
 		public IParameter[] GetParameters()
 		{
@@ -121,7 +146,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 			System.Reflection.MethodInfo getter = _property.GetGetMethod(true);
 			if (null != getter)
 			{
-				return (IMethod)_typeSystemServices.Map(getter);
+				return _typeSystemServices.Map(getter);
 			}
 			return null;
 		}
@@ -131,7 +156,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 			System.Reflection.MethodInfo setter = _property.GetSetMethod(true);
 			if (null != setter)
 			{
-				return (IMethod)_typeSystemServices.Map(setter);
+				return _typeSystemServices.Map(setter);
 			}
 			return null;
 		}

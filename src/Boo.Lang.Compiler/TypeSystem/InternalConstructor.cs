@@ -28,7 +28,6 @@
 
 namespace Boo.Lang.Compiler.TypeSystem
 {
-	using System;
 	using Boo.Lang.Compiler.Ast;
 
 	public class InternalConstructor : InternalMethod, IConstructor
@@ -37,7 +36,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 		bool _hasSelfCall = false;
 
 		public InternalConstructor(TypeSystemServices typeSystemServices,
-		                                  Constructor constructor) : base(typeSystemServices, constructor)
+		                           Constructor constructor) : base(typeSystemServices, constructor)
 		{
 		}
 		  
@@ -75,7 +74,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 				return _typeSystemServices.VoidType;
 			}
 		}
-	      
+
 	    override public EntityType EntityType
 	    {
 			get

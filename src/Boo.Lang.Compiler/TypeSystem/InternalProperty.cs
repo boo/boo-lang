@@ -29,7 +29,7 @@
 namespace Boo.Lang.Compiler.TypeSystem
 {
 	using Boo.Lang.Compiler.Ast;
-	
+
 	public class InternalProperty : IInternalEntity, IProperty
 	{
 		TypeSystemServices _typeSystemServices;
@@ -103,6 +103,14 @@ namespace Boo.Lang.Compiler.TypeSystem
 					: Unknown.Default;
 			}
 		}
+
+		public bool AcceptVarArgs
+		{
+			get
+			{
+				return false;
+			}
+		}
 		
 		public IParameter[] GetParameters()
 		{
@@ -171,6 +179,14 @@ namespace Boo.Lang.Compiler.TypeSystem
 		override public string ToString()
 		{
 			return string.Format("{0} as {1}", Name, Type);
+		}
+
+		public bool IsDuckTyped
+		{
+			get
+			{
+				return this.Type == _typeSystemServices.DuckType;
+			}
 		}
 	}
 }

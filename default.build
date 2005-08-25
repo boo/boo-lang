@@ -1,9 +1,10 @@
 ﻿<?xml version="1.0"?>
 <project name="boo" default="all">
 
-	<property name="boo.major.minor.release.version" value="0.5.6" />
-	<property name="boo.svn.revision" value="1720" />
+	<property name="boo.major.minor.release.version" value="0.6.0" />
+	<property name="boo.svn.revision" value="1858" />
 	<property name="boo.version" value="${boo.major.minor.release.version}.${boo.svn.revision}" dynamic="true" />
+	<property name="boo.assembly.version" value="1.0.0.0" />
 	
 	<property name="debug" value="true" />
 	<property name="optimize" value="false" />
@@ -201,11 +202,35 @@
 	</target>
 	
 	<target name="Boo.Lang.Useful" depends="Boo.NAnt.Tasks">
+		<uptodate property="useful-grammars-uptodate">
+			<sourcefiles basedir="src/Boo.Lang.Useful">
+				<include name="**/*.g" />
+			</sourcefiles>
+			<targetfiles basedir="src/Boo.Lang.Useful">
+				<include name="**/*Lexer.boo" />
+			</targetfiles>
+		</uptodate>
+
+		<if test="${not useful-grammars-uptodate}">
+			<exec program="${java}" failonerror="true">
+				<arg value="-cp" />
+				<arg file="${antlr.jar}" />
+				<arg value="antlr.Tool" />
+				<!-- <arg value="-traceParser" /> -->
+				<arg value="-o" />
+				<arg value="src/Boo.Lang.Useful/IO/Impl" />
+				<arg value="src/Boo.Lang.Useful/IO/PreProcessorExpressions.g" />
+			</exec>
+		</if>
+		
 		<booc target="library"
 			output="build/Boo.Lang.Useful.dll">
 			<sources basedir="src/Boo.Lang.Useful">
 				<include name="**/*.boo" />
 			</sources>
+			<references basedir="build">
+				<include name="Boo.Lang.Parser.dll" />
+			</references>
 		</booc>
 	</target>
 	
@@ -314,8 +339,7 @@
 		<copy todir="${fakeroot.boolib}">
 			<fileset basedir="build">
 				<include name="*.exe"/>
-				<include name="strings.resources"/>
-				<include name="boo.rsp"/>
+				<include name="*.rsp"/>
 				<include name="Boo.NAnt.Tasks.dll" />
 			</fileset>
 		</copy>
@@ -368,8 +392,38 @@
 		<exec program="chmod" commandline="+x ${fakeroot.bindir}/booish" />
 	</target>
 
-	<target name="install-win32" depends="booc, booish, booi">
-		<echo message="Install target not yet supported under Windows"/>
+	<target name="install-win32" depends="all">
+	
+		<fail unless="${property::exists('mono.prefix')}">
+		Please set the property 'mono.prefix' to point to the prefix of your
+		mono installation (example: c:\dotnet\mono-1.1.8).
+		</fail>
+		
+		<copy todir="${path::combine(mono.prefix, 'lib/boo')}">
+			<fileset basedir="build">
+				<include name="*.exe"/>
+				<include name="*.rsp"/>
+				<include name="Boo.NAnt.Tasks.dll" />
+			</fileset>
+		</copy>
+
+		<foreach item="File" property="filename">
+		<in>
+			<items>
+				<include name="build/Boo.Lang*.dll" />
+			</items>
+		</in>
+		<do>
+			<exec program="${path::combine(mono.prefix, 'bin/gacutil.bat')}"
+				useruntimeengine="false" workingdir="build">
+				<arg value="/i" />
+				<arg value="${path::get-file-name(filename)}" />
+				<arg value="/package" />
+				<arg value="boo" />
+			</exec>
+		</do>
+		</foreach>
+
 	</target>
 	
 	<target name="uninstall">
@@ -692,7 +746,6 @@
 				<arg value="-cp" />
 				<arg file="${antlr.jar}" />
 				<arg value="antlr.Tool" />
-				<!-- <arg value="-traceParser" /> -->
 				<arg value="-o" />
 				<arg value="src/Boo.Lang.Parser/" />
 				<arg value="src/Boo.Lang.Parser/boo.g" />
@@ -755,9 +808,22 @@
 		</boo>
 	</target>
 	
-	<target name="update-assembly-attributes" depends="Boo.NAnt.Tasks, update-svn-revision-number">
-    	<updateAssemblyVersion
-			version="${boo.version}">
+	<target name="update-assembly-attributes" depends="Boo.NAnt.Tasks, update-svn-revision-number">	
+		<boo>
+		import Useful.IO.TextFile from Boo.Lang.Useful
+		
+		fname = "src/Boo.Lang/Builtins.cs"
+		builtins = ReadFile(fname)
+		
+		version = Project.Properties["boo.version"]
+		newBuiltins = @/new System.Version\(".+"\)/.Replace(builtins, "new System.Version(\"${version}\")")
+		if builtins != newBuiltins:
+			print fname
+			WriteFile(fname, newBuiltins) 
+		</boo>
+		
+    		<updateAssemblyVersion
+			version="${boo.assembly.version}">
 			<fileset basedir="src">
 				<include name="**/AssemblyInfo.cs" />
 				<include name="**/AssemblyInfo.boo" />

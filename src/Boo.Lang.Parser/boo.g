@@ -54,7 +54,8 @@ tokens
 	ESEPARATOR; // expression separator (imaginary token)
 	ABSTRACT="abstract";
 	AND="and";
-	AS="as";		
+	AS="as";
+	AST="ast";
 	BREAK="break";
 	CONTINUE="continue";
 	CALLABLE="callable";
@@ -245,9 +246,9 @@ tokens
 		return LPAREN != token && LBRACK != token;
 	}
 	
-	static double ParseDouble(string text)
+	static double ParseDouble(string s)
 	{
-		return double.Parse(text, CultureInfo.InvariantCulture);
+		return double.Parse(s, NumberStyles.Float, CultureInfo.InvariantCulture);
 	}
 	
 	protected IntegerLiteralExpression ParseIntegerLiteralExpression(
@@ -260,11 +261,13 @@ tokens
 		if (s.StartsWith(HEX_PREFIX))
 		{
 			value = long.Parse(
-				s.Substring(HEX_PREFIX.Length), NumberStyles.AllowHexSpecifier, CultureInfo.InvariantCulture);
+				s.Substring(HEX_PREFIX.Length), NumberStyles.AllowHexSpecifier, 
+					CultureInfo.InvariantCulture);
 		}
 		else
 		{
-			value = long.Parse(s, CultureInfo.InvariantCulture);
+			value = long.Parse(s, NumberStyles.Integer | NumberStyles.AllowExponent,
+					CultureInfo.InvariantCulture);
 		}
 		return new IntegerLiteralExpression(ToLexicalInfo(token), value, isLong);
 	}
@@ -491,6 +494,8 @@ protected
 class_definition [TypeMemberCollection container]
 	{
 		TypeDefinition td = null;
+		TypeReferenceCollection baseTypes = null;
+		TypeMemberCollection members = null;
 	}:
 	(
 		CLASS { td = new ClassDefinition(); } |
@@ -503,30 +508,39 @@ class_definition [TypeMemberCollection container]
 		td.Modifiers = _modifiers;
 		AddAttributes(td.Attributes);
 		container.Add(td);
+		baseTypes = td.BaseTypes;
+		members = td.Members;
 	}
-	(base_types[td.BaseTypes])?
+	(base_types[baseTypes])?
 	begin_with_doc[td]					
 	(
 		(PASS eos) |
 		(
 			(EOS)*
-			attributes
-			modifiers
-			(						
-				method[td.Members] |
-				event_declaration[td.Members] |
-				field_or_property[td.Members] |
-				type_definition[td.Members]
-			)
-		)+
+			(type_definition_member[members])+			
+		)
 	)
 	end[td]
 	;
+	
+type_definition_member[TypeMemberCollection container]
+{
+}:
+	attributes
+	modifiers
+	(						
+		method[container] |
+		event_declaration[container] |
+		field_or_property[container] |
+		type_definition[container]
+	)
+;
 			
 protected
 interface_definition [TypeMemberCollection container]
 	{
 		InterfaceDefinition itf = null;
+		TypeMemberCollection members = null;
 	} :
 	INTERFACE id:ID
 	{
@@ -535,6 +549,7 @@ interface_definition [TypeMemberCollection container]
 		itf.Modifiers = _modifiers;
 		AddAttributes(itf.Attributes);
 		container.Add(itf);
+		members = itf.Members;
 	}
 	(base_types[itf.BaseTypes])?
 	begin_with_doc[itf]
@@ -543,9 +558,9 @@ interface_definition [TypeMemberCollection container]
 		(
 			attributes
 			(
-				interface_method[itf.Members] |
-				event_declaration[itf.Members] |
-				interface_property[itf.Members]
+				interface_method[members] |
+				event_declaration[members] |
+				interface_property[members]
 			)
 		)+
 	)
@@ -651,6 +666,7 @@ event_declaration [TypeMemberCollection container]
 		AddAttributes(e.Attributes);
 		container.Add(e);
 	}
+	docstring[e]
 	;
 
 protected
@@ -690,6 +706,9 @@ method [TypeMemberCollection container]
 		TypeReference rt = null;
 		TypeReference it = null;
 		ExplicitMemberInfo emi = null;
+		ParameterDeclarationCollection parameters = null;
+		Block body = null;
+		StatementCollection statements = null;
 	}: 
 	t:DEF
 	(
@@ -712,13 +731,16 @@ method [TypeMemberCollection container]
 	{
 		m.Modifiers = _modifiers;
 		AddAttributes(m.Attributes);
+		parameters = m.Parameters;
+		body = m.Body;
+		statements = body.Statements;
 	}
-	LPAREN parameter_declaration_list[m.Parameters] RPAREN
+	LPAREN parameter_declaration_list[parameters] RPAREN
 			(AS rt=type_reference { m.ReturnType = rt; })?
 			attributes { AddAttributes(m.ReturnTypeAttributes); }
-			begin_block_with_doc[m, m.Body]
-				block[m.Body.Statements]
-			end[m.Body]
+			begin_block_with_doc[m, body]
+				block[statements]
+			end[body]
 	{ 
 		container.Add(m);
 	}
@@ -742,6 +764,7 @@ field_or_property [TypeMemberCollection container]
 		Field field = null;
 		ExplicitMemberInfo emi = null;
 		Expression initializer = null;
+		ParameterDeclarationCollection parameters = null;
 	}: 
 	(property_header)=>(
 		(emi=explicit_member_info)? id:ID
@@ -754,14 +777,15 @@ field_or_property [TypeMemberCollection container]
 					p = new Property(ToLexicalInfo(id));
 				p.Name = id.getText();
 				p.ExplicitInfo = emi;
+				AddAttributes(p.Attributes);
+				parameters = p.Parameters;
 			}
-			(LPAREN parameter_declaration_list[p.Parameters] RPAREN)?
+			(LPAREN parameter_declaration_list[parameters] RPAREN)?
 			(AS tr=type_reference)?
 			{							
 				p.Type = tr;
 				tm = p;
 				tm.Modifiers = _modifiers;
-				AddAttributes(tm.Attributes);
 			}		
 			begin_with_doc[p]
 				(property_accessor[p])+
@@ -781,24 +805,33 @@ field_or_property [TypeMemberCollection container]
 		(		
 			(AS tr=type_reference { field.Type = tr; })?
 			(
-				(ASSIGN (
-							(slicing_expression (DO|DEF))=>
-							(initializer=slicing_expression method_invocation_block[initializer]) |
-							(initializer=array_or_expression eos) |
-							(initializer=callable_expression))
-				{ field.Initializer = initializer;	}) |
+				(
+					ASSIGN initializer=declaration_initializer
+					{ field.Initializer = initializer;	}
+				) |
 				eos
 			)
 			docstring[field]
 		)
 	)
 	{ container.Add(tm); }
-	;
-			
+;
+	
+declaration_initializer returns [Expression e]
+{
+	e = null;
+}:
+	(slicing_expression (DO|DEF))=>(e=slicing_expression method_invocation_block[e]) |
+	(e=array_or_expression eos) |
+	(e=callable_expression) |
+	(e=ast_literal)
+;
+
 protected
 property_accessor[Property p]
 	{		
 		Method m = null;
+		Block body = null;
 	}:
 	attributes
 	modifiers
@@ -824,8 +857,9 @@ property_accessor[Property p]
 	{
 		AddAttributes(m.Attributes);
 		m.Modifiers = _modifiers;
+		body = m.Body;
 	}
-	compound_stmt[m.Body]
+	compound_stmt[body]
 	;
 	
 protected
@@ -847,22 +881,22 @@ block[StatementCollection container]:
 	
 protected
 modifiers
-	{
-		_modifiers = TypeMemberModifiers.None;
-	}:
+{
+	_modifiers = TypeMemberModifiers.None;
+}:
 	(
-		STATIC { _modifiers |= TypeMemberModifiers.Static; } |
-		PUBLIC { _modifiers |= TypeMemberModifiers.Public; } |
-		PROTECTED { _modifiers |= TypeMemberModifiers.Protected; } |
-		PRIVATE { _modifiers |= TypeMemberModifiers.Private; } |
-		INTERNAL { _modifiers |= TypeMemberModifiers.Internal; } |			
-		FINAL { _modifiers |= TypeMemberModifiers.Final; } |
-		TRANSIENT { _modifiers |= TypeMemberModifiers.Transient; } |
-		OVERRIDE { _modifiers |= TypeMemberModifiers.Override; } |
-		ABSTRACT { _modifiers |= TypeMemberModifiers.Abstract; } |
-		VIRTUAL { _modifiers |= TypeMemberModifiers.Virtual; }
+	STATIC { _modifiers |= TypeMemberModifiers.Static; } |
+	PUBLIC { _modifiers |= TypeMemberModifiers.Public; } |
+	PROTECTED { _modifiers |= TypeMemberModifiers.Protected; } |
+	PRIVATE { _modifiers |= TypeMemberModifiers.Private; } |
+	INTERNAL { _modifiers |= TypeMemberModifiers.Internal; } |			
+	FINAL { _modifiers |= TypeMemberModifiers.Final; } |
+	TRANSIENT { _modifiers |= TypeMemberModifiers.Transient; } |
+	OVERRIDE { _modifiers |= TypeMemberModifiers.Override; } |
+	ABSTRACT { _modifiers |= TypeMemberModifiers.Abstract; } |
+	VIRTUAL { _modifiers |= TypeMemberModifiers.Virtual; }	
 	)*
-	;
+;
 	
 protected	
 parameter_declaration_list[ParameterDeclarationCollection c]
@@ -990,9 +1024,16 @@ end[Node node] :
 	;
 
 protected
-compound_stmt[Block b] :
-		COLON begin:INDENT { b.LexicalInfo = ToLexicalInfo(begin); }
-			block[b.Statements]
+compound_stmt[Block b]
+{
+	StatementCollection statements = null;
+}:
+		COLON begin:INDENT
+		{
+			b.LexicalInfo = ToLexicalInfo(begin);
+			statements = b.Statements;
+		}
+			block[statements]
 		end[b]
 		;
 		
@@ -1071,6 +1112,8 @@ stmt [StatementCollection container]
 		(ID (expression)?)=>{IsValidMacroArgument(LA(2))}? s=macro_stmt |
 		(slicing_expression (ASSIGN|(DO|DEF)))=> s=assignment_or_method_invocation_with_block_stmt |
 		s=return_stmt |
+		(declaration COMMA)=> s=unpack_stmt |
+		s=declaration_stmt |
 		(		
 			(
 				s=goto_stmt |
@@ -1080,8 +1123,6 @@ stmt [StatementCollection container]
 				s=continue_stmt |				
 				s=raise_stmt |
 				s=retry_stmt |
-				(declaration COMMA)=> s=unpack_stmt |
-				s=declaration_stmt |				
 				s=expression_stmt				
 			)
 			(			
@@ -1146,7 +1187,7 @@ internal_closure_stmt[Block block]
 		stmt=return_expression_stmt |
 		(
 			(
-				(declaration COMMA)=>stmt=unpack_stmt |
+				(declaration COMMA)=>stmt=unpack |
 				{IsValidMacroArgument(LA(2))}? stmt=closure_macro_stmt | 
 				stmt=expression_stmt |
 				stmt=raise_stmt |
@@ -1291,8 +1332,13 @@ declaration_stmt returns [DeclarationStatement s]
 		s = null;
 		TypeReference tr = null;
 		Expression initializer = null;
+		StatementModifier m = null;
 	}:
-	id:ID AS tr=type_reference (ASSIGN initializer=array_or_expression)?
+	id:ID AS tr=type_reference
+	(
+		(ASSIGN initializer=declaration_initializer) |
+		((m=stmt_modifier)? eos)
+	)
 	{
 		Declaration d = new Declaration(ToLexicalInfo(id));
 		d.Name = id.getText();
@@ -1301,6 +1347,7 @@ declaration_stmt returns [DeclarationStatement s]
 		s = new DeclarationStatement(d.LexicalInfo);
 		s.Declaration = d;
 		s.Initializer = initializer;
+		s.Modifier = m;
 	}
 	;
 
@@ -1310,7 +1357,6 @@ expression_stmt returns [ExpressionStatement s]
 		s = null;
 		Expression e = null;
 	}:
-	//e=expression
 	e=assignment_expression
 	{
 		s = new ExpressionStatement(e);
@@ -1350,6 +1396,9 @@ return_stmt returns [ReturnStatement s]
 			) |
 			(
 				e=callable_expression
+			) |
+			(AST)=>(
+				e=ast_literal
 			) |
 			(
 				(modifier=stmt_modifier)?
@@ -1409,11 +1458,18 @@ for_stmt returns [ForStatement fs]
 	{
 		fs = null;
 		Expression iterator = null;
+		DeclarationCollection declarations = null;
+		Block body = null;
 	}:
-	f:FOR { fs = new ForStatement(ToLexicalInfo(f)); }
-		declaration_list[fs.Declarations] IN iterator=array_or_expression
+	f:FOR
+	{
+		fs = new ForStatement(ToLexicalInfo(f));
+		declarations = fs.Declarations;
+		body = fs.Block;
+	}
+		declaration_list[declarations] IN iterator=array_or_expression
 		{ fs.Iterator = iterator; }
-		compound_stmt[fs.Block]
+		compound_stmt[body]
 	;
 		
 protected
@@ -1500,17 +1556,32 @@ if_stmt returns [IfStatement returnValue]
 protected
 unpack_stmt returns [UnpackStatement s]
 	{
-		Declaration d = null;
-		s = new UnpackStatement();
-		Expression e = null;
+		s = null;
+		StatementModifier m = null;
 	}:	
+	s=unpack (m=stmt_modifier)? eos
+	{
+		s.Modifier = m;
+	}
+;		
+
+protected
+unpack returns [UnpackStatement s]
+{
+	Declaration d = null;
+	s = new UnpackStatement();
+	Expression e = null;
+}:
 	d=declaration COMMA { s.Declarations.Add(d); }
-	(declaration_list[s.Declarations])? t:ASSIGN e=array_or_expression
+	(declaration_list[s.Declarations])?
+	t:ASSIGN e=array_or_expression
 	{
 		s.Expression = e;
 		s.LexicalInfo = ToLexicalInfo(t);
 	}
-	;		
+;
+	
+
 		
 protected
 declaration_list[DeclarationCollection dc]
@@ -1673,6 +1744,73 @@ method_invocation_block[Expression mi]
 		((MethodInvocationExpression)mi).Arguments.Add(block);
 	}
 	;
+	
+ast_literal_expression returns [AstLiteralExpression e]
+{
+	e = null;
+}:
+	t:AST { e = new AstLiteralExpression(ToLexicalInfo(t)); }
+	ast_literal_closure[e]
+;
+	
+ast_literal returns [AstLiteralExpression e]
+{
+	e = null;
+}:
+	t:AST { e = new AstLiteralExpression(ToLexicalInfo(t)); }
+	(ast_literal_block[e] | ast_literal_closure[e] eos)
+;
+
+type_definition_member_prediction:
+	attributes
+	modifiers
+	(CLASS|INTERFACE|STRUCT|DEF|EVENT|(ID (AS|ASSIGN)))
+;
+
+ast_literal_block[AstLiteralExpression e]
+{
+	// TODO: either cache or construct these objects on demand
+	TypeMemberCollection collection = new TypeMemberCollection();
+	Block block = new Block();
+	StatementCollection statements = block.Statements;
+	Node node = null;
+}:
+	begin 
+	(
+		(type_definition_member_prediction)=>(type_definition_member[collection] { e.Node = collection[0]; }) |
+		((stmt[statements])+ { e.Node = block.Statements.Count > 1 ? block : block.Statements[0]; })
+	)
+	end[e]
+;
+
+ast_literal_closure[AstLiteralExpression e]
+{
+	Node node = null;
+}:
+	LBRACE
+	(
+		(expression)=>node=expression { e.Node = node; } |
+		node=ast_literal_closure_stmt { e.Node = node; }
+	)
+	RBRACE
+;
+
+ast_literal_closure_stmt returns [Statement s]
+{
+	s = null;
+	StatementModifier modifier;
+}:
+	s=return_expression_stmt |
+	(
+		(
+			(declaration COMMA)=>s=unpack |
+			{IsValidMacroArgument(LA(2))}? s=closure_macro_stmt |
+			s=raise_stmt |
+			s=yield_stmt			
+		)
+		(modifier=stmt_modifier { s.Modifier = modifier; })?		
+	)
+;
 
 protected
 assignment_or_method_invocation_with_block_stmt returns [Statement stmt]
@@ -1694,7 +1832,7 @@ assignment_or_method_invocation_with_block_stmt returns [Statement stmt]
 			(
 			op:ASSIGN { token = op; binaryOperator = ParseAssignOperator(op.getText()); }
 				(
-					(DEF)=>rhs=callable_expression |
+					(DEF|DO)=>rhs=callable_expression |
 					(
 						rhs=array_or_expression
 						(		
@@ -1702,7 +1840,8 @@ assignment_or_method_invocation_with_block_stmt returns [Statement stmt]
 							(modifier=stmt_modifier eos) |
 							eos
 						)					
-					)
+					) |
+					rhs=ast_literal
 				)
 			)
 			{
@@ -2110,7 +2249,10 @@ member returns [IToken name]
 	}:
 	id:ID { name=id; } |
 	set:SET { name=set; } |
-	get:GET { name=get; }	
+	get:GET { name=get; } |
+	t1:INTERNAL { name=t1; } |
+	t2:PUBLIC { name=t2; } |
+	t3:PROTECTED { name=t3; }
 	;
 	
 protected
@@ -2194,11 +2336,38 @@ slicing_expression returns [Expression e]
 					mce = new MethodInvocationExpression(ToLexicalInfo(lparen));
 					mce.Target = e;
 					e = mce;
-				}			
-			argument_list[mce]
+				}
+				(
+					method_invocation_argument[mce] 
+					(
+						COMMA
+						method_invocation_argument[mce]
+					)*
+				)?
 			RPAREN
 		)
 	)*
+	;
+	
+protected
+method_invocation_argument[MethodInvocationExpression mie]
+	{
+		Expression arg = null;
+	}:
+	(
+		t:MULTIPLY arg=expression
+		{
+			if (null != arg)
+			{
+				mie.Arguments.Add(
+					new UnaryExpression(
+						ToLexicalInfo(t),
+						UnaryOperatorType.Explode,
+						arg));
+			}
+		}
+	) |
+	argument[mie]
 	;
 	
 protected
@@ -2212,6 +2381,7 @@ literal returns [Expression e]
 		e=list_literal |
 		(hash_literal_test)=>e=hash_literal |
 		e=closure_expression |
+		e=ast_literal_expression |
 		e=re_literal |
 		e=bool_literal |
 		e=null_literal |
@@ -2378,7 +2548,17 @@ re_literal returns [RELiteralExpression re] { re = null; }:
 protected
 double_literal returns [DoubleLiteralExpression rle] { rle = null; }:
 	value:DOUBLE
-	{ rle = new DoubleLiteralExpression(ToLexicalInfo(value), ParseDouble(value.getText())); }
+	{ 
+		rle = new DoubleLiteralExpression(ToLexicalInfo(value), ParseDouble(value.getText())); 
+	}
+	|
+	single:FLOAT
+	{
+		string s = single.getText();
+		s = s.Substring(0, s.Length-1);
+		double val = float.Parse(s, CultureInfo.InvariantCulture);
+		rle = new DoubleLiteralExpression(ToLexicalInfo(single), val, true);
+	}
 	;
 	
 protected
@@ -2437,6 +2617,7 @@ protected
 identifier returns [IToken value]
 	{
 		value = null; _sbuilder.Length = 0;
+		IToken id2 = null;
 	}:
 	id1:ID
 	{					
@@ -2445,7 +2626,7 @@ identifier returns [IToken value]
 	}				
 	( options { greedy = true; } :
 		DOT
-		id2:ID
+		id2=member
 		{ _sbuilder.Append('.'); _sbuilder.Append(id2.getText()); }
 	)*
 	{ value.setText(_sbuilder.ToString()); }
@@ -2534,20 +2715,41 @@ LINE_CONTINUATION:
 	'\\'! NEWLINE
 	{ $setType(Token.SKIP); }
 	;
-
+	
 INT : 
-	("0x"(HEXDIGIT)+)(('l' | 'L') { $setType(LONG); })? |
-	(DIGIT)+
+  	("0x"(HEXDIGIT)+)(('l' | 'L') { $setType(LONG); })? |
+  	(DIGIT)+
+ 	(('e'|'E')('+'|'-')? (DIGIT)+)?
+  	(
+  		('l' | 'L') { $setType(LONG); } |
+		(('f' | 'F') { $setType(FLOAT); }) |
+  		(
+ 			(
+ 				{BooLexer.IsDigit(LA(2))}? 
+ 				(
+ 					'.' (DIGIT)+
+ 					(('e'|'E')('+'|'-')? (DIGIT)+)?
+ 				)
+				(
+					(('f' | 'F') { $setType(FLOAT); }) |
+					{ $setType(DOUBLE); }
+				)
+ 			)?
+  			(("ms" | 's' | 'm' | 'h' | 'd') { $setType(TIMESPAN); })?
+  		)
+  	)
+;
+  
+DOT : '.' 
 	(
-		('l' | 'L') { $setType(LONG); } |
+		(DIGIT)+ (('e'|'E')('+'|'-')? (DIGIT)+)?
 		(
-			({BooLexer.IsDigit(LA(2))}? ('.' (DIGIT)+) { $setType(DOUBLE); })?
-			(("ms" | 's' | 'm' | 'h' | 'd') { $setType(TIMESPAN); })?
+			(('f' | 'F')  { $setType(FLOAT); }) |
+			(("ms" | 's' | 'm' | 'h' | 'd') { $setType(TIMESPAN); }) |
+			{$setType(DOUBLE);}
 		)
-	)
-	;
-
-DOT : '.' ((DIGIT)+ {$setType(DOUBLE);})?;
+	)?
+;
 
 COLON : ':';
 
@@ -2586,11 +2788,9 @@ SUBTRACT: ('-') ('=' { $setType(ASSIGN); })?;
 
 MODULUS: '%';
 
-MULTIPLY: '*' (
-					'=' { $setType(ASSIGN); } |
-					'*' { $setType(EXPONENTIATION); } | 
-				);
+MULTIPLY: '*' ('=' { $setType(ASSIGN); })?;
 
+EXPONENTIATION: "**";
 
 DIVISION: 
 	("/*")=> ML_COMMENT { $setType(Token.SKIP); } |
@@ -2829,7 +3029,9 @@ RE_ESC : '\\' (
 				'$' |
 				'^' |
 				'['	|
-				']'
+				']' |
+				'{' |
+				'}'
 			 )
 			 ;
 

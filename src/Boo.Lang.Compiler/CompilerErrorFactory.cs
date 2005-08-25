@@ -321,14 +321,10 @@ namespace Boo.Lang.Compiler
 			return new CompilerError("BCE0057", node.LexicalInfo, name);
 		}
 
-		/*
-		 * 
-		 * Deprecated
 		public static CompilerError ObjectRequired(Node node)
 		{
 			return new CompilerError("BCE0058", node.LexicalInfo);
 		}
-		*/
 		
 		public static CompilerError InvalidLockMacroArguments(Node node)
 		{
@@ -623,6 +619,31 @@ namespace Boo.Lang.Compiler
 		public static CompilerError FieldIsReadonly(Node node, string name)
 		{
 			return new CompilerError("BCE0117", node.LexicalInfo, name);
+		}
+
+		public static CompilerError ExplodedExpressionMustBeArray(Node node)
+		{
+			return new CompilerError("BCE0118", node.LexicalInfo);
+		}
+
+		public static CompilerError ExplodeExpressionMustMatchVarArgCall(Node node)
+		{
+			return new CompilerError("BCE0119", node.LexicalInfo);
+		}
+
+		public static CompilerError UnaccessibleMember(Node node, string name)
+		{
+			return new CompilerError("BCE0120", node.LexicalInfo, name);
+		}
+
+		public static CompilerError InvalidSuper(Node node)
+		{
+			return new CompilerError("BCE0121", node.LexicalInfo);
+		}
+
+		public static CompilerError ValueTypeCantHaveAbstractMember(Node node, string typeName, string memberName)
+		{
+			return new CompilerError("BCE0122", node.LexicalInfo, typeName, memberName);
 		}
 		
 		public static string ToStringList(System.Collections.IEnumerable names)

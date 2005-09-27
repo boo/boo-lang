@@ -29,7 +29,7 @@
 namespace Boo.Lang.Compiler.TypeSystem
 {
 	using System.Reflection;
-	
+
 	public class ExternalParameter : IParameter
 	{
 		TypeSystemServices _typeSystemServices;
@@ -70,6 +70,14 @@ namespace Boo.Lang.Compiler.TypeSystem
 			get
 			{
 				return _typeSystemServices.Map(_parameter.ParameterType);
+			}
+		}
+		
+		public bool IsByRef
+		{
+			get
+			{
+				return Type.IsByRef;
 			}
 		}
 	}

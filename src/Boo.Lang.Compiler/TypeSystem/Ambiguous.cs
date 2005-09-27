@@ -1,4 +1,4 @@
-﻿#region license
+#region license
 // Copyright (c) 2004, Rodrigo B. de Oliveira (rbo@acm.org)
 // All rights reserved.
 // 
@@ -26,28 +26,32 @@
 // THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #endregion
 
-using System;
-using System.Collections;
-
 namespace Boo.Lang.Compiler.TypeSystem
 {
+	using System;
+	using System.Collections;
+
 	public delegate bool InfoFilter(IEntity tag);
 	
 	public class Ambiguous : IEntity
 	{
 		IEntity[] _entities;
 		
-		public Ambiguous(IEntity[] tags)
+		public Ambiguous(IList entities) : this(ToArray(entities))
 		{
-			if (null == tags)
+		}
+		
+		public Ambiguous(IEntity[] entities)
+		{
+			if (null == entities)
 			{
-				throw new ArgumentNullException("tags");
+				throw new ArgumentNullException("entities");
 			}
-			if (0 == tags.Length)
+			if (0 == entities.Length)
 			{
-				throw new ArgumentException("tags");
+				throw new ArgumentException("entities");
 			}
-			_entities = tags;
+			_entities = entities;
 		}
 		
 		public string Name
@@ -82,9 +86,9 @@ namespace Boo.Lang.Compiler.TypeSystem
 			}
 		}
 		
-		public Boo.Lang.List Filter(InfoFilter condition)
+		public List Filter(InfoFilter condition)
 		{
-			Boo.Lang.List found = new Boo.Lang.List();
+			List found = new List();
 			foreach (IEntity tag in _entities)
 			{
 				if (condition(tag))
@@ -97,7 +101,26 @@ namespace Boo.Lang.Compiler.TypeSystem
 		
 		override public string ToString()
 		{
-			return string.Format("Ambiguous<{0}>", Boo.Lang.Builtins.join(_entities, ", "));
+			return string.Format("Ambiguous<{0}>", Builtins.join(_entities, ", "));
+		}
+		
+		private static IEntity[] ToArray(IList entities)
+		{
+			IEntity[] array = new IEntity[entities.Count];
+			entities.CopyTo(array, 0);
+			return array;
+		}
+
+		public bool AllEntitiesAre(EntityType entityType)
+		{
+			foreach (IEntity entity in _entities)
+			{
+				if (entityType != entity.EntityType)
+				{
+					return false;
+				}
+			}
+			return true;
 		}
 	}
 }

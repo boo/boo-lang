@@ -48,37 +48,20 @@ class CodeCompletionHunter(ProcessMethodBodiesWithDuckTyping):
 	
 	override protected def ProcessMemberReferenceExpression(node as MemberReferenceExpression):
 		if node.Name == '__codecomplete__':
-			_members = GetAllMembers(MyGetReferenceNamespace(node))
+			_members = TypeSystemServices.GetAllMembers(MyGetReferenceNamespace(node))
 		else:
 			super(node)
 		
 	protected def MyGetReferenceNamespace(expression as MemberReferenceExpression) as INamespace:		
 		target as Expression = expression.Target
-		
-		print("ExpressionType: ${target.ExpressionType}")
-		print("Entity: ${target.Entity}")
-		
 		if target.ExpressionType is not null:
 			if target.ExpressionType.EntityType != EntityType.Error:
 				return cast(INamespace, target.ExpressionType)
-		return cast(INamespace, target.Entity)
+		return cast(INamespace, TypeSystemServices.GetOptionalEntity(target))
 	
 	protected static def MakePipeline(hunter):
 		pipeline = ResolveExpressions(BreakOnErrors: false)
 		index = pipeline.Find(Boo.Lang.Compiler.Steps.ProcessMethodBodiesWithDuckTyping)
 		pipeline[index] = hunter
 		return pipeline
-		
-	private def GetAllMembers(entity as INamespace):
-		members = []
-		GetAllMembers(members, entity)
-		return members.ToArray(IEntity)
-		
-	def GetAllMembers(members as List, entity as INamespace):
-		if entity isa InternalClass:
-			type = entity as InternalClass
-			members.Extend(type.GetMembers())
-			GetAllMembers(members, type.BaseType)
-		else:
-			members.Extend(entity.GetMembers())
 		

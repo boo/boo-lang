@@ -59,12 +59,12 @@ interface ICompletionWindowImageProvider:
 		get
 	EventIndex as int:
 		get
-		
-internal enum InputState:
+
+class InteractiveInterpreterControl(TextEditorControl):
+	
+	enum InputState:
 		SingleLine = 0
 		Block = 1
-		
-class InteractiveInterpreterControl(TextEditorControl):	
 		
 	class NullCompletionWindowImageProvider(ICompletionWindowImageProvider):
 		
@@ -146,8 +146,6 @@ class InteractiveInterpreterControl(TextEditorControl):
 	
 	_block = System.IO.StringWriter()
 	
-	_console = System.IO.StringWriter()
-	
 	[getter(Interpreter)]
 	_interpreter as Boo.Lang.Interpreter.InteractiveInterpreter
 
@@ -166,9 +164,8 @@ class InteractiveInterpreterControl(TextEditorControl):
 	def constructor():
 		self._interpreter = Boo.Lang.Interpreter.InteractiveInterpreter(
 								RememberLastValue: true,
-								Print: print)
+								Print: self.print)
 		self._interpreter.SetValue("cls", cls)
-		self._interpreter.SetValue("exec", exec)
 		self._lineHistory = LineHistory(CurrentLineChanged: _lineHistory_CurrentLineChanged)
 		self.Document.HighlightingStrategy = GetBooHighlighting()
 		self.EnableFolding =  false
@@ -194,21 +191,13 @@ class InteractiveInterpreterControl(TextEditorControl):
 		prompt()
 		
 	def Eval(code as string):
-		saved = Console.Out
-		Console.SetOut(_console)
 		try:
 			_interpreter.LoopEval(code)			
 		ensure:
-			FlushConsole()
-			Console.SetOut(saved)
 			_state = InputState.SingleLine
-			
-	private def FlushConsole():
-		AppendText(_console.ToString())
-		_console.GetStringBuilder().Length = 0
 		
 	private def ConsumeCurrentLine():		
-		text = CurrentLineText
+		text as string = CurrentLineText # was accessing Control.text member
 		_lineHistory.Add(text)
 		print("")
 		return text
@@ -291,15 +280,7 @@ class InteractiveInterpreterControl(TextEditorControl):
 	private def GetSuggestions():		
 		code = CurrentLineText.Insert(self.CaretColumn-4, ".__codecomplete__")
 		code = code.Insert(0, _block.ToString()) if InputState.Block == _state
-		suggestion = _interpreter.SuggestCodeCompletion(code) as INamespace
-		return array(IEntity, 0) if suggestion is null
-		return GetChildNamespaces(suggestion) if code.StartsWith("import ")
-		return suggestion.GetMembers()
-		
-	private def GetChildNamespaces(parent as INamespace):
-		return array(member
-					for member in parent.GetMembers()
-					if member.EntityType == EntityType.Namespace)
+		return _interpreter.SuggestCodeCompletion(code)
 		
 	private def HandleDialogKey(key as Keys):
 		return false if InCodeCompletion
@@ -307,7 +288,9 @@ class InteractiveInterpreterControl(TextEditorControl):
 		if key == Keys.Enter:
 			try:
 				(SingleLineInputState, BlockInputState)[_state]()
-			except x:				
+			except x as System.Reflection.TargetInvocationException:
+				print(x.InnerException)
+			except x:
 				print(x)
 			prompt()
 			return true
@@ -355,9 +338,6 @@ class InteractiveInterpreterControl(TextEditorControl):
 		self.Document.TextContent = ""
 		self.ActiveTextAreaControl.Refresh()
 	
-	private def exec(scriptName as string):
-		_interpreter.Eval(Boo.IO.TextFile.ReadFile(scriptName))
-
 	private def _lineHistory_CurrentLineChanged():
 		segment = GetLastLineSegment()
 		self.Document.Replace(segment.Offset + 4,

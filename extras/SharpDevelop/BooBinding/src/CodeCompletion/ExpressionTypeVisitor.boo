@@ -1,3 +1,22 @@
+#region license
+// Copyright (c) 2004, Daniel Grunwald (daniel@danielgrunwald.de)
+// All rights reserved.
+//
+// BooBinding is free software; you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation; either version 2 of the License, or
+// (at your option) any later version.
+// 
+// BooBinding is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+// 
+// You should have received a copy of the GNU General Public License
+// along with BooBinding; if not, write to the Free Software
+// Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+#endregion
+
 namespace BooBinding.CodeCompletion
 
 import System
@@ -64,14 +83,19 @@ class ExpressionTypeVisitor(DepthFirstVisitor):
 			if _returnClass == null and _returnType != null:
 				_returnClass = _resolver.SearchType(_returnType.FullyQualifiedName)
 			return if ProcessMethod(node, mre.Name, _returnClass)
+			// try if the MemberReferenceExpression is a fully qualified class name (constructor call)
+			ProcessMemberReferenceExpression(mre.Name)
+			CreateReturnType(_returnClass)
 		elif node.Target isa ReferenceExpression:
 			re as ReferenceExpression = node.Target
 			// try if it is a method on the current object
 			return if ProcessMethod(node, re.Name, _resolver.CallingClass)
+			// try if it is a builtin method
+			return if ProcessMethod(node, re.Name, _resolver.BuiltinClass)
 			// try if it is a class name -> constructor
 			CreateReturnType(_resolver.SearchType(re.Name))
-			return
-		SetReturnType(null)
+		else:
+			SetReturnType(null)
 	
 	private def ProcessMethod(node as MethodInvocationExpression, name as string, c as IClass) as bool:
 		return false if c == null
@@ -97,6 +121,33 @@ class ExpressionTypeVisitor(DepthFirstVisitor):
 					possibleOverloads.Add(m)
 		return possibleOverloads
 	
+	override def OnSlicingExpression(node as SlicingExpression):
+		Debug(node)
+		Visit(node.Target)
+		slice as Slice = node.Indices[0]
+		if (slice.End != null):
+			// Boo slice, returns a part of the source -> same type as source
+			return
+		if _returnType != null and _returnType.ArrayDimensions != null and _returnType.ArrayDimensions.Length > 0:
+			SetReturnType(BooBinding.CodeCompletion.ReturnType(_returnType.FullyQualifiedName, _returnType.ArrayDimensions[0 : _returnType.ArrayDimensions.Length - 1], 0))
+			return
+		if _returnClass == null and _returnType != null:
+			_returnClass = _resolver.SearchType(_returnType.FullyQualifiedName)
+		if _returnClass != null:
+			indexers = FindIndexer(_returnClass, 1)
+			if indexers.Count > 0:
+				SetReturnType(cast(IIndexer, indexers[0]).ReturnType)
+				return
+		SetReturnType(null)
+	
+	private def FindIndexer(c as IClass, arguments as int):
+		possibleOverloads = ArrayList()
+		for cl as IClass in c.ClassInheritanceTree:
+			for m as IIndexer in cl.Indexer:
+				if m.Parameters.Count == arguments:
+					possibleOverloads.Add(m)
+		return possibleOverloads
+	
 	override def OnBinaryExpression(node as BinaryExpression):
 		Debug(node)
 		CombineTypes(node.Left, node.Right)
@@ -110,19 +161,34 @@ class ExpressionTypeVisitor(DepthFirstVisitor):
 	
 	override def OnReferenceExpression(node as ReferenceExpression):
 		// Resolve reference (to a variable, field, parameter or type)
+		return if ProcessMember(node.Name, _resolver.CallingClass)
 		rt = _resolver.GetTypeFromLocal(node.Name)
 		if rt != null:
 			SetReturnType(rt)
 			return
-		return if ProcessMember(node.Name, _resolver.CallingClass)
-		CreateReturnType(_resolver.SearchType(node.Name))
+		if _resolver.IsNamespace(node.Name):
+			SetReturnType(NamespaceReturnType(node.Name))
+		else:
+			CreateReturnType(_resolver.SearchType(node.Name))
 	
 	override def OnMemberReferenceExpression(node as MemberReferenceExpression):
 		Debug(node)
 		Visit(node.Target)
+		ProcessMemberReferenceExpression(node.Name)
+	
+	private def ProcessMemberReferenceExpression(name as string):
+	"""Gets the return type of the MemberReferenceExpression with the specified name
+	on the current return type."""
+		if _returnType isa NamespaceReturnType:
+			name = _returnType.FullyQualifiedName + '.' + name
+			if _resolver.IsNamespace(name):
+				SetReturnType(NamespaceReturnType(name))
+			else:
+				CreateReturnType(_resolver.SearchType(name))
+			return
 		if _returnClass == null and _returnType != null:
 			_returnClass = _resolver.SearchType(_returnType.FullyQualifiedName)
-		return if ProcessMember(node.Name, _returnClass)
+		return if ProcessMember(name, _returnClass)
 		SetReturnType(null)
 	
 	private def ProcessMember(name as string, parentClass as IClass):

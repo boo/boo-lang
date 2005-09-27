@@ -34,4 +34,14 @@ interface ICustomer:
 	Name as string:
 	"""interface property"""
 		get
+		
+	event Foo as EventHandler
+	"""events, yes, why not?"""
+
+enum AnEnum:
+"""and so can an enum"""
+	AnItem
+	"""and its items"""
+	AnotherItem
+
 

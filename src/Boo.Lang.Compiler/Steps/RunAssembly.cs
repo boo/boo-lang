@@ -28,13 +28,13 @@
 
 namespace Boo.Lang.Compiler.Steps
 {
-	using System;
-	
 	public class RunAssembly : AbstractCompilerStep
 	{
 		override public void Run()
 		{
-			if (Errors.Count > 0 || CompilerOutputType.Library == Parameters.OutputType)
+			if (Errors.Count > 0 ||
+				CompilerOutputType.Library == Parameters.OutputType ||
+				null == Context.GeneratedAssembly)
 			{
 				return;
 			}

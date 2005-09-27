@@ -1,4 +1,37 @@
 ﻿#region license
+// Copyright (c) 2003, 2004, 2005 Rodrigo B. de Oliveira (rbo@acm.org)
+// All rights reserved.
+// 
+// Redistribution and use in source and binary forms, with or without modification,
+// are permitted provided that the following conditions are met:
+// 
+//     * Redistributions of source code must retain the above copyright notice,
+//     this list of conditions and the following disclaimer.
+//     * Redistributions in binary form must reproduce the above copyright notice,
+//     this list of conditions and the following disclaimer in the documentation
+//     and/or other materials provided with the distribution.
+//     * Neither the name of Rodrigo B. de Oliveira nor the names of its
+//     contributors may be used to endorse or promote products derived from this
+//     software without specific prior written permission.
+// 
+// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+// ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+// WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+// DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE
+// FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+// DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+// SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+// CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+// OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+// THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+#endregion
+
+
+using System;
+using System.IO;
+using System.Xml.Serialization;
+
+#region license
 // Copyright (c) 2004, Rodrigo B. de Oliveira (rbo@acm.org)
 // All rights reserved.
 // 
@@ -30,6 +63,98 @@ namespace Boo.Lang.Compiler.Ast
 {	
 	public class AstUtil
 	{
+		public static bool IsOverloadableOperator(BinaryOperatorType op)
+		{
+			switch (op)
+			{
+				case BinaryOperatorType.Addition:
+				case BinaryOperatorType.Subtraction:
+				case BinaryOperatorType.Multiply:
+				case BinaryOperatorType.Division:
+				case BinaryOperatorType.Modulus:
+				case BinaryOperatorType.Exponentiation:
+				case BinaryOperatorType.LessThan:
+				case BinaryOperatorType.LessThanOrEqual:
+				case BinaryOperatorType.GreaterThan:
+				case BinaryOperatorType.GreaterThanOrEqual:
+				case BinaryOperatorType.Match:
+				case BinaryOperatorType.NotMatch:
+				case BinaryOperatorType.Member:
+				case BinaryOperatorType.NotMember:
+				case BinaryOperatorType.BitwiseOr:
+				case BinaryOperatorType.BitwiseAnd:
+				{
+					return true;
+				}
+			}
+			return false;
+		}
+
+		public static string GetMethodNameForOperator(BinaryOperatorType op)
+		{
+			return "op_" + op.ToString();
+		}
+		
+		public static string GetMethodNameForOperator(UnaryOperatorType op)
+		{
+			return "op_" + op.ToString();
+		}
+
+		public static bool IsComplexSlicing(SlicingExpression node)
+		{
+			foreach (Slice slice in node.Indices)
+			{
+				if (IsComplexSlice(slice))
+				{
+					return true;
+				}
+			}
+			return false;
+		}
+		
+		public static bool IsComplexSlice(Slice slice)
+		{
+			return null != slice.End
+				|| null != slice.Step
+				|| OmittedExpression.Default == slice.Begin;
+		}
+
+		public static Node GetMemberAnchor(Node node)
+		{
+			MemberReferenceExpression member = node as MemberReferenceExpression;
+			return member != null ? member.Target : node;
+		}
+
+		public static bool IsPostUnaryOperator(UnaryOperatorType op)
+		{
+			return UnaryOperatorType.PostIncrement == op ||
+				UnaryOperatorType.PostDecrement == op;
+		}
+
+		public static bool IsIncDec(Node node)
+		{
+			if (node.NodeType == NodeType.UnaryExpression)
+			{
+				UnaryOperatorType op = ((UnaryExpression)node).Operator;
+				return UnaryOperatorType.Increment == op ||
+					UnaryOperatorType.PostIncrement == op ||
+					UnaryOperatorType.Decrement == op ||
+					UnaryOperatorType.PostDecrement == op;
+			}
+			return false;
+		}
+
+		public static bool IsAssignment(Expression node)
+		{
+			if (node.NodeType == NodeType.BinaryExpression)
+			{
+				BinaryOperatorType binaryOperator = ((BinaryExpression)node).Operator;
+				return IsAssignmentOperator(binaryOperator);
+			}
+			return false;
+		}
+
+
 		public static ClassDefinition GetParentClass(Node node)
 		{
 			Node parent = node.ParentNode;
@@ -81,23 +206,48 @@ namespace Boo.Lang.Compiler.Ast
 		
 		public static bool IsListGenerator(Node node)
 		{			
-			if (NodeType.ListLiteralExpression == node.NodeType)
-			{
-				return IsListGenerator((ListLiteralExpression)node);
-			}
-			return false;
+			return NodeType.ListLiteralExpression == node.NodeType
+				? IsListGenerator((ListLiteralExpression)node)
+				: false;
 		}
 		
 		public static bool IsListGenerator(ListLiteralExpression node)
 		{
-			return 1 == node.Items.Count &&
-				NodeType.GeneratorExpression == node.Items[0].NodeType;
+			if (1 == node.Items.Count)
+			{
+				NodeType itemType = node.Items[0].NodeType;
+				return NodeType.GeneratorExpression == itemType;
+			}
+			return false;
+		}
+		
+		public static bool IsListMultiGenerator(Node node)
+		{			
+			return NodeType.ListLiteralExpression == node.NodeType
+				? IsListMultiGenerator((ListLiteralExpression)node)
+				: false;
+		}
+
+		public static bool IsListMultiGenerator(ListLiteralExpression node)
+		{
+			if (1 == node.Items.Count)
+			{
+				NodeType itemType = node.Items[0].NodeType;
+				return NodeType.ExtendedGeneratorExpression == itemType;
+			}
+			return false;
 		}		
 		
 		public static bool IsTargetOfMethodInvocation(Expression node)
 		{
 			return node.ParentNode.NodeType == NodeType.MethodInvocationExpression &&
 					node == ((MethodInvocationExpression)node.ParentNode).Target;
+		}
+
+		public static bool IsTargetOfMemberReference(Expression node)
+		{
+			return node.ParentNode.NodeType == NodeType.MemberReferenceExpression &&
+				node == ((MemberReferenceExpression)node.ParentNode).Target;
 		}
 		
 		public static bool IsTargetOfSlicing(Expression node)
@@ -133,8 +283,8 @@ namespace Boo.Lang.Compiler.Ast
 				if (node == be.Left)
 				{
 					BinaryOperatorType op = be.Operator;
-					return op == BinaryOperatorType.InPlaceAdd ||
-							op == BinaryOperatorType.InPlaceSubtract;
+					return op == BinaryOperatorType.InPlaceAddition ||
+							op == BinaryOperatorType.InPlaceSubtraction;
 				}
 			}
 			return false;
@@ -143,10 +293,14 @@ namespace Boo.Lang.Compiler.Ast
 		public static bool IsAssignmentOperator(BinaryOperatorType op)
 		{
 			return BinaryOperatorType.Assign == op ||
-					BinaryOperatorType.InPlaceAdd == op ||
-					BinaryOperatorType.InPlaceSubtract == op ||
+					BinaryOperatorType.InPlaceAddition == op ||
+					BinaryOperatorType.InPlaceSubtraction == op ||
 					BinaryOperatorType.InPlaceMultiply == op ||
-					BinaryOperatorType.InPlaceDivide == op;
+					BinaryOperatorType.InPlaceDivision == op ||
+					BinaryOperatorType.InPlaceBitwiseAnd == op ||
+					BinaryOperatorType.InPlaceBitwiseOr == op ||
+					BinaryOperatorType.InPlaceShiftLeft == op ||
+					BinaryOperatorType.InPlaceShiftRight == op;
 		}
 		
 		public static Constructor CreateConstructor(Node lexicalInfoProvider, TypeMemberModifiers modifiers)
@@ -157,7 +311,7 @@ namespace Boo.Lang.Compiler.Ast
 			return constructor;
 		}
 		
-		public static Expression CreateReferenceExpression(string fullname)
+		public static ReferenceExpression CreateReferenceExpression(string fullname)
 		{
 			string[] parts = fullname.Split('.');
 			ReferenceExpression expression = new ReferenceExpression(parts[0]);
@@ -183,9 +337,28 @@ namespace Boo.Lang.Compiler.Ast
 			mie.IsSynthetic = true;
 			return mie;
 		}
+
+		public static bool IsExplodeExpression(Node node)
+		{
+			UnaryExpression e = node as UnaryExpression;
+			return null == e ? false : e.Operator == UnaryOperatorType.Explode;
+		}
 		
 		private AstUtil()
 		{
+		}
+
+		public static string ToXml(Node node)
+		{
+			StringWriter writer = new StringWriter();
+			XmlSerializer serializer = new XmlSerializer(node.GetType());
+			serializer.Serialize(writer, node);
+			return writer.ToString();
+		}
+
+		public static Node FromXml(Type type, string code)
+		{
+			return (Node)new XmlSerializer(type).Deserialize(new StringReader(code));
 		}
 	}
 }

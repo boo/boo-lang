@@ -198,7 +198,7 @@ class BooEditor(DockContent):
 		_compiler.Parameters.Input.Add(StringInput(GetSafeFileName(), self.TextContent))
 
 		try:
-			using console=ConsoleCapture():
+			using console=Boo.Lang.Interpreter.ConsoleCapture():
 				
 				started = date.Now
 				result = _compiler.Run()
@@ -219,7 +219,7 @@ class BooEditor(DockContent):
 					current = AppDomain.CurrentDomain
 					try:
 						current.AssemblyResolve += AppDomain_AssemblyResolve
-						result.GeneratedAssemblyEntryPoint.Invoke(null, (null,))
+						result.GeneratedAssembly.EntryPoint.Invoke(null, (null,))
 					except x:
 						print(x)		
 					ensure:

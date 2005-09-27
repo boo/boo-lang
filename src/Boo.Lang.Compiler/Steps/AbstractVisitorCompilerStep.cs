@@ -1,10 +1,10 @@
 ﻿#region license
 // Copyright (c) 2004, Rodrigo B. de Oliveira (rbo@acm.org)
 // All rights reserved.
-// 
+//
 // Redistribution and use in source and binary forms, with or without modification,
 // are permitted provided that the following conditions are met:
-// 
+//
 //     * Redistributions of source code must retain the above copyright notice,
 //     this list of conditions and the following disclaimer.
 //     * Redistributions in binary form must reproduce the above copyright notice,
@@ -13,7 +13,7 @@
 //     * Neither the name of Rodrigo B. de Oliveira nor the names of its
 //     contributors may be used to endorse or promote products derived from this
 //     software without specific prior written permission.
-// 
+//
 // THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
 // ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
 // WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
@@ -27,9 +27,8 @@
 #endregion
 
 using System;
-using System.Reflection;
-using Boo.Lang.Compiler.Ast;
 using Boo.Lang.Compiler;
+using Boo.Lang.Compiler.Ast;
 using Boo.Lang.Compiler.TypeSystem;
 
 namespace Boo.Lang.Compiler.Steps
@@ -39,7 +38,7 @@ namespace Boo.Lang.Compiler.Steps
 		protected CompilerContext _context;
 		
 		protected AbstractVisitorCompilerStep()
-		{			
+		{
 		}
 		
 		protected CompilerContext Context
@@ -105,10 +104,15 @@ namespace Boo.Lang.Compiler.Steps
 				return _context.TypeSystemServices;
 			}
 		}
-		
+
+		public override void OnAstLiteralExpression(Boo.Lang.Compiler.Ast.AstLiteralExpression node)
+		{
+			// ignore ast literals
+		}
+
 		override protected void OnError(Node node, Exception error)
 		{
-			_context.TraceError("{0}: Internal compiler error: ${1}", node.LexicalInfo, error);
+			_context.TraceError("{0}: Internal compiler error on node '{2}': {1}", node.LexicalInfo, error, node);
 			base.OnError(node, error);
 		}
 		
@@ -126,23 +130,32 @@ namespace Boo.Lang.Compiler.Steps
 		protected void Error(Expression node)
 		{
 			node.ExpressionType = TypeSystemServices.ErrorEntity;
-			node.Entity = TypeSystemServices.ErrorEntity;
 		}
 
 		protected void Bind(Node node, IEntity tag)
 		{
 			_context.TraceVerbose("{0}: Node '{1}' bound to '{2}'.", node.LexicalInfo, node, tag);
 			node.Entity = tag;
-		}		
+		}
 		
 		public IEntity GetEntity(Node node)
 		{
 			return TypeSystemServices.GetEntity(node);
 		}
+
+		public IMethod GetEntity(Method node)
+		{
+			return (IMethod)TypeSystemServices.GetEntity(node);
+		}
+
+		public IProperty GetEntity(Property node)
+		{
+			return (IProperty)TypeSystemServices.GetEntity(node);
+		}
 		
 		protected void BindExpressionType(Expression node, IType type)
 		{
-			_context.TraceVerbose("{0}: Type of expression '{1}' bound to '{2}'.", node.LexicalInfo, node, type);  
+			_context.TraceVerbose("{0}: Type of expression '{1}' bound to '{2}'.", node.LexicalInfo, node, type);
 			node.ExpressionType = type;
 		}
 		
@@ -150,16 +163,16 @@ namespace Boo.Lang.Compiler.Steps
 		{
 			return TypeSystemServices.GetConcreteExpressionType(expression);
 		}
-		
+
 		protected IType GetExpressionType(Expression node)
-		{			
+		{
 			return TypeSystemServices.GetExpressionType(node);
 		}
 		
 		public IType GetType(Node node)
 		{
 			return TypeSystemServices.GetType(node);
-		}		
+		}
 		
 		public InternalLocal GetInternalLocal(Node local)
 		{
@@ -185,6 +198,32 @@ namespace Boo.Lang.Compiler.Steps
 		public virtual void Dispose()
 		{
 			_context = null;
+		}
+
+		private readonly object VisitedAnnotationKey = new object();
+
+		protected void MarkVisited(Node node)
+		{
+			node[VisitedAnnotationKey] = VisitedAnnotationKey;
+			_context.TraceInfo("{0}: node '{1}' mark visited.", node.LexicalInfo, node);
+		}
+
+		protected virtual void EnsureRelatedNodeWasVisited(Node sourceNode, IEntity entity)
+		{
+			IInternalEntity internalEntity = entity as IInternalEntity;
+			if (null != internalEntity)
+			{
+				Node node = internalEntity.Node;
+				if (!WasVisited(node))
+				{
+					Visit(node);
+				}
+			}
+		}
+
+		protected bool WasVisited(Node node)
+		{
+			return node.ContainsAnnotation(VisitedAnnotationKey);
 		}
 	}
 }

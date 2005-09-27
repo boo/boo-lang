@@ -303,6 +303,19 @@ namespace Boo.Lang.Parser.Tests
 		}
 
 		[Test]
+		public void TestRELiteral3()
+		{
+			Boo.Lang.Compiler.Ast.Module module = ParseTestCase("re_literal_3.boo");
+			
+			StatementCollection stmts = module.Globals.Statements;
+			Assert.AreEqual(2, stmts.Count);
+			
+			BinaryExpression ae = (BinaryExpression)((ExpressionStatement)stmts[0]).Expression;
+			Assert.AreEqual(BinaryOperatorType.Assign, ae.Operator);
+			Assert.AreEqual("/\\x2f\\u002f/", ((RELiteralExpression)ae.Right).Value);
+		}
+
+		[Test]
 		public void TestIfElse1()
 		{
 			Boo.Lang.Compiler.Ast.Module module = ParseTestCase("if_else_1.boo");
@@ -524,7 +537,11 @@ interface ICustomer:
 	"""interface property"""
 		get
 	
-	
+enum AnEnum:
+"""and so can an enum"""
+	AnItem
+	"""and its items"""
+	AnotherItem
 			*/
 			
 			Boo.Lang.Compiler.Ast.Module module = ParseTestCase("docstrings_1.boo");
@@ -542,6 +559,10 @@ interface ICustomer:
 			
 			Assert.AreEqual("interface method", customer.Members[0].Documentation);
 			Assert.AreEqual("interface property", customer.Members[1].Documentation);
+			
+			EnumDefinition anEnum = (EnumDefinition)module.Members[2];
+			Assert.AreEqual("and so can an enum", anEnum.Documentation);
+			Assert.AreEqual("and its items", anEnum.Members[0].Documentation);
 			
 		}
 	}

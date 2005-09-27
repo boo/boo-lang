@@ -60,7 +60,10 @@ class BooCompilerWrapper:
 			args.Add("-t:winexe")
 		elif _options.CompileTarget == CompileTarget.Library:
 			args.Add("-t:library")
-			
+		
+		if _options.DuckTypingByDefault:
+			args.Add("-ducky")
+		
 		args.Add("-o:${OutputFile}")		
 		for fname in _references:
 			args.Add("-r:${fname}")
@@ -72,10 +75,12 @@ class BooCompilerWrapper:
 		// shellm executes the compiler inprocess in a new AppDomain
 		// for some reason, the compiler output sometimes contains
 		// spurious messages from the main AppDomain 
-		return shellm(GetBoocLocation(), args.ToArray(string))
-		//return shell(GetBoocLocation(), join("\"${arg}\"" for arg in args))
+		
+		//return shellm(GetBoocLocation(), args.ToArray(string))
+		// Switching to shell instead of shellm because of BOO-243
+		return shell(GetBoocLocation(), join("\"${arg}\"" for arg in args))
 		
 	def GetBoocLocation():
 		return Path.Combine(
-			Path.GetDirectoryName(typeof(BooCompilerWrapper).Assembly.CodeBase["file:///".Length:]),
+			Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location),
 			"booc.exe")

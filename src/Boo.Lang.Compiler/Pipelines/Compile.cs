@@ -28,22 +28,32 @@
 
 namespace Boo.Lang.Compiler.Pipelines
 {
-	using System;
 	using Boo.Lang.Compiler.Steps;
 	
 	public class Compile : ResolveExpressions
 	{
 		public Compile()
-		{				
+		{	
 			Add(new StricterErrorChecking());
+
+			Add(new ExpandDuckTypedExpressions());
+
+			Add(new ProcessAssignmentsToValueTypeMembers());
+			Add(new ExpandProperties());
+			Add(new RemoveDeadCode());
+			
+			Add(new CheckMembersProtectionLevel());
+
 			Add(new NormalizeIterationStatements());
 			
 			Add(new ProcessSharedLocals());			
 			Add(new ProcessClosures());
 			Add(new ProcessGenerators());
+
+			Add(new ExpandVarArgsMethodInvocations());
 			
 			Add(new InjectCallableConversions());
-			Add(new ImplementICallableOnCallableDefinitions());			
+			Add(new ImplementICallableOnCallableDefinitions());
 		}
 	}
 }

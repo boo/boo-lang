@@ -179,7 +179,7 @@ class Visitor(AbstractVisitorCompilerStep):
 	override def OnMethod(node as AST.Method):
 		try:
 			print "Method: ${node.FullName}"
-			method = Method(node.Name, ReturnType(node.ReturnType), GetModifier(node), GetRegion(node), GetClientRegion(node))
+			method = Method(node.Name, ReturnType.CreateReturnType(node), GetModifier(node), GetRegion(node), GetClientRegion(node))
 			method.Parameters = GetParameters(node.Parameters)
 			method.Node = node
 			method.Documentation = node.Documentation
@@ -218,9 +218,21 @@ class Visitor(AbstractVisitorCompilerStep):
 		try:
 			print "Field ${node.Name}"
 			c as Class = _currentClass.Peek()
-			field = Field(ReturnType(node.Type), node.Name, GetModifier(node), GetRegion(node))
-			field.Documentation = node.Documentation			
+			field = Field(ReturnType.CreateReturnType(node), node.Name, GetModifier(node), GetRegion(node))
+			field.Documentation = node.Documentation
 			c.Fields.Add(field)
+		except ex:
+			print ex.ToString()
+			raise
+			
+	override def OnEvent(node as AST.Event):
+		try:
+			print "event ${node.Name}"
+			c as Class = _currentClass.Peek()
+			region = GetRegion(node)
+			e = Event(node.Name, ReturnType.CreateReturnType(node), GetModifier(node), region, region)
+			e.Documentation = node.Documentation
+			c.Events.Add(e)
 		except ex:
 			print ex.ToString()
 			raise
@@ -228,7 +240,7 @@ class Visitor(AbstractVisitorCompilerStep):
 	override def OnProperty(node as AST.Property):
 		try:
 			print "Property ${node.Name}"
-			property = Property(node.Name, ReturnType(node.Type), GetModifier(node), GetRegion(node), GetClientRegion(node))
+			property = Property(node.Name, ReturnType.CreateReturnType(node), GetModifier(node), GetRegion(node), GetClientRegion(node))
 			property.Documentation = node.Documentation
 			property.Node = node
 			cast(Class, _currentClass.Peek()).Properties.Add(property)
@@ -237,24 +249,6 @@ class Visitor(AbstractVisitorCompilerStep):
 			raise
 	
 	/*
-	// TODO: Event Declaration
-	override def Visit(eventDeclaration as AST.EventDeclaration, data as object) as object:
-		region as DefaultRegion = GetRegion(eventDeclaration.StartLocation, eventDeclaration.EndLocation)
-		bodyRegion as DefaultRegion = GetRegion(eventDeclaration.BodyStart, eventDeclaration.BodyEnd)
-		type as ReturnType = ReturnType(eventDeclaration.TypeReference)
-		c as Class = _currentClass.Peek()
-		e as Event = null
-		if eventDeclaration.VariableDeclarators != null:
-			for varDecl as ICSharpCode.SharpRefactory.Parser.AST.VariableDeclaration in eventDeclaration.VariableDeclarators:
-				e = Event(varDecl.Name, type, eventDeclaration.Modifier, region, bodyRegion)
-				c.Events.Add(e)
-			
-		else:
-			e = Event(eventDeclaration.Name, type, eventDeclaration.Modifier, region, bodyRegion)
-			c.Events.Add(e)
-		
-		return null
-	
 	// TODO: Detect indexer method and add it as Indexer
 	override def Visit(indexerDeclaration as AST.IndexerDeclaration, data as object) as object:
 		region as DefaultRegion = GetRegion(indexerDeclaration.StartLocation, indexerDeclaration.EndLocation)

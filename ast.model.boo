@@ -21,15 +21,25 @@ enum TypeMemberModifiers:
 	Virtual = 128
 	Override = 256
 	Abstract = 512
+	VisibilityMask = 15
 	
 enum MethodImplementationFlags:
 	None = 0
 	Runtime = 1
 
+enum ParameterModifiers:
+	None = 0
+	Val = 0
+	Ref = 1
+
+
 abstract class TypeMember(Node, INodeWithAttributes):
 	Modifiers as TypeMemberModifiers
 	Name as string
 	Attributes as AttributeCollection
+
+class ExplicitMemberInfo(Node):
+	InterfaceType as SimpleTypeReference
 
 [collection(TypeMember)]
 class TypeMemberCollection:
@@ -43,9 +53,10 @@ class SimpleTypeReference(TypeReference):
 
 class ArrayTypeReference(TypeReference):
 	ElementType as TypeReference
+	Rank as IntegerLiteralExpression
 	
 class CallableTypeReference(TypeReference):
-	Parameters as TypeReferenceCollection
+	Parameters as ParameterDeclarationCollection
 	ReturnType as TypeReference
 
 [collection(TypeReference)]
@@ -107,11 +118,12 @@ class Field(TypeMember):
 	Type as TypeReference
 	Initializer as Expression
 
-class Property(TypeMember, INodeWithParameters):
+class Property(TypeMember, INodeWithParameters, IExplicitMember):
 	Parameters as ParameterDeclarationCollection
 	Getter as Method
 	Setter as Method
 	Type as TypeReference
+	ExplicitInfo as ExplicitMemberInfo
 	
 class Event(TypeMember):
 	Add as Method
@@ -132,18 +144,23 @@ class CallableBlockExpression(Expression, INodeWithParameters):
 	[auto]
 	Body as Block
 
-class Method(CallableDefinition):	
+class Method(CallableDefinition, IExplicitMember):
 	[auto]
 	Body as Block
 	Locals as LocalCollection
 	ImplementationFlags as MethodImplementationFlags
+	ExplicitInfo as ExplicitMemberInfo
 
 class Constructor(Method):
+	pass
+
+class Destructor(Method):
 	pass
 
 class ParameterDeclaration(Node, INodeWithAttributes):
 	Name as string
 	Type as TypeReference
+	Modifiers as ParameterModifiers
 	Attributes as AttributeCollection
 
 [collection(ParameterDeclaration)]
@@ -292,7 +309,7 @@ abstract class Expression(Node):
 [collection(Expression)]
 class ExpressionCollection:
 	pass
-
+	
 [ignore]
 class OmittedExpression(Expression):
 	pass
@@ -309,9 +326,6 @@ class MethodInvocationExpression(Expression, INodeWithArguments):
 	Target as Expression
 	Arguments as ExpressionCollection
 	NamedArguments as ExpressionPairCollection
-	
-class GenericMethodInvocationExpression(MethodInvocationExpression):
-	TypeParameters as TypeReferenceCollection
 
 enum BinaryOperatorType:
 	None
@@ -330,10 +344,12 @@ enum BinaryOperatorType:
 	Match
 	NotMatch
 	Assign
-	InPlaceAdd
-	InPlaceSubtract
+	InPlaceAddition
+	InPlaceSubtraction
 	InPlaceMultiply
-	InPlaceDivide
+	InPlaceDivision
+	InPlaceBitwiseAnd
+	InPlaceBitwiseOr
 	ReferenceEquality
 	ReferenceInequality
 	TypeTest
@@ -345,13 +361,20 @@ enum BinaryOperatorType:
 	BitwiseAnd
 	ExclusiveOr
 	InPlaceExclusiveOr
+	ShiftLeft
+	InPlaceShiftLeft
+	ShiftRight
+	InPlaceShiftRight
 
 enum UnaryOperatorType:
 	None
 	UnaryNegation
 	Increment
 	Decrement
+	PostIncrement
+	PostDecrement
 	LogicalNot
+	Explode
 
 class UnaryExpression(Expression):
 	Operator as UnaryOperatorType
@@ -375,9 +398,15 @@ class MemberReferenceExpression(ReferenceExpression):
 
 abstract class LiteralExpression(Expression):
 	pass
+	
+class AstLiteralExpression(LiteralExpression):
+	Node as Node
 
 class StringLiteralExpression(LiteralExpression):
 	Value as string
+	
+class CharLiteralExpression(StringLiteralExpression):
+	pass
 
 class TimeSpanLiteralExpression(LiteralExpression):
 	Value as System.TimeSpan
@@ -388,6 +417,7 @@ class IntegerLiteralExpression(LiteralExpression):
 
 class DoubleLiteralExpression(LiteralExpression):
 	Value as double
+	IsSingle as bool
 
 class NullLiteralExpression(LiteralExpression):
 	pass
@@ -415,12 +445,19 @@ class ListLiteralExpression(LiteralExpression):
 
 class ArrayLiteralExpression(ListLiteralExpression):
 	pass
-
+	
 class GeneratorExpression(Expression):
 	Expression as Expression
 	Declarations as DeclarationCollection
 	Iterator as Expression
 	Filter as StatementModifier
+	
+class ExtendedGeneratorExpression(Expression):
+	Items as GeneratorExpressionCollection
+	
+[collection(GeneratorExpression)]
+class GeneratorExpressionCollection:
+	pass
 	
 class Slice(Node):
 	Begin as Expression

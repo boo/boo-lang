@@ -28,7 +28,7 @@
 
 import System
 import System.IO
-import Boo.IO
+import Boo.Lang.Useful.IO from Boo.Lang.Useful
 import Boo.Lang.Compiler
 import Boo.Lang.Compiler.Pipelines
 import Boo.Lang.Compiler.Ast
@@ -72,7 +72,10 @@ namespace Boo.Lang.Compiler.Ast
 	using System;
 
 	[Serializable]
-	public enum ${node.Name}
+""")
+		if node.Name.EndsWith("Modifiers"):
+			writer.WriteLine("	[Flags]")
+		writer.Write("""	public enum ${node.Name}
 	{	
 """)
 		last = node.Members[-1]
@@ -106,6 +109,28 @@ def WriteAssignmentsFromParameters(writer as TextWriter, fields as List):
 	for field as Field in fields:
 		writer.Write("""
 			${field.Name} = ${GetParameterName(field)};""")
+			
+def WriteMatchesImpl(writer as TextWriter, node as ClassDefinition):
+	writer.WriteLine("""
+		override public bool Matches(Node node)
+		{	
+			${node.Name} other = node as ${node.Name};
+			if (null == other) return false;""")
+	
+	for field as Field in GetAllFields(node):
+		fieldName = GetPrivateName(field)
+		fieldType = ResolveFieldType(field)
+		if fieldType is null or IsEnum(fieldType):
+			writer.WriteLine("""
+			if (${fieldName} != other.${fieldName}) return false;""")
+			continue
+		writer.WriteLine("""
+			if (!Node.Matches(${fieldName}, other.${fieldName})) return false;""")
+	
+	writer.WriteLine("""
+			return true;
+		}
+	""");
 	
 def WriteClassImpl(node as ClassDefinition):
 	
@@ -176,6 +201,8 @@ namespace Boo.Lang.Compiler.Ast.Impl
 			}
 		}""")
 		
+			WriteMatchesImpl(writer, node)
+		
 			writer.WriteLine("""
 		override public bool Replace(Node existing, Node newNode)
 		{
@@ -225,7 +252,8 @@ namespace Boo.Lang.Compiler.Ast.Impl
 			clone._lexicalInfo = _lexicalInfo;
 			clone._endSourceLocation = _endSourceLocation;
 			clone._documentation = _documentation;
-			clone._entity = _entity;
+			//clone._entity = _entity;
+			clone._annotations = (Hashtable)_annotations.Clone();
 			""")
 			
 			if IsExpression(node):
@@ -251,8 +279,44 @@ namespace Boo.Lang.Compiler.Ast.Impl
 			return clone;
 		}
 			""")
+			
+			writer.WriteLine("""
+		override internal void ClearTypeSystemBindings()
+		{
+			_annotations.Clear();
+			//_entity = null;
+			""")
+			
+			if IsExpression(node):
+				writer.WriteLine("""
+			_expressionType = null;
+			""");
+			
+			for field as Field in allFields:
+				fieldType = ResolveFieldType(field)
+				fieldName = GetPrivateName(field)
+				if fieldType and not IsEnum(fieldType):
+					writer.WriteLine("""
+			if (null != ${fieldName})
+			{
+				${fieldName}.ClearTypeSystemBindings();
+			}""")
+			
+			writer.WriteLine("""
+		}""")
 		
 		for field as Field in node.Members:
+			if field.Name == "Name":
+				writer.Write("""
+		[System.Xml.Serialization.XmlAttribute]""")
+			elif field.Name == "Modifiers":
+				writer.Write("""
+		[System.Xml.Serialization.XmlAttribute,
+		System.ComponentModel.DefaultValue(${field.Type}.None)]""")
+			else:
+				writer.Write("""
+		[System.Xml.Serialization.XmlElement]""")
+
 			writer.WriteLine("""
 		public ${field.Type} ${field.Name}
 		{
@@ -381,7 +445,7 @@ def GetResultingTransformerNode(node as ClassDefinition):
 			return subclass
 	return node.Name
 	
-def IsSubclassOf(node as ClassDefinition, typename as string):
+def IsSubclassOf(node as ClassDefinition, typename as string) as bool:
 	for typeref as SimpleTypeReference in node.BaseTypes:
 		if typename == typeref.Name:
 			return true
@@ -412,6 +476,10 @@ namespace Boo.Lang.Compiler.Ast.Impl
 		}
 		
 		protected ${node.Name}Impl(Node parent) : base(parent)
+		{
+		}
+		
+		protected ${node.Name}Impl(Node parent, Boo.Lang.List list) : base(parent, list)
 		{
 		}
 		
@@ -464,6 +532,11 @@ namespace Boo.Lang.Compiler.Ast.Impl
 			base.ReplaceAt(index, newItem);
 		}
 		
+		public ${itemType}Collection PopRange(int begin)
+		{
+			return new ${itemType}Collection(_parent, InnerList.PopRange(begin));
+		}
+		
 		public new ${itemType}[] ToArray()
 		{
 			return (${itemType}[])InnerList.ToArray(typeof(${itemType}));
@@ -474,7 +547,7 @@ namespace Boo.Lang.Compiler.Ast.Impl
 
 def OpenFile(fname as string):	
 	print(fname)
-	return StreamWriter(fname, false, System.Text.Encoding.UTF8)
+	return StreamWriter(fname)//, false, System.Text.Encoding.UTF8)
 	
 def GetPath(fname as string):
 	return Path.Combine("src/Boo.Lang.Compiler/Ast", fname)
@@ -556,8 +629,12 @@ namespace Boo.Lang.Compiler.Ast
 						writer.WriteLine("""
 				${field.Type} current${field.Name}Value = node.${field.Name};
 				if (null != current${field.Name}Value)
-				{											
-					node.${field.Name} = (${field.Type})VisitNode(current${field.Name}Value);
+				{			
+					${field.Type} newValue = (${field.Type})VisitNode(current${field.Name}Value);
+					if (!object.ReferenceEquals(newValue, current${field.Name}Value))
+					{
+						node.${field.Name} = newValue;
+					}
 				}""")
 				
 				writer.WriteLine("""
@@ -590,7 +667,12 @@ namespace Boo.Lang.Compiler.Ast
 			_resultingNode = replacement;
 		}
 		
-		public Node VisitNode(Node node)
+		protected virtual void OnNode(Node node)
+		{
+			node.Accept(this);
+		}
+		
+		public virtual Node VisitNode(Node node)
 		{
 			if (null != node)
 			{
@@ -598,7 +680,7 @@ namespace Boo.Lang.Compiler.Ast
 				{
 					Node saved = _resultingNode;
 					_resultingNode = node;
-					node.Accept(this);
+					OnNode(node);
 					Node result = _resultingNode;
 					_resultingNode = saved;
 					return result;
@@ -743,7 +825,7 @@ def WriteDepthFirstAccept(writer as TextWriter, item as ClassDefinition):
 			{""")
 			
 		for field as Field in fields:
-			writer.WriteLine("\t\t\tVisit(node.${field.Name});")
+			writer.WriteLine("\t\t\t\tVisit(node.${field.Name});")
 			
 		writer.Write(
 """				Leave${item.Name}(node);

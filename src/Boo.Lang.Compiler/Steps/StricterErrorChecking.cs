@@ -1,4 +1,4 @@
-﻿#region license
+#region license
 // Copyright (c) 2004, Rodrigo B. de Oliveira (rbo@acm.org)
 // All rights reserved.
 // 
@@ -27,31 +27,48 @@
 #endregion
 
 namespace Boo.Lang.Compiler.Steps
-{
-	using System;
-	using System.Collections;
-	using Boo.Lang;
+{	
 	using Boo.Lang.Compiler;
 	using Boo.Lang.Compiler.Ast;
 	using Boo.Lang.Compiler.TypeSystem;
 	
 	public class StricterErrorChecking : AbstractVisitorCompilerStep
-	{
-		Hashtable _members = new Hashtable();
-		
+	{	
 		override public void Run()
 		{
 			Visit(CompileUnit);
 		}
-		
-		override public void Dispose()
+
+		override public void OnSuperLiteralExpression(SuperLiteralExpression node)
 		{
-			_members.Clear();
-			base.Dispose();
+			if (AstUtil.IsTargetOfMethodInvocation(node)) return;
+			if (AstUtil.IsTargetOfMemberReference(node)) return;
+			Error(CompilerErrorFactory.InvalidSuper(node));
+		}
+
+		public override void LeaveReturnStatement(ReturnStatement node)
+		{
+			if (null == node.Expression) return;
+			CheckExpressionType(node.Expression);
+		}
+
+		public override void LeaveYieldStatement(YieldStatement node)
+		{
+			if (null == node.Expression) return;
+			CheckExpressionType(node.Expression);
+		}
+
+		public override void LeaveExpressionInterpolationExpression(ExpressionInterpolationExpression node)
+		{
+			foreach (Expression e in node.Expressions)
+			{
+				CheckExpressionType(e);
+			}
 		}
 		
 		override public void LeaveBinaryExpression(BinaryExpression node)
 		{
+			CheckExpressionType(node.Right);
 			if (BinaryOperatorType.ReferenceEquality == node.Operator)
 			{
 				if (IsTypeReference(node.Right))
@@ -68,127 +85,6 @@ namespace Boo.Lang.Compiler.Steps
 				(
 					node is ReferenceExpression &&
 					node.Entity is IType);
-		}
-		
-		override public void LeaveEnumDefinition(EnumDefinition node)
-		{
-			_members.Clear();
-			foreach (TypeMember member in node.Members)
-			{
-				if (_members.ContainsKey(member.Name))
-				{
-					MemberNameConflict(member);
-				}
-				else
-				{
-					_members[member.Name] = member;
-				}
-			}
-		}
-		
-		override public void LeaveClassDefinition(ClassDefinition node)
-		{
-			CheckMembers(node);
-		}
-		
-		override public void LeaveInterfaceDefinition(InterfaceDefinition node)
-		{
-			CheckMembers(node);
-		}
-		
-		void CheckMembers(TypeDefinition node)
-		{
-			_members.Clear();
-			
-			foreach (TypeMember member in node.Members)
-			{
-				List list = GetMemberList(member.Name);
-				switch (member.NodeType)
-				{
-					case NodeType.Constructor:
-					case NodeType.Method:
-					{
-						CheckMethodMember(list, (Method)member);
-						break;
-					}
-					
-					default:
-					{
-						CheckMember(list, member);
-						break;
-					}
-				}
-				list.Add(member);
-			}
-		}
-		
-		void CheckMember(List existing, TypeMember member)
-		{
-			if (existing.Count > 0)
-			{
-				MemberNameConflict(member);
-			}
-		}
-		
-		void CheckMethodMember(List existing, TypeMember member)
-		{
-			NodeType expectedNodeType = member.NodeType;
-			foreach (TypeMember existingMember in existing)
-			{
-				if (expectedNodeType != existingMember.NodeType)
-				{
-					MemberNameConflict(member);
-				}
-				else
-				{
-					if (existingMember.IsStatic == member.IsStatic)
-					{
-						if (AreParametersTheSame(existingMember, member))
-						{
-							MemberConflict(member, TypeSystemServices.GetSignature((IMethod)member.Entity, false));
-						}
-					}
-				}
-			}
-		}
-		
-		bool AreParametersTheSame(TypeMember lhs, TypeMember rhs)
-		{
-			IParameter[] lhsParameters = ((InternalMethod)lhs.Entity).GetParameters();
-			IParameter[] rhsParameters = ((InternalMethod)rhs.Entity).GetParameters();
-			if (lhsParameters.Length != rhsParameters.Length)
-			{
-				return false;
-			}
-			for (int i=0; i<lhsParameters.Length; ++i)
-			{
-				if (lhsParameters[i].Type != rhsParameters[i].Type)
-				{
-					return false;
-				}
-			}
-			return true;
-		}
-		
-		void MemberNameConflict(TypeMember member)
-		{
-			MemberConflict(member, member.Name);
-		}
-		
-		void MemberConflict(TypeMember member, string memberName)
-		{
-			Error(CompilerErrorFactory.MemberNameConflict(member, member.DeclaringType.FullName, memberName));
-		}
-		
-		List GetMemberList(string name)
-		{
-			List list = (List)_members[name];
-			if (null == list)
-			{
-				list = new List();
-				_members[name] = list;
-			}
-			return list;
 		}
 		
 		override public void OnGotoStatement(GotoStatement node)
@@ -240,7 +136,7 @@ namespace Boo.Lang.Compiler.Steps
 		override public void LeaveMethod(Method node)
 		{
 			InternalMethod derived = (InternalMethod)node.Entity;
-			IMethod super = derived.Override;
+			IMethod super = derived.Overriden;
 			if (null != super)
 			{
 				TypeMemberModifiers derivedAccess = TypeSystemServices.GetAccess(derived);
@@ -257,8 +153,20 @@ namespace Boo.Lang.Compiler.Steps
 			}
 			
 			CheckUnusedLocals(node);
+			CheckAbstractMethodCantHaveBody(node);
 		}
-		
+
+		private void CheckAbstractMethodCantHaveBody(Method node)
+		{
+			if (node.IsAbstract)
+			{
+				if (node.Body.Statements.Count > 0)
+				{
+					Error(CompilerErrorFactory.AbstractMethodCantHaveBody(node, node.FullName));
+				}
+			}
+		}
+
 		void CheckUnusedLocals(Method node)
 		{
 			foreach (Local local in node.Locals)
@@ -324,6 +232,13 @@ namespace Boo.Lang.Compiler.Steps
 		bool IsAddressOfBuiltin(Expression node)
 		{
 			return BuiltinFunction.AddressOf == node.Entity;
+		}
+
+		void CheckExpressionType(Expression node)
+		{
+			IType type = node.ExpressionType;
+			if (type != TypeSystemServices.VoidType) return;
+			Error(CompilerErrorFactory.InvalidExpressionType(node, type.FullName));
 		}
 	}
 }

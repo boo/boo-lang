@@ -30,6 +30,144 @@ namespace BooCompiler.Tests
 {
 	using System;
 	
+	public class ReturnDucks
+	{
+		public class DuckBase {}
+		
+		public class DuckFoo : DuckBase
+		{
+			public string Foo() { return "foo"; }
+		}
+		
+		public class DuckBar : DuckBase
+		{
+			public string Bar() { return "bar"; }
+		}
+		
+		[Boo.Lang.DuckTypedAttribute]
+		public DuckBase GetDuck(bool foo)
+		{
+			if (foo) return new DuckFoo();
+			return new DuckBar();
+		}
+	}
+	
+	public struct Point
+	{
+		public int x;
+		public int y;
+	}
+
+	public struct Rectangle
+	{
+		Point _top;
+		public Point topLeft
+		{
+			get { return _top; }
+			set { _top = value; }
+		}
+	}
+	
+	public struct Vector3
+	{
+		public float x, y, z;
+	}
+
+	public class Transform
+	{	
+		Vector3 _position;
+	
+		public Vector3 position
+		{
+			get { return _position; }
+			set { _position = value; }
+		}
+	}
+	
+	public class BOO313BaseClass
+	{
+		Transform _t = new Transform();
+		public Transform transform
+		{
+			get { return _t; }
+		}
+	}
+	
+	public class OutterClass
+	{
+		public class InnerClass
+		{
+			public static int X = 3;
+		}
+	}
+	
+	public class OverrideBoolOperator
+	{
+		public static implicit operator bool(OverrideBoolOperator instance)
+		{
+			Console.WriteLine("OverrideBoolOperator.operator bool");
+			return false;
+		}
+	}
+	
+	public class ExtendsOverridenBoolOperator : OverrideBoolOperator
+	{
+	}
+	
+	public class OverrideEqualityOperators
+	{
+		public static bool operator==(OverrideEqualityOperators lhs, OverrideEqualityOperators rhs)
+		{
+			if (Object.Equals(null, lhs))
+			{
+				Console.WriteLine("lhs is null");
+			}
+			
+			if (Object.Equals(null, rhs))
+			{
+				Console.WriteLine("rhs is null");
+			}
+			return true;
+		}
+		
+		public static bool operator!=(OverrideEqualityOperators lhs, OverrideEqualityOperators rhs)
+		{
+			if (Object.Equals(null, lhs))
+			{
+				Console.WriteLine("lhs is null");
+			}
+			
+			if (Object.Equals(null, rhs))
+			{
+				Console.WriteLine("rhs is null");
+			}
+			return false;
+		}
+	}
+	
+	public class AmbiguousBase
+	{
+		public string Path(string empty)
+		{
+			return "Base";
+		}
+	}
+
+	public class AmbiguousSub1 : AmbiguousBase
+	{
+        public new string Path
+        {
+        	get
+        	{
+        		return "Sub1";
+        	}
+        }
+	}
+	
+	public class AmbiguousSub2 : AmbiguousSub1
+	{
+	}
+	
 	[Flags]
 	public enum TestEnum
 	{
@@ -212,7 +350,7 @@ namespace BooCompiler.Tests
 	
 	public class DerivedClass : BaseClass
 	{
-		protected DerivedClass()
+		public DerivedClass()
 		{
 		}
 		
@@ -230,6 +368,19 @@ namespace BooCompiler.Tests
 			Console.WriteLine("ClassWithNewMethod.Method2");
 		}
 	}	
+	
+	public class VarArgs
+	{
+		public void Method()
+		{
+			Console.WriteLine("VarArgs.Method");
+		}
+		
+		public void Method(params object[] args)
+		{
+			Console.WriteLine("VarArgs.Method({0})", Boo.Lang.Builtins.join(args, ", "));
+		}
+	}
 	
 	public class Disposable : System.IDisposable
 	{
@@ -280,6 +431,27 @@ namespace BooCompiler.Tests
 		public static void ReturnRef(object value, out object output)
 		{
 			output = value;
+		}
+	}
+
+	public class PointersBase
+	{
+		public void Foo(ref int bar)
+		{
+			System.Console.WriteLine("PointersBase.Foo(int&)");
+		}
+		
+		public unsafe void Foo(int* bar)
+		{
+			System.Console.WriteLine("Pointers.Foo(int*)");
+		}
+	}
+	
+	public class Pointers : PointersBase
+	{
+		public new void Foo(ref int bar)
+		{
+			System.Console.WriteLine("Pointers.Foo(int&)");
 		}
 	}
 	

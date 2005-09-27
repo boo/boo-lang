@@ -2,8 +2,8 @@
 <project name="BooDevelop" default="compile">
 	<!-- run this using NAnt nightly, but you have to force NAnt to run under .NET 1.1 (otherwise you get a BadImageFormatException) -->
 	
-	<property name="sharpdevelop.dir" value = "D:\Fidalgo\SharpDevelop" />
-	<property name="boo.dir" value="../../../build" />
+	<property name="extras.dir" value="${path::get-full-path('../..')}" />
+	<include buildfile="${extras.dir}/common-properties.build" />
 	
 	<!-- Adjust these properties to point to your sharpdevelop directory / boo binary directory -->
 	<include buildfile="build.properties" if="${file::exists('build.properties')}" />	
@@ -31,7 +31,7 @@
 	</target>
 	
 	<target name="run" depends="compile">
-		<exec program="${sharpdevelop.dir}bin/SharpDevelop.exe">
+		<exec program="${path::combine(sharpdevelop.dir, 'bin/SharpDevelop.exe')}">
 		</exec>
 	</target>
 	
@@ -44,10 +44,12 @@
 		
 		<copy todir="${addin.dir}">
 			<fileset basedir="${boo.dir}">
-				<include name="Boo.dll" />
+				<include name="Boo.Lang.dll" />
+				<include name="Boo.Lang.Useful.dll" />
 				<include name="Boo.Lang.Compiler.dll" />
 				<include name="Boo.Lang.Parser.dll" />
 				<include name="Boo.Lang.Interpreter.dll" />
+				<include name="Boo.Lang.CodeDom.dll" />
 				<include name="booc.exe" />
 				<include name="booc.rsp" />
 			</fileset>
@@ -59,12 +61,16 @@
 				<include name="${sharp.dir}/SharpDevelop.Base.Dll" />
 				<include name="${sharp.dir}/ICSharpCode.TextEditor.dll" />
 				<include name="${sharp.dir}/ICSharpCode.SharpRefactory.dll" />
+				<include name="${sharp.dir}/SharpDevelop.DefaultTexteditor.dll" />
+				<include name="${sharpdevelop.dir}/AddIns/AddIns/DisplayBindings/ICSharpCode.FormDesigner.dll" />
 				<include name="System.Windows.Forms.dll" />
 				<include name="System.Drawing.dll" />
 				<include name="System.Xml.dll" />
+				<include name="System.Design.dll" />
 				<include name="${addin.dir}/Boo.Lang.Compiler.dll" />
 				<include name="${addin.dir}/Boo.Lang.Parser.dll" />
 				<include name="${addin.dir}/Boo.Lang.Interpreter.dll" />
+				<include name="${addin.dir}/Boo.Lang.CodeDom.dll" />
 				<include name="${addin.dir}/booish.gui.exe" />
 			</references>
 			<sources basedir=".">

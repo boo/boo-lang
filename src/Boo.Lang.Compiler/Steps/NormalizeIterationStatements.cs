@@ -28,10 +28,7 @@
 
 namespace Boo.Lang.Compiler.Steps
 {
-	using System;
-	using Boo.Lang;
 	using Boo.Lang.Compiler.Ast;
-	using Boo.Lang.Compiler;
 	using Boo.Lang.Compiler.TypeSystem;
 
 	/// <summary>
@@ -40,8 +37,6 @@ namespace Boo.Lang.Compiler.Steps
 	public class NormalizeIterationStatements : AbstractTransformerCompilerStep
 	{		
 		static System.Reflection.MethodInfo RuntimeServices_MoveNext = Types.RuntimeServices.GetMethod("MoveNext");
-		
-		static System.Reflection.MethodInfo RuntimeServices_CheckArrayUnpack = Types.RuntimeServices.GetMethod("CheckArrayUnpack");
 		
 		static System.Reflection.MethodInfo RuntimeServices_GetEnumerable = Types.RuntimeServices.GetMethod("GetEnumerable");		
 		
@@ -72,6 +67,11 @@ namespace Boo.Lang.Compiler.Steps
 		{
 			OnMethod(node);
 		}
+
+		override public void OnDestructor(Destructor node)
+		{
+			OnMethod(node);
+		}
 		
 		override public void OnCallableBlockExpression(CallableBlockExpression node)
 		{
@@ -98,13 +98,23 @@ namespace Boo.Lang.Compiler.Steps
 										"___iterator" + _context.AllocIndex(),
 										TypeSystemServices.IEnumeratorType);
 			
-			// ___iterator = <node.Iterator>.GetEnumerator()
-			body.Add(
-				CodeBuilder.CreateAssignment(
-					CodeBuilder.CreateReference(iterator),
-					CodeBuilder.CreateMethodInvocation(
-						node.Iterator,
-						IEnumerable_GetEnumerator)));
+			if (TypeSystemServices.IEnumeratorType.IsAssignableFrom(enumeratorType))
+			{
+				body.Add(
+					CodeBuilder.CreateAssignment(
+						CodeBuilder.CreateReference(iterator),
+						node.Iterator));
+			}
+			else
+			{
+				// ___iterator = <node.Iterator>.GetEnumerator()
+				body.Add(
+					CodeBuilder.CreateAssignment(
+						CodeBuilder.CreateReference(iterator),
+						CodeBuilder.CreateMethodInvocation(
+							node.Iterator,
+							IEnumerable_GetEnumerator)));
+			}
 					
 			// while __iterator.MoveNext():
 			WhileStatement ws = new WhileStatement(node.LexicalInfo);
@@ -163,19 +173,31 @@ namespace Boo.Lang.Compiler.Steps
 			
 			InternalLocal local = codeBuilder.DeclareTempLocal(method,
 												tss.IEnumeratorType);
+												
+			IType expressionType = expression.ExpressionType;
 			
-			if (!expression.ExpressionType.IsSubclassOf(codeBuilder.TypeSystemServices.IEnumerableType))
+			if (expressionType.IsSubclassOf(codeBuilder.TypeSystemServices.IEnumeratorType))
 			{
-				expression = codeBuilder.CreateMethodInvocation(
-					RuntimeServices_GetEnumerable, expression);								
+				block.Add(
+					codeBuilder.CreateAssignment(
+						codeBuilder.CreateReference(local),
+						expression));
 			}
-			
-			block.Add(
-				codeBuilder.CreateAssignment(
-					block.LexicalInfo,
-					codeBuilder.CreateReference(local),
-					codeBuilder.CreateMethodInvocation(
-						expression, IEnumerable_GetEnumerator)));
+			else
+			{
+				if (!expressionType.IsSubclassOf(codeBuilder.TypeSystemServices.IEnumerableType))
+				{
+					expression = codeBuilder.CreateMethodInvocation(
+						RuntimeServices_GetEnumerable, expression);								
+				}
+				
+				block.Add(
+					codeBuilder.CreateAssignment(
+						block.LexicalInfo,
+						codeBuilder.CreateReference(local),
+						codeBuilder.CreateMethodInvocation(
+							expression, IEnumerable_GetEnumerator)));
+			}
 						
 			for (int i=0; i<declarations.Count; ++i)
 			{

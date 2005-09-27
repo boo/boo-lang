@@ -28,10 +28,10 @@
 
 namespace Boo.Lang.Compiler.TypeSystem
 {
-	using System;	
-	using Boo.Lang.Compiler;
+	using System;
+	using System.Collections;
 	using Boo.Lang.Compiler.Ast;
-	
+
 	public class NameResolutionService
 	{
 		public static readonly char[] DotArray = new char[] { '.' };
@@ -42,9 +42,9 @@ namespace Boo.Lang.Compiler.TypeSystem
 		
 		protected INamespace _global = NullNamespace.Default;
 		
-		protected Boo.Lang.List _buffer = new Boo.Lang.List();
+		protected List _buffer = new List();
 		
-		protected Boo.Lang.List _innerBuffer = new Boo.Lang.List();
+		protected List _innerBuffer = new List();
 		
 		public NameResolutionService(CompilerContext context)
 		{
@@ -120,17 +120,17 @@ namespace Boo.Lang.Compiler.TypeSystem
 			return GetEntityFromBuffer();
 		}
 		
-		public bool Resolve(Boo.Lang.List targetList, string name)
+		public bool Resolve(List targetList, string name)
 		{
 			return Resolve(targetList, name, EntityType.Any);
 		}
 		
-		public bool Resolve(Boo.Lang.List targetList, string name, EntityType flags)
+		public bool Resolve(List targetList, string name, EntityType flags)
 		{			
-			IEntity tag = _context.TypeSystemServices.ResolvePrimitive(name);
-			if (null != tag)
+			IEntity entity = _context.TypeSystemServices.ResolvePrimitive(name);
+			if (null != entity)
 			{
-				targetList.Add(tag);
+				targetList.Add(entity);
 				return true;
 			}
 			else
@@ -155,12 +155,12 @@ namespace Boo.Lang.Compiler.TypeSystem
 			return GetEntityFromBuffer();
 		}
 		
-		public bool ResolveQualifiedName(Boo.Lang.List targetList, string name)
+		public bool ResolveQualifiedName(List targetList, string name)
 		{
 			return ResolveQualifiedName(targetList, name, EntityType.Any);
 		}
 		
-		public bool ResolveQualifiedName(Boo.Lang.List targetList, string name, EntityType flags)
+		public bool ResolveQualifiedName(List targetList, string name, EntityType flags)
 		{
 			if (!IsQualifiedName(name))
 			{
@@ -225,7 +225,8 @@ namespace Boo.Lang.Compiler.TypeSystem
 			}
 			else
 			{
-				node.Entity = _context.TypeSystemServices.GetArrayType(elementType);
+				int rank = null == node.Rank ? 1 : (int)node.Rank.Value;
+				node.Entity = _context.TypeSystemServices.GetArrayType(elementType, rank);
 			}
 		}
 		
@@ -276,12 +277,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 		
 		public IEntity ResolveMember(IType type, string name, EntityType elementType)
 		{
-			/*
-			_buffer.Clear();
-			type.Resolve(_buffer, name, elementType);
-			System.Diagnostics.Debug.Assert(1 == _buffer.Count);
-			return (IEntity)_buffer[0];*/
-			foreach (IMember member in type.GetMembers())
+			foreach (IEntity member in type.GetMembers())
 			{				
 				if (elementType == member.EntityType && name == member.Name)
 				{
@@ -308,14 +304,14 @@ namespace Boo.Lang.Compiler.TypeSystem
 			return GetEntityFromList(_buffer);
 		}
 		
-		public static IEntity GetEntityFromList(Boo.Lang.List list)
+		public static IEntity GetEntityFromList(IList list)
 		{
 			IEntity element = null;
 			if (list.Count > 0)
 			{
 				if (list.Count > 1)
 				{
-					element = new Ambiguous((IEntity[])list.ToArray(typeof(IEntity)));
+					element = new Ambiguous(list);
 				}
 				else
 				{

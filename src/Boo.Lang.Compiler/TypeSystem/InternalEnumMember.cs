@@ -1,4 +1,4 @@
-﻿#region license
+#region license
 // Copyright (c) 2004, Rodrigo B. de Oliveira (rbo@acm.org)
 // All rights reserved.
 // 
@@ -28,18 +28,14 @@
 
 namespace Boo.Lang.Compiler.TypeSystem
 {
-	using System;
 	using Boo.Lang.Compiler.Ast;
-	
+
 	public class InternalEnumMember : IInternalEntity, IField
 	{
-		TypeSystemServices _typeSystemServices;
-		
 		EnumMember _member;
 		
 		public InternalEnumMember(TypeSystemServices tagManager, EnumMember member)
 		{
-			_typeSystemServices = tagManager;
 			_member = member;
 		}
 		
@@ -90,6 +86,22 @@ namespace Boo.Lang.Compiler.TypeSystem
 				return true;
 			}
 		}
+
+		public bool IsInternal
+		{
+			get
+			{
+				return false;
+			}
+		}
+
+		public bool IsPrivate
+		{
+			get
+			{
+				return false;
+			}
+		}
 		
 		public bool IsInitOnly
 		{
@@ -137,6 +149,11 @@ namespace Boo.Lang.Compiler.TypeSystem
 			{
 				return _member;
 			}
+		}
+
+		public bool IsDuckTyped
+		{
+			get { return false; }
 		}
 	}
 }

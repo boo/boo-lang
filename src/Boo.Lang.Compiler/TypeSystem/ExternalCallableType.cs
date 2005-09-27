@@ -29,15 +29,14 @@
 namespace Boo.Lang.Compiler.TypeSystem
 {
 	using System;
-	using System.Reflection;
-	
+
 	public class ExternalCallableType : ExternalType, ICallableType
 	{
 		IMethod _invoke;
 		
 		internal ExternalCallableType(TypeSystemServices typeSystemServices, Type type) : base(typeSystemServices, type)
 		{
-			_invoke = (IMethod)typeSystemServices.Map(type.GetMethod("Invoke"));
+			_invoke = typeSystemServices.Map(type.GetMethod("Invoke"));
 		}
 		
 		public CallableSignature GetSignature()
@@ -46,7 +45,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 		}
 		
 		override public bool IsAssignableFrom(IType other)
-		{
+		{	
 			return _typeSystemServices.IsCallableTypeAssignableFrom(this, other);
 		}
 	}

@@ -1,10 +1,10 @@
 #region license
 // Copyright (c) 2004, Rodrigo B. de Oliveira (rbo@acm.org)
 // All rights reserved.
-// 
+//
 // Redistribution and use in source and binary forms, with or without modification,
 // are permitted provided that the following conditions are met:
-// 
+//
 //     * Redistributions of source code must retain the above copyright notice,
 //     this list of conditions and the following disclaimer.
 //     * Redistributions in binary form must reproduce the above copyright notice,
@@ -13,7 +13,7 @@
 //     * Neither the name of Rodrigo B. de Oliveira nor the names of its
 //     contributors may be used to endorse or promote products derived from this
 //     software without specific prior written permission.
-// 
+//
 // THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
 // ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
 // WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
@@ -28,34 +28,17 @@
 
 namespace Boo.Lang.Compiler.Steps
 {
-	using Boo.Lang.Compiler;
 	using Boo.Lang.Compiler.Ast;
 	using Boo.Lang.Compiler.TypeSystem;
-	
+
 	public class ProcessMethodBodiesWithDuckTyping : ProcessMethodBodies
 	{
-		protected IType _runtimeServices;
-		protected IMethod RuntimeServices_Invoke;
-		protected IMethod RuntimeServices_InvokeBinaryOperator;
-		protected IMethod RuntimeServices_SetProperty;
-		protected IMethod RuntimeServices_GetProperty;
-		
-		override protected void InitializeMemberCache()
-		{
-			base.InitializeMemberCache();
-			_runtimeServices = TypeSystemServices.Map(typeof(Boo.Lang.RuntimeServices));
-			RuntimeServices_Invoke = ResolveMethod(_runtimeServices, "Invoke");
-			RuntimeServices_InvokeBinaryOperator = ResolveMethod(_runtimeServices, "InvokeBinaryOperator");
-			RuntimeServices_SetProperty = ResolveMethod(_runtimeServices, "SetProperty");
-			RuntimeServices_GetProperty = ResolveMethod(_runtimeServices, "GetProperty");
-		}
-		
 		override protected void ProcessBuiltinInvocation(BuiltinFunction function, MethodInvocationExpression node)
 		{
-			if (IsQuackBuiltin(function))
+			if (TypeSystemServices.IsQuackBuiltin(function))
 			{
-				ProcessQuackInvocation(node);				
-			}	
+				BindDuck(node);
+			}
 			else
 			{
 				base.ProcessBuiltinInvocation(function, node);
@@ -64,57 +47,87 @@ namespace Boo.Lang.Compiler.Steps
 		
 		override protected void ProcessAssignment(BinaryExpression node)
 		{
-			if (IsQuackBuiltin(node.Left.Entity))
+			if (TypeSystemServices.IsQuackBuiltin(node.Left.Entity))
 			{
-				ProcessQuackPropertySet(node);
+				BindDuck(node);
 			}
 			else
 			{
 				base.ProcessAssignment(node);
 			}
 		}
-		
-		override protected void ProcessMemberReferenceExpression(MemberReferenceExpression node)
+
+		protected override bool ShouldRebindMember(IEntity entity)
 		{
-			if (IsDuckTyped(node.Target))
-			{
-				if (AstUtil.IsTargetOfMethodInvocation(node) || 
-					AstUtil.IsLhsOfAssignment(node))
-				{
-					Bind(node, BuiltinFunction.Quack);
-				}
-				else
-				{
-					ProcessQuackPropertyGet(node);
-				}
+			// always rebind quack builtins (InPlace operators)
+			return null == entity || TypeSystemServices.IsQuackBuiltin(entity);
+		}
+
+		
+		override protected void MemberNotFound(MemberReferenceExpression node, INamespace ns)
+		{
+			if (TypeSystemServices.IsDuckTyped(node.Target))
+			{	
+				Bind(node, BuiltinFunction.Quack);
+				BindDuck(node);
 			}
 			else
 			{
-				base.ProcessMemberReferenceExpression(node);
+				base.MemberNotFound(node, ns);
 			}
 		}
 		
+		override protected void ProcessInvocationOnUnknownCallableExpression(MethodInvocationExpression node)
+		{
+			if (TypeSystemServices.IsDuckTyped(node.Target))
+			{
+				Bind(node, BuiltinFunction.Quack);
+				BindDuck(node);
+			}
+			else
+			{
+				base.ProcessInvocationOnUnknownCallableExpression(node);
+			}
+		}
+		
+		override public void LeaveSlicingExpression(SlicingExpression node)
+		{
+			if (TypeSystemServices.IsDuckTyped(node.Target))
+			{
+				BindDuck(node);
+			}
+			else
+			{
+				base.LeaveSlicingExpression(node);
+			}
+		}
+		
+		override public void LeaveUnaryExpression(UnaryExpression node)
+		{
+			if (TypeSystemServices.IsDuckTyped(node.Operand) &&
+			   node.Operator == UnaryOperatorType.UnaryNegation)
+			{
+				BindDuck(node);
+			}
+			else
+			{
+				base.LeaveUnaryExpression(node);
+			}
+		}
+
 		override protected void BindBinaryExpression(BinaryExpression node)
 		{
-			if ((IsDuckTyped(node.Left) || IsDuckTyped(node.Right)))
+			if (TypeSystemServices.IsDuckTyped(node.Left)
+				|| TypeSystemServices.IsDuckTyped(node.Right))
 			{
-				if (IsOverloadableOperator(node.Operator))
+				if (AstUtil.IsOverloadableOperator(node.Operator))
 				{
-					MethodInvocationExpression mie = CodeBuilder.CreateMethodInvocation(
-							RuntimeServices_InvokeBinaryOperator,
-							CodeBuilder.CreateStringLiteral(
-								GetMethodNameForOperator(node.Operator)),
-								node.Left, node.Right);							
-					BindExpressionType(mie, TypeSystemServices.DuckType);
-				
-					node.ParentNode.Replace(
-						node, 
-						mie);
+					BindDuck(node);
 				}
 				else if (BinaryOperatorType.Or == node.Operator ||
 				         BinaryOperatorType.And == node.Operator)
 				{
-					BindExpressionType(node, TypeSystemServices.DuckType);
+					BindDuck(node);
 				}
 				else
 				{
@@ -127,78 +140,15 @@ namespace Boo.Lang.Compiler.Steps
 			}
 		}
 		
-		bool IsOverloadableOperator(BinaryOperatorType op)
+		protected override void CheckBuiltinUsage(ReferenceExpression node, IEntity entity)
 		{
-			switch (op)
-			{
-				case BinaryOperatorType.Addition:
-				case BinaryOperatorType.Subtraction:
-				case BinaryOperatorType.Multiply:
-				case BinaryOperatorType.Division:
-				case BinaryOperatorType.Modulus:
-				case BinaryOperatorType.Exponentiation:
-				case BinaryOperatorType.LessThan:
-				case BinaryOperatorType.LessThanOrEqual:
-				case BinaryOperatorType.GreaterThan:
-				case BinaryOperatorType.GreaterThanOrEqual:
-				case BinaryOperatorType.Match:
-				case BinaryOperatorType.NotMatch:
-				case BinaryOperatorType.Member:
-				case BinaryOperatorType.NotMember:
-				case BinaryOperatorType.BitwiseOr:
-				case BinaryOperatorType.BitwiseAnd:
-				{
-					return true;
-				}
-			}
-			return false;
+			if (TypeSystemServices.IsQuackBuiltin(entity)) return;
+			base.CheckBuiltinUsage(node, entity);
 		}
-		
-		bool IsDuckTyped(Expression expression)
+
+		private void BindDuck(Expression node)
 		{
-			return TypeSystemServices.DuckType == expression.ExpressionType;
-		}
-		
-		bool IsQuackBuiltin(IEntity entity)
-		{
-			return BuiltinFunction.Quack == entity;
-		}
-		
-		void ProcessQuackPropertyGet(MemberReferenceExpression node)
-		{
-			MethodInvocationExpression mie = CodeBuilder.CreateMethodInvocation(
-												RuntimeServices_GetProperty,
-												node.Target,
-												CodeBuilder.CreateStringLiteral(node.Name));
-			BindExpressionType(mie, TypeSystemServices.DuckType);
-			node.ParentNode.Replace(node, mie);
-		}
-		
-		void ProcessQuackPropertySet(BinaryExpression node)
-		{
-			MemberReferenceExpression target = (MemberReferenceExpression)node.Left;
-			MethodInvocationExpression mie = CodeBuilder.CreateMethodInvocation(
-												RuntimeServices_SetProperty,
-												target.Target,
-												CodeBuilder.CreateStringLiteral(target.Name),
-												node.Right);
-			BindExpressionType(mie, TypeSystemServices.DuckType);
-			node.ParentNode.Replace(node, mie);
-		}
-		
-		void ProcessQuackInvocation(MethodInvocationExpression node)
-		{
-			MemberReferenceExpression target = (MemberReferenceExpression)node.Target;
-			node.Target = CodeBuilder.CreateMemberReference(
-								CodeBuilder.CreateReference(node.LexicalInfo, _runtimeServices),
-								RuntimeServices_Invoke);
-			
-			Expression args = CodeBuilder.CreateObjectArray(node.Arguments);
-			node.Arguments.Clear();
-			node.Arguments.Add(target.Target);
-			node.Arguments.Add(CodeBuilder.CreateStringLiteral(target.Name));
-			node.Arguments.Add(args);
 			BindExpressionType(node, TypeSystemServices.DuckType);
-		}		
+		}
 	}
 }

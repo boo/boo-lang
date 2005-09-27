@@ -1,10 +1,10 @@
-﻿#region license
+#region license
 // Copyright (c) 2004, Rodrigo B. de Oliveira (rbo@acm.org)
 // All rights reserved.
-// 
+//
 // Redistribution and use in source and binary forms, with or without modification,
 // are permitted provided that the following conditions are met:
-// 
+//
 //     * Redistributions of source code must retain the above copyright notice,
 //     this list of conditions and the following disclaimer.
 //     * Redistributions in binary form must reproduce the above copyright notice,
@@ -13,7 +13,7 @@
 //     * Neither the name of Rodrigo B. de Oliveira nor the names of its
 //     contributors may be used to endorse or promote products derived from this
 //     software without specific prior written permission.
-// 
+//
 // THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
 // ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
 // WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
@@ -26,41 +26,44 @@
 // THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #endregion
 
-using System;
-
 namespace Boo.Lang.Compiler.TypeSystem
 {
+	using System;
+	using System.Collections;
+	using System.Text.RegularExpressions;
+	using Boo.Lang.Runtime;
+
 	public class Types
 	{
-		public static readonly Type RuntimeServices = typeof(Boo.Lang.RuntimeServices);
+		public static readonly Type RuntimeServices = typeof(RuntimeServices);
 		
-		public static readonly Type Builtins = typeof(Boo.Lang.Builtins);
+		public static readonly Type Builtins = typeof(Builtins);
 		
-		public static readonly Type Exception = typeof(System.Exception);
+		public static readonly Type Exception = typeof(Exception);
 		
-		public static readonly Type ApplicationException = typeof(System.ApplicationException);
+		public static readonly Type ApplicationException = typeof(ApplicationException);
 		
-		public static readonly Type List = typeof(Boo.Lang.List);
+		public static readonly Type List = typeof(List);
 		
-		public static readonly Type Hash = typeof(Boo.Lang.Hash);
+		public static readonly Type Hash = typeof(Hash);
 		
-		public static readonly Type ICallable = typeof(Boo.Lang.ICallable);
+		public static readonly Type ICallable = typeof(ICallable);
 		
-		public static readonly Type ICollection = typeof(System.Collections.ICollection);
+		public static readonly Type ICollection = typeof(ICollection);
 		
-		public static readonly Type IList = typeof(System.Collections.IList);
+		public static readonly Type IList = typeof(IList);
 		
-		public static readonly Type IDictionary = typeof(System.Collections.IDictionary);
+		public static readonly Type IDictionary = typeof(IDictionary);
 		
-		public static readonly Type IEnumerable = typeof(System.Collections.IEnumerable);
+		public static readonly Type IEnumerable = typeof(IEnumerable);
 		
-		public static readonly Type IEnumerator = typeof(System.Collections.IEnumerator);
+		public static readonly Type IEnumerator = typeof(IEnumerator);
 		
 		public static readonly Type Object = typeof(object);
 		
-		public static readonly Type Regex = typeof(System.Text.RegularExpressions.Regex);
+		public static readonly Type Regex = typeof(Regex);
 		
-		public static readonly Type ValueType = typeof(System.ValueType);
+		public static readonly Type ValueType = typeof(ValueType);
 		
 		public static readonly Type Array = typeof(Array);
 		
@@ -72,7 +75,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 		
 		public static readonly Type Byte = typeof(byte);
 		
-		public static readonly Type SByte = typeof(sbyte);	
+		public static readonly Type SByte = typeof(sbyte);
 		
 		public static readonly Type Char = typeof(char);
 		
@@ -96,17 +99,25 @@ namespace Boo.Lang.Compiler.TypeSystem
 		
 		public static readonly Type Double = typeof(double);
 		
-		public static readonly Type Date = typeof(System.DateTime);
+		public static readonly Type Decimal = typeof(decimal);
+		
+		public static readonly Type Date = typeof(DateTime);
 		
 		public static readonly Type Bool = typeof(bool);
 		
 		public static readonly Type IntPtr = typeof(IntPtr);
 		
-		public static readonly Type Type = typeof(System.Type);
+		public static readonly Type Type = typeof(Type);
 		
-		public static readonly Type MulticastDelegate = typeof(System.MulticastDelegate);
+		public static readonly Type MulticastDelegate = typeof(MulticastDelegate);
 		
-		public static readonly Type Delegate = typeof(System.Delegate);
+		public static readonly Type Delegate = typeof(Delegate);
+
+		public static readonly Type DuckTypedAttribute = typeof(DuckTypedAttribute);
+
+		public static readonly Type ModuleAttribute = typeof(ModuleAttribute);
+
+		public static readonly Type ParamArrayAttribute = typeof(ParamArrayAttribute);
 
 	}
 }

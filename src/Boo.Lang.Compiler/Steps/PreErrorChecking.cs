@@ -1,4 +1,4 @@
-﻿#region license
+#region license
 // Copyright (c) 2004, Rodrigo B. de Oliveira (rbo@acm.org)
 // All rights reserved.
 // 
@@ -27,11 +27,9 @@
 #endregion
 
 namespace Boo.Lang.Compiler.Steps
-{
-	using System;
+{	
 	using Boo.Lang.Compiler;
 	using Boo.Lang.Compiler.Ast;
-	using Boo.Lang.Compiler.TypeSystem;
 	
 	public class PreErrorChecking : AbstractVisitorCompilerStep
 	{
@@ -54,10 +52,18 @@ namespace Boo.Lang.Compiler.Steps
 			CantBeMarkedAbstract(node);
 		}
 		
+		override public void LeaveProperty(Property node)
+		{
+			CheckMemberName(node);
+			CantBeMarkedTransient(node);
+			CheckExplicitImpl(node);
+		}
+		
 		override public void LeaveMethod(Method node)
 		{
 			CheckMemberName(node);
 			CantBeMarkedTransient(node);
+			CheckExplicitImpl(node);
 		}
 		
 		override public void LeaveEvent(Event node)
@@ -88,6 +94,50 @@ namespace Boo.Lang.Compiler.Steps
 		{
 			NotImplemented(node, "given");
 		}
+
+		override public void LeaveTryStatement(TryStatement node)
+		{
+			if (node.EnsureBlock == null && node.ExceptionHandlers.Count == 0)
+			{
+				Error(CompilerErrorFactory.InvalidTryStatement(node));
+			}
+		}
+		
+		override public void LeaveBinaryExpression(BinaryExpression node)
+		{
+			if (BinaryOperatorType.Assign == node.Operator
+				&& (node.Right.NodeType != NodeType.AsExpression)
+				&& (IsTopLevelOfConditional(node)))
+			{
+				Warnings.Add(CompilerWarningFactory.EqualsInsteadOfAssign(node));
+			}
+		}
+		
+		bool IsTopLevelOfConditional(Node child)
+		{
+			Node parent = child.ParentNode;
+			return (parent.NodeType == NodeType.IfStatement
+				|| parent.NodeType == NodeType.UnlessStatement
+				|| parent.NodeType == NodeType.TernaryExpression
+				|| parent.NodeType == NodeType.WhenClause
+				|| parent.NodeType == NodeType.StatementModifier
+				|| parent.NodeType == NodeType.ReturnStatement
+				|| parent.NodeType == NodeType.YieldStatement);
+		}
+
+		override public void LeaveDestructor(Destructor node)
+		{
+			if (node.Modifiers != TypeMemberModifiers.None)
+			{
+				Error(CompilerErrorFactory.InvalidDestructorModifier(node));
+			}
+
+			if (node.Parameters.Count != 0)
+			{
+				Error(CompilerErrorFactory.CantHaveDestructorParameters(node));
+			}
+		}
+
 		
 		void CantBeMarkedAbstract(TypeMember member)
 		{
@@ -114,6 +164,25 @@ namespace Boo.Lang.Compiler.Steps
 					Error(CompilerErrorFactory.ReservedPrefix(node, prefix));
 					break;
 				}
+			}
+		}
+		
+		void CheckExplicitImpl(IExplicitMember member)
+		{
+			ExplicitMemberInfo ei = member.ExplicitInfo;
+			if (null == ei)
+			{
+				return;
+			}
+			
+			TypeMember node = (TypeMember)member;
+			if (TypeMemberModifiers.None != node.Modifiers)
+			{
+				Error(
+					CompilerErrorFactory.ExplicitImplMustNotHaveModifiers(
+						node,
+						ei.InterfaceType.Name,
+						node.Name));
 			}
 		}
 	}

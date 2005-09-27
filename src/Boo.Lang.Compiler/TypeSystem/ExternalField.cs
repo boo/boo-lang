@@ -76,7 +76,23 @@ namespace Boo.Lang.Compiler.TypeSystem
 		{
 			get
 			{
-				return _field.IsFamily;
+				return _field.IsFamily || _field.IsFamilyOrAssembly;
+			}
+		}
+
+		public bool IsPrivate
+		{
+			get
+			{
+				return _field.IsPrivate;
+			}
+		}
+
+		public bool IsInternal
+		{
+			get
+			{
+				return _field.IsAssembly;
 			}
 		}
 		
@@ -139,6 +155,11 @@ namespace Boo.Lang.Compiler.TypeSystem
 		override public string ToString()
 		{
 			return _field.ToString();
+		}
+
+		public bool IsDuckTyped
+		{
+			get { return false; }
 		}
 	}
 }

@@ -27,17 +27,20 @@
 #endregion
 
 using System.Reflection;
-using System.Runtime.CompilerServices;
 
 [assembly: AssemblyTitle("boo antlr based parser")]
 [assembly: AssemblyDescription("")]
 [assembly: AssemblyConfiguration("")]
 [assembly: AssemblyCompany("")]
 [assembly: AssemblyProduct("boo - an extensible programming language for the CLI")]
-[assembly: AssemblyCopyright("(C) 2004 Rodrigo Barreto de Oliveira")]
+[assembly: AssemblyCopyright("(C) 2003-2005 Rodrigo Barreto de Oliveira")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]
 [assembly: AssemblyVersion("1.0.0.0")]
 [assembly: AssemblyDelaySign(false)]
+
+#if !IGNOREKEYFILE
 [assembly: AssemblyKeyFile("../src/boo.snk")]
+#endif
+
 [assembly: AssemblyKeyName("")]

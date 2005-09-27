@@ -30,15 +30,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 {
 	using System;
 	using System.Collections;
-	using System.Collections.Generic;
-
-	using TypeList = System.Collections.Generic.List<System.Type>;
-	using ITypeList = System.Collections.Generic.List<IType>;
-	using IEntityList = System.Collections.Generic.List<IEntity>;
-	using ModuleList = System.Collections.Generic.List<ModuleEntity>;
-	using TypeListMap = System.Collections.Generic.Dictionary<System.Reflection.Assembly, System.Collections.Generic.List<System.Type> >;
-	using IEntityMap = System.Collections.Generic.Dictionary<string, IEntity>;
-	using NamespaceEntityMap = System.Collections.Generic.Dictionary<string, NamespaceEntity>;
+	using System.Reflection;
 
 	public class NamespaceEntity : IEntity, INamespace
 	{		
@@ -48,30 +40,31 @@ namespace Boo.Lang.Compiler.TypeSystem
 		
 		string _name;
 		
-		TypeListMap _assemblies;
-
-		NamespaceEntityMap _childrenNamespaces;
-
-		ModuleList _internalModules;
+		Hashtable _assemblies;
 		
-		ITypeList _externalModules;
+		Hashtable _childrenNamespaces;
+		
+		List _internalModules;
+		
+		List _externalModules;
 		
 		public NamespaceEntity(INamespace parent, TypeSystemServices tagManager, string name)
 		{			
 			_parent = parent;
 			_typeSystemServices = tagManager;
 			_name = name;
-			_childrenNamespaces = new NamespaceEntityMap();
-			_assemblies = new TypeListMap();
-			_internalModules = new ModuleList();
-			_externalModules = new ITypeList();
+			_assemblies = new Hashtable();
+			_childrenNamespaces = new Hashtable();
+			_assemblies = new Hashtable();
+			_internalModules = new List();
+			_externalModules = new List();
 		}
 		
 		public string Name
 		{
 			get
 			{
-				return _name;
+				return GetLastPart(_name);
 			}
 		}
 		
@@ -93,11 +86,11 @@ namespace Boo.Lang.Compiler.TypeSystem
 		
 		public void Add(Type type)
 		{
-			TypeList types = null;
-			System.Reflection.Assembly assembly = type.Assembly;
-			if (!_assemblies.TryGetValue(assembly, out types))
+			Assembly assembly = type.Assembly;
+			List types = (List)_assemblies[assembly];
+			if (null == types)
 			{
-				types = new TypeList();
+				types = new List();
 				_assemblies[assembly] = types;
 			}
 			types.Add(type);
@@ -110,35 +103,32 @@ namespace Boo.Lang.Compiler.TypeSystem
 		
 		bool IsModule(Type type)
 		{
-			return System.Attribute.IsDefined(type, typeof(Boo.Lang.ModuleAttribute));
+			return MetadataUtil.IsAttributeDefined(type, Types.ModuleAttribute);
 		}		
 		
-		public void AddModule(Boo.Lang.Compiler.TypeSystem.ModuleEntity module)
+		public void AddModule(ModuleEntity module)
 		{
 			_internalModules.Add(module);
 		}
 		
 		public IEntity[] GetMembers()
 		{
-			IEntityList members = new IEntityList();
-			foreach (IEntity e in _childrenNamespaces.Values)
-			{
-				members.Add(e);
-			}
-			foreach (TypeList types in _assemblies.Values)
+			List members = new List();
+			members.Extend(_childrenNamespaces.Values);
+			foreach (List types in _assemblies.Values)
 			{
 				foreach (Type type in types)
 				{
 					members.Add(_typeSystemServices.Map(type));
 				}
 			}
-			return members.ToArray();
+			return (IEntity[])members.ToArray(typeof(IEntity));
 		}
 		
 		public NamespaceEntity GetChildNamespace(string name)
 		{
-			NamespaceEntity tag = null;
-			if (!_childrenNamespaces.TryGetValue(name, out tag))
+			NamespaceEntity tag = (NamespaceEntity)_childrenNamespaces[name];
+			if (null == tag)
 			{				
 				tag = new NamespaceEntity(this, _typeSystemServices, _name + "." + name);
 				_childrenNamespaces[name] = tag;
@@ -146,16 +136,16 @@ namespace Boo.Lang.Compiler.TypeSystem
 			return tag;
 		}
 		
-		internal bool Resolve(Boo.Lang.List targetList, string name, System.Reflection.Assembly assembly, EntityType flags)
+		internal bool Resolve(List targetList, string name, Assembly assembly, EntityType flags)
 		{
-			NamespaceEntity tag = null; 
-			if (_childrenNamespaces.TryGetValue(name, out tag))
+			NamespaceEntity tag = (NamespaceEntity)_childrenNamespaces[name];
+			if (null != tag)
 			{
 				targetList.Add(new AssemblyQualifiedNamespaceEntity(assembly, tag));
 				return true;
 			}
 			
-			TypeList types = _assemblies[assembly];
+			List types = (List)_assemblies[assembly];
 			
 			bool found = false;
 			if (null != types)
@@ -189,10 +179,10 @@ namespace Boo.Lang.Compiler.TypeSystem
 			}
 		}
 		
-		public bool Resolve(Boo.Lang.List targetList, string name, EntityType flags)
-		{
-			NamespaceEntity tag = null;
-			if (_childrenNamespaces.TryGetValue(name, out tag))
+		public bool Resolve(List targetList, string name, EntityType flags)
+		{	
+			IEntity tag = (IEntity)_childrenNamespaces[name];
+			if (null != tag)
 			{
 				targetList.Add(tag);
 				return true;
@@ -207,7 +197,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 			return found;
 		}
 		
-		bool ResolveInternalType(Boo.Lang.List targetList, string name, EntityType flags)
+		bool ResolveInternalType(List targetList, string name, EntityType flags)
 		{
 			foreach (ModuleEntity ns in _internalModules)
 			{
@@ -216,27 +206,23 @@ namespace Boo.Lang.Compiler.TypeSystem
 			return false;
 		}
 		
-		bool ResolveExternalType(Boo.Lang.List targetList, string name)
+		bool ResolveExternalType(List targetList, string name)
 		{			
-			foreach (TypeList types in _assemblies.Values)
+			foreach (List types in _assemblies.Values)
 			{				
 				foreach (Type type in types)
 				{
-					if (type.Name.StartsWith(name))
+					if (name == type.Name)
 					{
-						if (type.Name.Length == name.Length ||
-							(type.IsGenericTypeDefinition && '`' == type.Name[name.Length]))
-						{
-							targetList.Add(_typeSystemServices.Map(type));
-							return true;
-						}
+						targetList.Add(_typeSystemServices.Map(type));
+						return true;
 					}
 				}
 			}
 			return false;
 		}
-
-		bool ResolveExternalModules(Boo.Lang.List targetList, string name, EntityType flags)
+		
+		bool ResolveExternalModules(List targetList, string name, EntityType flags)
 		{
 			bool found = false;
 			foreach (INamespace ns in _externalModules)
@@ -249,6 +235,12 @@ namespace Boo.Lang.Compiler.TypeSystem
 		override public string ToString()
 		{
 			return _name;
+		}
+
+		private string GetLastPart(string name)
+		{
+			int index = name.LastIndexOf('.');
+			return index < 0 ? name : name.Substring(index+1);
 		}
 	}
 }

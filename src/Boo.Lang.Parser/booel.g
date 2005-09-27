@@ -35,7 +35,7 @@ options
 	defaultErrorHandler = false;
 	testLiterals = false;
 	importVocab = Boo;	
-	k = 2;
+	k = 3;
 	charVocabulary='\u0003'..'\uFFFE';
 	// without inlining some bitset tests, ANTLR couldn't do unicode;
 	// They need to make ANTLR generate smaller bitsets;
@@ -59,18 +59,39 @@ ID options { testLiterals = true; }:
 	;
 
 INT : 
-	("0x"(HEXDIGIT)+)(('l' | 'L') { $setType(LONG); })? |
-	(DIGIT)+
+  	("0x"(HEXDIGIT)+)(('l' | 'L') { $setType(LONG); })? |
+  	(DIGIT)+
+ 	(('e'|'E')('+'|'-')? (DIGIT)+)?
+  	(
+  		('l' | 'L') { $setType(LONG); } |
+		(('f' | 'F') { $setType(FLOAT); }) |
+  		(
+ 			(
+ 				{BooLexer.IsDigit(LA(2))}? 
+ 				(
+ 					'.' (DIGIT)+
+ 					(('e'|'E')('+'|'-')? (DIGIT)+)?
+ 				)
+				(
+					(('f' | 'F') { $setType(FLOAT); }) |
+					{ $setType(DOUBLE); }
+				)
+ 			)?
+  			(("ms" | 's' | 'm' | 'h' | 'd') { $setType(TIMESPAN); })?
+  		)
+  	)
+;
+  
+DOT : '.' 
 	(
-		('l' | 'L') { $setType(LONG); } |
+		(DIGIT)+ (('e'|'E')('+'|'-')? (DIGIT)+)?
 		(
-			({BooLexer.IsDigit(LA(2))}? ('.' (DIGIT)+) { $setType(DOUBLE); })?
-			(("ms" | 's' | 'm' | 'h' | 'd') { $setType(TIMESPAN); })?
+			(('f' | 'F')  { $setType(FLOAT); }) |
+			(("ms" | 's' | 'm' | 'h' | 'd') { $setType(TIMESPAN); }) |
+			{$setType(DOUBLE);}
 		)
-	)
-	;
-
-DOT : '.' ((DIGIT)+ {$setType(DOUBLE);})?;
+	)?
+;
 
 COLON : ':';
 
@@ -115,7 +136,19 @@ DIVISION:
 	;
 
 
-CMP_OPERATOR : '<' | "<=" | '>' | ">=" | "!~" | "!=";
+LESS_THAN: '<';
+
+SHIFT_LEFT: "<<";
+
+INPLACE_SHIFT_LEFT: "<<=";
+
+GREATER_THAN: '>';
+
+SHIFT_RIGHT: ">>";
+
+INPLACE_SHIFT_RIGHT: ">>=";
+
+CMP_OPERATOR :  "<=" | ">=" | "!~" | "!=";
 
 ASSIGN : '=' ( ('=' | '~') { $setType(CMP_OPERATOR); } )?;
 
@@ -137,11 +170,23 @@ protected
 SQS_ESC : '\\'! ( SESC | '\'' );
 
 protected
-SESC : 
-				( 'r' {$setText("\r"); }) |
-				( 'n' {$setText("\n"); }) |
-				( 't' {$setText("\t"); }) |
-				( '\\' {$setText("\\"); });
+SESC: 
+				( 'r'! {$setText("\r"); }) |
+				( 'n'! {$setText("\n"); }) |
+				( 't'! {$setText("\t"); }) |
+				( 'a'! {text.Length = _begin; text.Append("\a"); }) |
+				( 'b'! {text.Length = _begin; text.Append("\b"); }) |
+				( 'f'! {text.Length = _begin; text.Append("\f"); }) |
+				( '0'! {text.Length = _begin; text.Append("\0"); }) |
+				( 'u'!
+					HEXDIGIT HEXDIGIT HEXDIGIT HEXDIGIT
+					{
+						char ch = (char)int.Parse(text.ToString(_begin, 4), System.Globalization.NumberStyles.HexNumber);
+						text.Length = _begin;
+						text.Append(ch);
+					}
+				) |
+				( '\\'! {$setText("\\"); });
 
 protected
 RE_LITERAL : '/' (RE_CHAR)+ '/';
@@ -165,8 +210,8 @@ RE_ESC : '\\' (
 				'n' |
 				'e' |
 				(DIGIT)+ |
-				'x' DIGIT DIGIT |
-				'u' DIGIT DIGIT DIGIT DIGIT |
+				'x' HEXDIGIT HEXDIGIT |
+				'u' HEXDIGIT HEXDIGIT HEXDIGIT HEXDIGIT |
 				'\\' |
 				
 	// character classes
@@ -202,7 +247,9 @@ RE_ESC : '\\' (
 				'$' |
 				'^' |
 				'['	|
-				']'
+				']' |
+				'{' |
+				'}'
 			 )
 			 ;
 

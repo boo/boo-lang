@@ -1,4 +1,4 @@
-﻿#region license
+#region license
 // Copyright (c) 2004, Rodrigo B. de Oliveira (rbo@acm.org)
 // All rights reserved.
 // 
@@ -27,11 +27,7 @@
 #endregion
 
 namespace Boo.Lang.Compiler.TypeSystem
-{
-	using System;
-	using System.Collections;
-	using Boo.Lang.Compiler.Ast;
-	
+{	
 	/// <summary>
 	/// A namespace.
 	/// </summary>
@@ -57,7 +53,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 		/// true if at least one element was added to the targetList, false
 		/// otherwise.
 		/// </returns>
-		bool Resolve(Boo.Lang.List targetList, string name, EntityType filter);
+		bool Resolve(List targetList, string name, EntityType filter);
 		
 		/// <summary>
 		/// Returns all members of this namespace.
@@ -83,7 +79,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 			}
 		}
 		
-		public bool Resolve(Boo.Lang.List targetList, string name, EntityType flags)
+		public bool Resolve(List targetList, string name, EntityType flags)
 		{
 			return false;
 		}

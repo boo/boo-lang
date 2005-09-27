@@ -26,9 +26,6 @@
 // THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #endregion
 
-using System;
-using Boo.Lang.Compiler.TypeSystem;
-
 namespace Boo.Lang.Compiler.Ast
 {
 	public class TypeReferenceCollection : Boo.Lang.Compiler.Ast.Impl.TypeReferenceCollectionImpl
@@ -41,14 +38,8 @@ namespace Boo.Lang.Compiler.Ast
 		{
 		}
 
-		public IType[] ToTypeArray()
-		{
-			IType[] types = new IType[_list.Count];
-			for (int i = 0; i < types.Length; ++i)
-			{
-				types[i] = (IType)this[i].Entity;
-			}
-			return types;
+		internal TypeReferenceCollection(Boo.Lang.Compiler.Ast.Node parent, Boo.Lang.List list) : base(parent, list)
+		{	
 		}
 	}
 }

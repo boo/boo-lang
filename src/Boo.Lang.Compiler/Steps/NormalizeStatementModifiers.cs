@@ -1,10 +1,10 @@
-﻿#region license
+#region license
 // Copyright (c) 2004, Rodrigo B. de Oliveira (rbo@acm.org)
 // All rights reserved.
-// 
+//
 // Redistribution and use in source and binary forms, with or without modification,
 // are permitted provided that the following conditions are met:
-// 
+//
 //     * Redistributions of source code must retain the above copyright notice,
 //     this list of conditions and the following disclaimer.
 //     * Redistributions in binary form must reproduce the above copyright notice,
@@ -13,7 +13,7 @@
 //     * Neither the name of Rodrigo B. de Oliveira nor the names of its
 //     contributors may be used to endorse or promote products derived from this
 //     software without specific prior written permission.
-// 
+//
 // THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
 // ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
 // WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
@@ -26,92 +26,17 @@
 // THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #endregion
 
-using System;
-using System.Collections;
-using Boo.Lang.Compiler.Ast;
-using Boo.Lang.Compiler;
-
 namespace Boo.Lang.Compiler.Steps
 {
+	using Boo.Lang.Compiler.Ast;
+	using Boo.Lang.Compiler;
+
 	public class NormalizeStatementModifiers : AbstractTransformerCompilerStep
 	{
 		override public void Run()
 		{
 			Visit(CompileUnit.Modules);
 		}
-		
-		override public void OnModule(Module node)
-		{
-			Visit(node.Members);
-		}
-		
-		void LeaveTypeDefinition(TypeDefinition node)
-		{
-			if (!node.IsVisibilitySet)
-			{
-				node.Modifiers |= TypeMemberModifiers.Public;
-			}
-		}
-		
-		override public void LeaveEnumDefinition(EnumDefinition node)
-		{
-			LeaveTypeDefinition(node);
-		}
-		
-		override public void LeaveInterfaceDefinition(InterfaceDefinition node)
-		{
-			LeaveTypeDefinition(node);
-		}
-		
-		override public void LeaveClassDefinition(ClassDefinition node)
-		{
-			LeaveTypeDefinition(node);		
-			if (!node.HasInstanceConstructor)
-			{	
-				node.Members.Add(AstUtil.CreateConstructor(node, TypeMemberModifiers.Public));
-			}
-
-		}
-		
-		override public void LeaveField(Field node)
-		{
-			if (!node.IsVisibilitySet)
-			{
-				node.Modifiers |= TypeMemberModifiers.Protected;
-			}
-		}
-		
-		override public void LeaveProperty(Property node)
-		{
-			if (!node.IsVisibilitySet)
-			{
-				node.Modifiers |= TypeMemberModifiers.Public;
-			}
-		}
-		
-		override public void LeaveEvent(Event node)
-		{
-			if (!node.IsVisibilitySet)
-			{
-				node.Modifiers |= TypeMemberModifiers.Public;
-			}
-		}
-		
-		override public void LeaveMethod(Method node)
-		{
-			if (!node.IsVisibilitySet)
-			{
-				node.Modifiers |= TypeMemberModifiers.Public;
-			}
-		}
-		
-		override public void LeaveConstructor(Constructor node)
-		{
-			if (!node.IsVisibilitySet)
-			{
-				node.Modifiers |= TypeMemberModifiers.Public;
-			}
-		}		
 		
 		override public void LeaveUnpackStatement(UnpackStatement node)
 		{
@@ -162,53 +87,58 @@ namespace Boo.Lang.Compiler.Steps
 			}
 		}
 		
+		override public void LeaveMacroStatement(MacroStatement node)
+		{
+			LeaveStatement(node);
+		}
+		
+		public static Statement CreateModifiedStatement(StatementModifier modifier, Statement node)
+		{
+			Block block;
+			Statement stmt = MapStatementModifier(modifier, out block);
+			block.Add(node);
+			return stmt;
+		}
+		
+		public static Statement MapStatementModifier(StatementModifier modifier, out Block block)
+		{
+			switch (modifier.Type)
+			{
+				case StatementModifierType.If:
+				{
+					IfStatement stmt = new IfStatement(modifier.LexicalInfo);
+					stmt.Condition = modifier.Condition;
+					stmt.TrueBlock = new Block();
+					block = stmt.TrueBlock;
+					return stmt;
+				}
+				
+				case StatementModifierType.Unless:
+				{
+					UnlessStatement stmt = new UnlessStatement(modifier.LexicalInfo);
+					stmt.Condition = modifier.Condition;
+					block = stmt.Block;
+					return stmt;
+				}
+				
+				case StatementModifierType.While:
+				{
+					WhileStatement stmt = new WhileStatement(modifier.LexicalInfo);
+					stmt.Condition = modifier.Condition;
+					block = stmt.Block;
+					return stmt;
+				}
+			}
+			throw CompilerErrorFactory.NotImplemented(modifier, string.Format("modifier {0} supported", modifier.Type));
+		}
+		
 		public void LeaveStatement(Statement node)
 		{
-			if (null != node.Modifier)
+			StatementModifier modifier = node.Modifier;
+			if (null != modifier)
 			{
-				switch (node.Modifier.Type)
-				{
-					case StatementModifierType.If:
-					{	
-						IfStatement stmt = new IfStatement(node.Modifier.LexicalInfo);
-						stmt.Condition = node.Modifier.Condition;
-						stmt.TrueBlock = new Block();						
-						stmt.TrueBlock.Statements.Add(node);						
-						node.Modifier = null;
-						
-						ReplaceCurrentNode(stmt);
-						
-						break;
-					}
-					
-					case StatementModifierType.Unless:
-					{
-						UnlessStatement stmt = new UnlessStatement(node.Modifier.LexicalInfo);
-						stmt.Condition = node.Modifier.Condition;
-						stmt.Block.Statements.Add(node);
-						node.Modifier = null;
-						
-						ReplaceCurrentNode(stmt);
-						break;
-					}
-					
-					case StatementModifierType.While:
-					{
-						WhileStatement stmt = new WhileStatement(node.Modifier.LexicalInfo);
-						stmt.Condition = node.Modifier.Condition;
-						stmt.Block.Statements.Add(node);
-						node.Modifier = null;
-						
-						ReplaceCurrentNode(stmt);
-						break;
-					}
-						
-					default:
-					{							
-						Errors.Add(CompilerErrorFactory.NotImplemented(node, string.Format("modifier {0} supported", node.Modifier.Type)));
-						break;
-					}
-				}
+				node.Modifier = null;
+				ReplaceCurrentNode(CreateModifiedStatement(modifier, node));
 			}
 		}
 		
@@ -224,32 +154,6 @@ namespace Boo.Lang.Compiler.Steps
 					ReplaceCurrentNode(integer);
 				}
 			}
-		}
-		
-		override public void LeaveBinaryExpression(BinaryExpression node)
-		{
-			if (IsNull(node.Left) || IsNull(node.Right))
-			{
-				switch (node.Operator)
-				{
-					case BinaryOperatorType.Inequality:
-					{		
-						node.Operator = BinaryOperatorType.ReferenceInequality;
-						break;
-					}
-					
-					case BinaryOperatorType.Equality:
-					{
-						node.Operator = BinaryOperatorType.ReferenceEquality;
-						break;
-					}
-				}
-			}
-		}
-		
-		bool IsNull(Expression node)
-		{
-			return NodeType.NullLiteralExpression == node.NodeType;
 		}
 	}
 }

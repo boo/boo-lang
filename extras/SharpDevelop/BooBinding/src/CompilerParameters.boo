@@ -7,13 +7,13 @@
 // the Free Software Foundation; either version 2 of the License, or
 // (at your option) any later version.
 // 
-// Boo Explorer is distributed in the hope that it will be useful,
+// BooBinding is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 // 
 // You should have received a copy of the GNU General Public License
-// along with Foobar; if not, write to the Free Software
+// along with BooBinding; if not, write to the Free Software
 // Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #endregion
 
@@ -100,6 +100,14 @@ class BooCompilerParameters(AbstractProjectConfiguration):
 		set:
 			_compilerOptions.Runtime = value
 	
+	[DefaultValue(false)]
+	[LocalizedProperty("Duck typing by default", Description : "A slower but more flexible python-like mode in which types that cannot be inferred are resolved at runtime (duck typed).")]
+	DuckTypingByDefault as bool:
+		get:
+			return _compilerOptions.DuckTypingByDefault
+		set:
+			_compilerOptions.DuckTypingByDefault = value
+	
 	def constructor(name as string):
 		self.name = name
 	
@@ -123,4 +131,7 @@ class CompilerOptions:
 	
 	[XmlAttribute("pauseConsoleOutput")]
 	public PauseConsoleOutput = true
+	
+	[XmlAttribute("duckTypingByDefault")]
+	public DuckTypingByDefault = false
 	

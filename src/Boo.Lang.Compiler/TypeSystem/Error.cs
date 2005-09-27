@@ -63,15 +63,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 				return false;
 			}
 		}
-
-		public bool IsGenericTypeDefinition
-		{
-			get
-			{
-				return false;
-			}
-		}
-
+		
 		public virtual bool IsClass
 		{
 			get
@@ -192,11 +184,6 @@ namespace Boo.Lang.Compiler.TypeSystem
 		override public string ToString()
 		{
 			return Name;
-		}
-
-		public virtual IType BindGenericParameters(IType[] parameters)
-		{
-			throw new System.NotSupportedException("BindGenericParameters");
 		}
 	}
 	

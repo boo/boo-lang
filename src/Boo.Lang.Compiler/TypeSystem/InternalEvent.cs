@@ -1,4 +1,4 @@
-﻿#region license
+#region license
 // Copyright (c) 2004, Rodrigo B. de Oliveira (rbo@acm.org)
 // All rights reserved.
 // 
@@ -28,20 +28,16 @@
 
 namespace Boo.Lang.Compiler.TypeSystem
 {
-	using System;
 	using Boo.Lang.Compiler.Ast;
-	
+
 	public class InternalEvent : IEvent, IInternalEntity
-	{
-		TypeSystemServices _typeSystemServices;
-		
+	{	
 		Event _event;
 		
 		InternalField _backingField;
 		
 		public InternalEvent(TypeSystemServices tagManager, Event event_)
 		{
-			_typeSystemServices = tagManager;
 			_event = event_;
 		}
 		
@@ -131,7 +127,23 @@ namespace Boo.Lang.Compiler.TypeSystem
 				return _event.IsStatic;
 			}
 		}
-		
+
+		public bool IsVirtual
+		{
+			get
+			{
+				return _event.IsVirtual;
+			}
+		}
+
+		public bool IsAbstract
+		{
+			get
+			{
+				return _event.IsAbstract;
+			}
+		}
+
 		public InternalField BackingField
 		{
 			get
@@ -143,6 +155,11 @@ namespace Boo.Lang.Compiler.TypeSystem
 			{
 				_backingField = value;
 			}
+		}
+
+		public bool IsDuckTyped
+		{
+			get { return false; }
 		}
 	}
 }

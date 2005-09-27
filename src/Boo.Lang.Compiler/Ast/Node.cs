@@ -30,7 +30,7 @@ namespace Boo.Lang.Compiler.Ast
 {
 	using System;
 	using System.Collections;
-	using System.IO;
+	using System.Xml.Serialization;
 
 	/// <summary>
 	/// Base class for every node in the AST.
@@ -46,9 +46,7 @@ namespace Boo.Lang.Compiler.Ast
 		
 		protected string _documentation;
 		
-		protected Boo.Lang.Compiler.TypeSystem.IEntity _entity;
-		
-		protected System.Collections.Hashtable _properties;
+		protected System.Collections.Hashtable _annotations = new System.Collections.Hashtable();
 		
 		protected bool _isSynthetic;
 
@@ -79,6 +77,8 @@ namespace Boo.Lang.Compiler.Ast
 		/// <summary>
 		/// true when the node was constructed by the compiler.
 		/// </summary>
+		[XmlAttribute]
+		[System.ComponentModel.DefaultValue(false)]
 		public bool IsSynthetic
 		{
 			get
@@ -92,16 +92,17 @@ namespace Boo.Lang.Compiler.Ast
 			}
 		}
 		
-		public Boo.Lang.Compiler.TypeSystem.IEntity Entity
+		[XmlIgnore]
+		internal Boo.Lang.Compiler.TypeSystem.IEntity Entity
 		{
 			get
 			{
-				return _entity;
+				return Boo.Lang.Compiler.TypeSystem.TypeSystemServices.GetOptionalEntity(this);
 			}
 			
 			set
 			{
-				_entity = value;
+				Boo.Lang.Compiler.TypeSystem.TypeSystemServices.Bind(this, value);
 			}
 		}
 		
@@ -109,26 +110,28 @@ namespace Boo.Lang.Compiler.Ast
 		{
 			get
 			{
-				if (null == _properties)
-				{
-					return null;
-				}
-				return _properties[key];
+				return _annotations[key];
 			}
 			
-			set
+			set			
 			{
-				if (null == key)
-				{
-					throw new ArgumentNullException("key");
-				}
-				
-				if (null == _properties)
-				{
-					_properties = new Hashtable();
-				}
-				_properties[key] = value;
+				_annotations[key] = value;
 			}
+		}
+		
+		public bool ContainsAnnotation(object key)
+		{
+			return _annotations.ContainsKey(key);
+		}
+		
+		public void RemoveAnnotation(object key)
+		{
+			_annotations.Remove(key);
+		}
+		
+		internal virtual void ClearTypeSystemBindings()
+		{
+			_annotations.Clear();
 		}
 		
 		public Node ParentNode
@@ -152,7 +155,7 @@ namespace Boo.Lang.Compiler.Ast
 			}
 		}
 
-		[System.Xml.Serialization.XmlIgnore]
+		[XmlIgnore]
 		public LexicalInfo LexicalInfo
 		{
 			get
@@ -201,6 +204,52 @@ namespace Boo.Lang.Compiler.Ast
 			}
 			return false;
 		}
+		
+		private class ReplaceVisitor : DepthFirstTransformer
+		{
+			Node _pattern;
+			Node _template;	
+			int _matches;
+			
+			public ReplaceVisitor(Node pattern, Node template)
+			{
+				_pattern = pattern;
+				_template = template;
+			}
+			
+			public int Matches
+			{
+				get
+				{
+					return _matches;
+				}
+			}
+	
+			override protected void OnNode(Node node)
+			{
+				if (_pattern.Matches(node))
+				{
+					++_matches;
+					ReplaceCurrentNode(_template.CloneNode());
+				}
+				else
+				{
+					base.OnNode(node);
+				}
+			}
+		}
+		
+		/// <summary>
+		/// Replaces all occurrences of the pattern pattern anywhere in the tree
+		/// with a clone of template.
+		/// </summary>
+		/// <returns>the number of which matched the specified pattern</returns>
+		public int ReplaceNodes(Node pattern, Node template)
+		{
+			ReplaceVisitor visitor = new ReplaceVisitor(pattern, template);
+			Accept(visitor);
+			return visitor.Matches;
+		}
 
 		internal void InitializeParent(Node parent)
 		{			
@@ -211,12 +260,33 @@ namespace Boo.Lang.Compiler.Ast
 		
 		public abstract object Clone();
 		
+		public abstract bool Matches(Node other);
+		
+		public static bool Matches(Node lhs, Node rhs)
+		{
+			return lhs == null
+				? rhs == null
+				: lhs.Matches(rhs);
+		}
+		
+		public static bool Matches(NodeCollection lhs, NodeCollection rhs)
+		{
+			return lhs == null
+				? rhs == null
+				: lhs.Matches(rhs);
+		}
+		
 		public abstract NodeType NodeType
 		{
 			get;
 		}
 		
 		override public string ToString()
+		{
+			return ToCodeString();
+		}
+		
+		public string ToCodeString()
 		{
 			System.IO.StringWriter writer = new System.IO.StringWriter();
 			new Visitors.BooPrinterVisitor(writer).Visit(this);

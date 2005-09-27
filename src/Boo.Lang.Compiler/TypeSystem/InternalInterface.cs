@@ -28,11 +28,8 @@
 
 namespace Boo.Lang.Compiler.TypeSystem
 {
-	using System;
-	using Boo.Lang;
 	using Boo.Lang.Compiler.Ast;
-	using System.Reflection;
-	
+
 	public class InternalInterface : AbstractInternalType
 	{		
 		int _typeDepth = -1;
@@ -50,7 +47,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 			}
 		}
 		
-		override public bool Resolve(Boo.Lang.List targetList, string name, EntityType flags)
+		override public bool Resolve(List targetList, string name, EntityType flags)
 		{
 			bool found = base.Resolve(targetList, name, flags);
 			

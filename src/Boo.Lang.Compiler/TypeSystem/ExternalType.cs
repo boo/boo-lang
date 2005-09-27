@@ -1,10 +1,10 @@
-﻿#region license
+#region license
 // Copyright (c) 2004, Rodrigo B. de Oliveira (rbo@acm.org)
 // All rights reserved.
-// 
+//
 // Redistribution and use in source and binary forms, with or without modification,
 // are permitted provided that the following conditions are met:
-// 
+//
 //     * Redistributions of source code must retain the above copyright notice,
 //     this list of conditions and the following disclaimer.
 //     * Redistributions in binary form must reproduce the above copyright notice,
@@ -13,7 +13,7 @@
 //     * Neither the name of Rodrigo B. de Oliveira nor the names of its
 //     contributors may be used to endorse or promote products derived from this
 //     software without specific prior written permission.
-// 
+//
 // THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
 // ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
 // WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
@@ -31,45 +31,12 @@ namespace Boo.Lang.Compiler.TypeSystem
 	using System;
 	using System.Reflection;
 
-	public class ExternalGenericType : ExternalType
-	{
-		internal ExternalGenericType(TypeSystemServices typeSystemServices, Type type) : base(typeSystemServices, type)
-		{
-		}
-
-		override public string Name
-		{
-			get
-			{
-				return _type.Name.Split('`')[0];
-			}
-		}
-
-		override public bool IsGenericTypeDefinition
-		{
-			get
-			{
-				return true;
-			}
-		}
-
-		override public IType BindGenericParameters(IType[] parameters)
-		{
-			System.Type[] types = new System.Type[parameters.Length];
-			for (int i = 0; i < types.Length; ++i)
-			{
-				types[i] = ((ExternalType)parameters[i]).ActualType;
-			}
-			return _typeSystemServices.Map(_type.BindGenericParameters(types));
-		}
-	}
-
 	public class ExternalType : IType
 	{
 		protected TypeSystemServices _typeSystemServices;
-
-		protected Type _type;
-
+		
+		Type _type;
+		
 		IConstructor[] _constructors;
 		
 		IType[] _interfaces;
@@ -88,15 +55,16 @@ namespace Boo.Lang.Compiler.TypeSystem
 			_type = type;
 		}
 		
-		public virtual string FullName
+		public string FullName
 		{
 			get
 			{
-				return _type.FullName;
+				// FIXME: don't use Replace but build the name from the parent
+				return _type.FullName.Replace("+", ".");
 			}
 		}
 		
-		public virtual string Name
+		public string Name
 		{
 			get
 			{
@@ -120,7 +88,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 			}
 		}
 		
-		public bool IsFinal
+		public virtual bool IsFinal
 		{
 			get
 			{
@@ -170,7 +138,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 			get
 			{
 				return _type.IsEnum;
-			}			
+			}
 		}
 		
 		public bool IsValueType
@@ -193,12 +161,16 @@ namespace Boo.Lang.Compiler.TypeSystem
 		{
 			get
 			{
-				return _typeSystemServices.Map(_type.BaseType);
+								
+				Type baseType = _type.BaseType;
+				return null == baseType
+					? null
+					: _typeSystemServices.Map(baseType);
 			}
 		}
 		
 		public IEntity GetDefaultMember()
-		{			
+		{
 			return _typeSystemServices.Map(_type.GetDefaultMembers());
 		}
 		
@@ -209,15 +181,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 				return _type;
 			}
 		}
-
-		public virtual bool IsGenericTypeDefinition
-		{
-			get
-			{
-				return false;
-			}
-		}
-
+		
 		public virtual bool IsSubclassOf(IType other)
 		{
 			ExternalType external = other as ExternalType;
@@ -282,7 +246,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 		{
 			if (null == _members)
 			{
-				BindingFlags flags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static | BindingFlags.FlattenHierarchy;
+				BindingFlags flags = BindingFlags.DeclaredOnly | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static;// | BindingFlags.FlattenHierarchy;
 				MemberInfo[] members = _type.GetMembers(flags);
 				Type[] nested = _type.GetNestedTypes();
 				_members = new IEntity[members.Length+nested.Length];
@@ -316,8 +280,8 @@ namespace Boo.Lang.Compiler.TypeSystem
 			}
 		}
 		
-		public virtual bool Resolve(Boo.Lang.List targetList, string name, EntityType flags)
-		{					
+		public virtual bool Resolve(List targetList, string name, EntityType flags)
+		{
 			bool found = false;
 			foreach (IEntity member in GetMembers())
 			{
@@ -329,7 +293,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 			}
 			
 			if (IsInterface)
-			{				
+			{
 				if (_typeSystemServices.ObjectType.Resolve(targetList, name, flags))
 				{
 					found = true;
@@ -340,6 +304,17 @@ namespace Boo.Lang.Compiler.TypeSystem
 					found |= baseInterface.Resolve(targetList, name, flags);
 				}
 			}
+			else
+			{
+				if (!found || TypeSystemServices.ContainsMethodsOnly(targetList))
+				{
+					IType baseType = BaseType;
+					if (null != baseType)
+					{
+						found |= baseType.Resolve(targetList, name, flags);
+					}
+				}
+			}
 			return found;
 		}
 		
@@ -347,14 +322,13 @@ namespace Boo.Lang.Compiler.TypeSystem
 		{
 			return FullName;
 		}
-
-		public virtual IType BindGenericParameters(IType[] parameters)
-		{
-			throw new NotSupportedException("BindGenericParameters");
-		}
-
+		
 		static int GetTypeDepth(Type type)
 		{
+			if (type.IsByRef)
+			{
+				return GetTypeDepth(type.GetElementType());
+			}
 			if (type.IsInterface)
 			{
 				return GetInterfaceDepth(type);
@@ -363,8 +337,8 @@ namespace Boo.Lang.Compiler.TypeSystem
 		}
 		
 		static int GetClassDepth(Type type)
-		{			
-			int depth = 0;			
+		{
+			int depth = 0;
 			Type objectType = Types.Object;
 			while (type != objectType)
 			{
@@ -378,7 +352,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 		{
 			Type[] interfaces = type.GetInterfaces();
 			if (interfaces.Length > 0)
-			{			
+			{
 				int current = 0;
 				foreach (Type i in interfaces)
 				{

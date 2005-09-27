@@ -11,15 +11,8 @@ import Boo.Lang.Compiler.Pipelines
 import Boo.Lang.Compiler.Steps
 
 class TestResource(ICompilerResource):
-	Name:
-		get:
-			return "strings1.resources"
-	
-	Description:
-		get:
-			return ""
-			
-	def WriteResources(writer as IResourceWriter):
+	def WriteResource(service as IResourceService):		
+		writer = service.DefineResource("strings1.resources", "")
 		writer.AddResource("message", "Hello, world!")
 
 [TestFixture]
@@ -42,6 +35,21 @@ class CompilerResourcesFixture:
 		resources = ResourceManager("fileresource", asm)
 		Assert.AreEqual("Hello from file!", resources.GetString("message"))
 		Assert.AreEqual([1, 2, 3], resources.GetObject("list"))
+	/*
+	[Test]
+	def TextFileResource():
+		fname = MapPath("resource.txt")
+		Boo.IO.TextFile.WriteFile(fname, "SPAM, SPAM, SPAM, SPAM")
+		
+		asm = CompileResource("TextFileResource.dll", FileResource(fname))
+		files = asm.GetFiles()
+		Assert.AreEqual(1, len(files))
+		Assert.AreEqual(Boo.IO.TextFile.ReadFile(fname), ReadToEnd(files[0]))
+	*/
+		
+	def ReadToEnd(stream as FileStream):
+		using reader=StreamReader(stream):
+			return reader.ReadToEnd()
 		
 	def CompileResource(outputAssembly as string, resource as ICompilerResource):
 		compiler = BooCompiler()
@@ -51,7 +59,7 @@ class CompilerResourcesFixture:
 		parameters.Resources.Add(resource)
 		parameters.Pipeline = CompileToFile()
 		context = compiler.Run()
-		Assert.AreEqual(0, len(context.Errors), context.Errors.ToString())
+		Assert.AreEqual(0, len(context.Errors), context.Errors.ToString(true))
 		
 		asm = Assembly.LoadFrom(parameters.OutputAssembly)
 		Assert.IsNotNull(asm, "Assembly must be loadable after Run.")

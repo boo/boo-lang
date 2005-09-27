@@ -1,4 +1,4 @@
-﻿#region license
+#region license
 // Copyright (c) 2004, Rodrigo B. de Oliveira (rbo@acm.org)
 // All rights reserved.
 // 
@@ -30,23 +30,21 @@ namespace Boo.Lang.Compiler.TypeSystem
 {
 	using System;
 	using System.Collections;
+	using System.Reflection;
 	using Boo.Lang.Compiler.Ast;
-	
+	using Attribute = Boo.Lang.Compiler.Ast.Attribute;
+
 	public abstract class AbstractInternalType : IInternalEntity, IType, INamespace
 	{		
 		protected TypeSystemServices _typeSystemServices;
 		
 		protected TypeDefinition _typeDefinition;
 		
-		protected IEntity[] _members;
-		
 		protected IType[] _interfaces;
 		
 		protected INamespace _parentNamespace;
 		
-		protected Boo.Lang.List _buffer = new Boo.Lang.List();
-		
-		protected System.Type _generatedType;
+		protected Type _generatedType;
 		
 		protected AbstractInternalType(TypeSystemServices typeSystemServices, TypeDefinition typeDefinition)
 		{
@@ -69,7 +67,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 				return _typeDefinition.Name;
 			}
 		}	
-		
+
 		public Node Node
 		{
 			get
@@ -98,15 +96,15 @@ namespace Boo.Lang.Compiler.TypeSystem
 			}
 		}
 		
-		public virtual bool Resolve(Boo.Lang.List targetList, string name, EntityType flags)
+		public virtual bool Resolve(List targetList, string name, EntityType flags)
 		{			
 			bool found = false;
 			
-			foreach (IEntity tag in GetMembers())
+			foreach (IEntity entity in GetMembers())
 			{
-				if (tag.Name == name && NameResolutionService.IsFlagSet(flags, tag.EntityType))
+				if (entity.Name == name && NameResolutionService.IsFlagSet(flags, entity.EntityType))
 				{
-					targetList.Add(tag);
+					targetList.AddUnique(entity);
 					found = true;
 				}
 			}
@@ -150,15 +148,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 		{
 			return null;
 		}
-
-		public bool IsGenericTypeDefinition
-		{
-			get
-			{
-				return false;
-			}
-		}
-
+		
 		public bool IsClass
 		{
 			get
@@ -222,8 +212,8 @@ namespace Boo.Lang.Compiler.TypeSystem
 		
 		public IEntity GetDefaultMember()
 		{
-			IType defaultMemberAttribute = _typeSystemServices.Map(typeof(System.Reflection.DefaultMemberAttribute));
-			foreach (Boo.Lang.Compiler.Ast.Attribute attribute in _typeDefinition.Attributes)
+			IType defaultMemberAttribute = _typeSystemServices.Map(typeof(DefaultMemberAttribute));
+			foreach (Attribute attribute in _typeDefinition.Attributes)
 			{
 				IConstructor tag = TypeSystemServices.GetEntity(attribute) as IConstructor;
 				if (null != tag)
@@ -233,9 +223,9 @@ namespace Boo.Lang.Compiler.TypeSystem
 						StringLiteralExpression memberName = attribute.Arguments[0] as StringLiteralExpression;
 						if (null != memberName)
 						{
-							_buffer.Clear();
-							Resolve(_buffer, memberName.Value, EntityType.Any);
-							return NameResolutionService.GetEntityFromList(_buffer);
+							List buffer = new List();
+							Resolve(buffer, memberName.Value, EntityType.Any);
+							return NameResolutionService.GetEntityFromList(buffer);
 						}
 					}
 				}
@@ -276,40 +266,79 @@ namespace Boo.Lang.Compiler.TypeSystem
 		{
 			if (null == _interfaces)
 			{
-				_buffer.Clear();
+				List buffer = new List();
 				
 				foreach (TypeReference baseType in _typeDefinition.BaseTypes)
 				{
 					IType tag = TypeSystemServices.GetType(baseType);
 					if (tag.IsInterface)
 					{
-						_buffer.AddUnique(tag);
+						buffer.AddUnique(tag);
 					}
 				}
 				
-				_interfaces = (IType[])_buffer.ToArray(typeof(IType));
+				_interfaces = (IType[])buffer.ToArray(typeof(IType));
 			}
 			return _interfaces;
 		}
 		
 		public virtual IEntity[] GetMembers()
-		{
-			if (null == _members)
+		{			
+			ArrayList buffer = new ArrayList();
+			foreach (TypeMember member in _typeDefinition.Members)
 			{
-				_buffer.Clear();
-				foreach (TypeMember member in _typeDefinition.Members)
-				{
-					IEntity tag = TypeSystemServices.GetEntity(member);
-					_buffer.Add(tag);
-				}
-
-				_members = (IEntity[])_buffer.ToArray(typeof(IEntity));
-				_buffer.Clear();				
+				buffer.Add(GetMemberEntity(member));
 			}
-			return _members;
+			return (IEntity[])buffer.ToArray(typeof(IEntity));
 		}
 		
-		public System.Type GeneratedType
+		private IEntity GetMemberEntity(TypeMember member)
+		{
+			if (null == member.Entity)
+			{
+				member.Entity = CreateEntity(member);
+			}
+			return member.Entity;
+		}
+		
+		private IEntity CreateEntity(TypeMember member)
+		{
+			switch (member.NodeType)
+			{
+				case NodeType.Field:
+				{
+					return new InternalField((Field)member);
+				}
+					
+				case NodeType.EnumMember:
+				{
+					return new InternalEnumMember(_typeSystemServices, (EnumMember)member);
+				}
+					
+				case NodeType.Method:
+				{
+					return new InternalMethod(_typeSystemServices, (Method)member);
+				}
+					
+				case NodeType.Constructor:
+				{
+					return new InternalConstructor(_typeSystemServices, (Constructor)member);
+				}
+					
+				case NodeType.Property:
+				{
+					return new InternalProperty(_typeSystemServices, (Property)member);
+				}
+					
+				case NodeType.Event:
+				{
+					return new InternalEvent(_typeSystemServices, (Event)member);
+				}
+			}
+			throw new ArgumentException("Member type not supported: " + member);
+		}
+		
+		public Type GeneratedType
 		{
 			get
 			{
@@ -325,11 +354,6 @@ namespace Boo.Lang.Compiler.TypeSystem
 		override public string ToString()
 		{
 			return FullName;
-		}
-
-		public virtual IType BindGenericParameters(IType[] parameters)
-		{
-			throw new NotSupportedException("BindGenericParameters");
 		}
 	}
 

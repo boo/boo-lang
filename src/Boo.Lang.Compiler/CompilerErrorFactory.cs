@@ -38,6 +38,16 @@ namespace Boo.Lang.Compiler
 		{
 		}
 		
+		public static CompilerError CustomError(LexicalInfo lexicalInfo, string msg)
+		{
+			return new CompilerError(lexicalInfo, msg);
+		}
+		
+		public static CompilerError CustomError(string msg)
+		{
+			return new CompilerError(msg);
+		}
+		
 		public static CompilerError ClassAlreadyHasBaseType(Node node, string className, string baseType)
 		{
 			return new CompilerError("BCE0001", node.LexicalInfo, className, baseType);
@@ -644,6 +654,36 @@ namespace Boo.Lang.Compiler
 		public static CompilerError ValueTypeCantHaveAbstractMember(Node node, string typeName, string memberName)
 		{
 			return new CompilerError("BCE0122", node.LexicalInfo, typeName, memberName);
+		}
+
+		public static CompilerError InvalidParameterType(Node node, string typeName)
+		{
+			return new CompilerError("BCE0123", node.LexicalInfo, typeName);
+		}
+
+		public static CompilerError InvalidFieldType(Node node, string typeName)
+		{
+			return new CompilerError("BCE0124", node.LexicalInfo, typeName);
+		}
+
+		public static CompilerError InvalidDeclarationType(Node node, string typeName)
+		{
+			return new CompilerError("BCE0125", node.LexicalInfo, typeName);
+		}
+
+		public static CompilerError InvalidExpressionType(Node node, string typeName)
+		{
+			return new CompilerError("BCE0126", node.LexicalInfo, typeName);
+		}
+		
+		public static CompilerError RefArgTakesLValue(Node node)
+		{
+			return new CompilerError("BCE0127", node.LexicalInfo, node.ToString());
+		}
+
+		public static CompilerError InvalidTryStatement(Node node)
+		{
+			return new CompilerError("BCE0128", node.LexicalInfo);
 		}
 		
 		public static string ToStringList(System.Collections.IEnumerable names)

@@ -98,6 +98,7 @@ tokens
 	PROTECTED="protected";
 	PRIVATE="private";
 	RAISE="raise";
+	REF="ref";
 	RETURN="return";
 	RETRY="retry";
 	SET="set";	
@@ -248,7 +249,21 @@ tokens
 	
 	static double ParseDouble(string s)
 	{
-		return double.Parse(s, NumberStyles.Float, CultureInfo.InvariantCulture);
+		return ParseDouble(s,false);
+	}
+	
+	static double ParseDouble(string s, bool isSingle)
+	{
+		double val;
+		if (isSingle)
+		{
+			val = float.Parse(s, NumberStyles.Float, CultureInfo.InvariantCulture);
+		}
+		else
+		{
+			val = double.Parse(s, NumberStyles.Float, CultureInfo.InvariantCulture);
+		}
+		return val;
 	}
 	
 	protected IntegerLiteralExpression ParseIntegerLiteralExpression(
@@ -257,17 +272,30 @@ tokens
 		const string HEX_PREFIX = "0x";
 		
 		long value;
-		
-		if (s.StartsWith(HEX_PREFIX))
+		NumberStyles style = NumberStyles.Integer | NumberStyles.AllowExponent;
+		int hex_start = s.IndexOf(HEX_PREFIX);
+		bool negative = false;
+
+		if (hex_start >=0)
 		{
-			value = long.Parse(
-				s.Substring(HEX_PREFIX.Length), NumberStyles.AllowHexSpecifier, 
-					CultureInfo.InvariantCulture);
+			if (s.StartsWith("-"))
+			{
+				negative = true;
+			}
+			s = s.Substring(hex_start+HEX_PREFIX.Length);
+			style = NumberStyles.HexNumber;
+		}
+		if (isLong)
+		{
+			value = long.Parse(s, style, CultureInfo.InvariantCulture);
 		}
 		else
 		{
-			value = long.Parse(s, NumberStyles.Integer | NumberStyles.AllowExponent,
-					CultureInfo.InvariantCulture);
+			value = int.Parse(s, style, CultureInfo.InvariantCulture);
+		}
+		if (negative) //negative hex number
+		{
+			value *= -1;
 		}
 		return new IntegerLiteralExpression(ToLexicalInfo(token), value, isLong);
 	}
@@ -897,7 +925,17 @@ modifiers
 	VIRTUAL { _modifiers |= TypeMemberModifiers.Virtual; }	
 	)*
 ;
-	
+
+protected
+parameter_modifier returns [ParameterModifiers pm]
+	{
+		pm = ParameterModifiers.None;
+	}:
+	(
+		REF { pm = ParameterModifiers.Ref; }
+	)
+	;
+
 protected	
 parameter_declaration_list[ParameterDeclarationCollection c]
 	{
@@ -914,6 +952,7 @@ parameter_declaration[ParameterDeclarationCollection c]
 	{		
 		IToken id = null;
 		TypeReference tr = null;
+		ParameterModifiers pm = ParameterModifiers.None;
 		variableArguments = false;
 	}: 
 	attributes
@@ -925,6 +964,7 @@ parameter_declaration[ParameterDeclarationCollection c]
 		)
 		|
 		(
+			(pm=parameter_modifier)?
 			id2:ID (AS tr=type_reference)?
 			{ id = id2; }
 		)
@@ -933,7 +973,33 @@ parameter_declaration[ParameterDeclarationCollection c]
 		ParameterDeclaration pd = new ParameterDeclaration(ToLexicalInfo(id));
 		pd.Name = id.getText();
 		pd.Type = tr;
+		pd.Modifiers = pm;
 		AddAttributes(pd.Attributes);
+		c.Add(pd);
+	} 
+	;
+	
+protected	
+callable_parameter_declaration_list[ParameterDeclarationCollection c]:
+	(callable_parameter_declaration[c]
+	(COMMA callable_parameter_declaration[c])*)?
+	;
+
+protected
+callable_parameter_declaration[ParameterDeclarationCollection c]
+	{		
+		TypeReference tr = null;
+		ParameterModifiers pm = ParameterModifiers.None;
+	}: 
+	(
+		(pm=parameter_modifier)?
+		(tr=type_reference)
+	)
+	{
+		ParameterDeclaration pd = new ParameterDeclaration(tr.LexicalInfo);
+		pd.Name = "arg" + c.Count;
+		pd.Type = tr;
+		pd.Modifiers = pm;
 		c.Add(pd);
 	} 
 	;
@@ -943,17 +1009,19 @@ callable_type_reference returns [CallableTypeReference ctr]
 	{
 		ctr = null;
 		TypeReference tr = null;
+		ParameterDeclarationCollection parameters = null;
 	}:	
 	c:CALLABLE LPAREN
 	{
 		ctr = new CallableTypeReference(ToLexicalInfo(c));
+		parameters = ctr.Parameters;
 	}
-	(
-		tr=type_reference { ctr.Parameters.Add(tr); }
-		(COMMA tr=type_reference { ctr.Parameters.Add(tr); })*
-	)?
+	callable_parameter_declaration_list[parameters]
 	RPAREN
-	(AS tr=type_reference { ctr.ReturnType = tr; })?
+	(AS tr=type_reference { 
+		ctr.ReturnType = tr; 
+		}
+	)?
 	;
 	
 protected
@@ -1172,6 +1240,7 @@ callable_or_expression returns [Expression e]
 
 protected
 closure_parameters_test:
+	(parameter_modifier)?
 	(ID (AS type_reference)?)
 	(COMMA ID (AS type_reference)?)*
 	BITWISE_OR
@@ -2104,7 +2173,8 @@ unary_expression returns [Expression e]
 			(
 				sub:SUBTRACT { op = sub; uOperator = UnaryOperatorType.UnaryNegation; } |
 				inc:INCREMENT { op = inc; uOperator = UnaryOperatorType.Increment; } |
-				dec:DECREMENT { op = dec; uOperator = UnaryOperatorType.Decrement; }
+				dec:DECREMENT { op = dec; uOperator = UnaryOperatorType.Decrement; } |
+				oc:ONES_COMPLEMENT { op = oc; uOperator = UnaryOperatorType.OnesComplement; }
 			)
 			e=unary_expression
 		) |
@@ -2252,7 +2322,8 @@ member returns [IToken name]
 	get:GET { name=get; } |
 	t1:INTERNAL { name=t1; } |
 	t2:PUBLIC { name=t2; } |
-	t3:PROTECTED { name=t3; }
+	t3:PROTECTED { name=t3; } |
+	r:REF { name=r; }
 	;
 	
 protected
@@ -2422,18 +2493,28 @@ bool_literal returns [BoolLiteralExpression e] { e = null; }:
 	;
 
 protected
-integer_literal returns [IntegerLiteralExpression e] { e = null; } :
-	i:INT
+integer_literal returns [IntegerLiteralExpression e] 
 	{
-		e = ParseIntegerLiteralExpression(i, i.getText(), false);
-	}
-	|
-	l:LONG
-	{
-		string s = l.getText();
-		s = s.Substring(0, s.Length-1);
-		e = ParseIntegerLiteralExpression(l, s, true);
-	}
+		e = null;
+		string val;
+	} :
+	(neg:SUBTRACT)?
+	(
+		i:INT
+		{
+			val = i.getText();
+			if (neg != null) val = neg.getText() + val;
+			e = ParseIntegerLiteralExpression(i, val, false);
+		}
+		|
+		l:LONG
+		{
+			val = l.getText();
+			val = val.Substring(0, val.Length-1);
+			if (neg != null) val = neg.getText() + val;
+			e = ParseIntegerLiteralExpression(l, val, true);
+		}
+	)
 	;
 	
 protected
@@ -2458,23 +2539,27 @@ string_literal returns [Expression e]
 	
 protected
 expression_interpolation returns [ExpressionInterpolationExpression e]
-	{
-		e = null;
-		Expression param = null;	
-	}:
-	separator:ESEPARATOR
-	{
-		LexicalInfo info = ToLexicalInfo(separator);
-		e = new ExpressionInterpolationExpression(info);		
-	}
-	(  options { greedy = true; } :
-		
-		ESEPARATOR		
-		param=expression { if (null != param) { e.Expressions.Add(param); } }
-		ESEPARATOR
-	)*
-	;
-	
+{
+	e = null;
+	Expression param = null;
+	LexicalInfo info = null;
+}:
+	(firstseparator:ESEPARATOR)?
+	(options { greedy = true; }:
+		startsep:ESEPARATOR
+		{
+			if (info == null)
+			{
+				info = ToLexicalInfo(startsep);
+				e = new ExpressionInterpolationExpression(info);
+			}
+		}
+		param=expression
+		{ if (null != param) { e.Expressions.Add(param); } }
+		endsep:ESEPARATOR
+	)+
+	(lastseparator:ESEPARATOR)?
+;
 
 protected
 list_literal returns [Expression e]
@@ -2546,25 +2631,37 @@ re_literal returns [RELiteralExpression re] { re = null; }:
 	;
 	
 protected
-double_literal returns [DoubleLiteralExpression rle] { rle = null; }:
+double_literal returns [DoubleLiteralExpression rle]
+	{
+		rle = null;
+		string val;
+	}:
+	(neg:SUBTRACT)?
 	value:DOUBLE
-	{ 
-		rle = new DoubleLiteralExpression(ToLexicalInfo(value), ParseDouble(value.getText())); 
+	{
+		val = value.getText();
+		if (neg != null) val = neg.getText() + val;
+		rle = new DoubleLiteralExpression(ToLexicalInfo(value), ParseDouble(val));
 	}
 	|
 	single:FLOAT
 	{
-		string s = single.getText();
-		s = s.Substring(0, s.Length-1);
-		double val = float.Parse(s, CultureInfo.InvariantCulture);
-		rle = new DoubleLiteralExpression(ToLexicalInfo(single), val, true);
+		val = single.getText();
+		val = val.Substring(0, val.Length-1);
+		if (neg != null) val = neg.getText() + val;
+		rle = new DoubleLiteralExpression(ToLexicalInfo(single), ParseDouble(val, true), true);
 	}
 	;
 	
 protected
 timespan_literal returns [TimeSpanLiteralExpression tsle] { tsle = null; }:
+	(neg:SUBTRACT)?
 	value:TIMESPAN
-	{ tsle = new TimeSpanLiteralExpression(ToLexicalInfo(value), ParseTimeSpan(value.getText())); }
+	{
+		string val = value.getText();
+		if (neg != null) val = neg.getText() + val;
+		tsle = new TimeSpanLiteralExpression(ToLexicalInfo(value), ParseTimeSpan(val)); 
+	}
 	;
 
 protected
@@ -2718,8 +2815,8 @@ LINE_CONTINUATION:
 	
 INT : 
   	("0x"(HEXDIGIT)+)(('l' | 'L') { $setType(LONG); })? |
-  	(DIGIT)+
- 	(('e'|'E')('+'|'-')? (DIGIT)+)?
+  	DIGIT_GROUP
+ 	(('e'|'E')('+'|'-')? DIGIT_GROUP)?
   	(
   		('l' | 'L') { $setType(LONG); } |
 		(('f' | 'F') { $setType(FLOAT); }) |
@@ -2727,8 +2824,8 @@ INT :
  			(
  				{BooLexer.IsDigit(LA(2))}? 
  				(
- 					'.' (DIGIT)+
- 					(('e'|'E')('+'|'-')? (DIGIT)+)?
+ 					'.' REVERSE_DIGIT_GROUP
+ 					(('e'|'E')('+'|'-')? DIGIT_GROUP)?
  				)
 				(
 					(('f' | 'F') { $setType(FLOAT); }) |
@@ -2742,7 +2839,7 @@ INT :
   
 DOT : '.' 
 	(
-		(DIGIT)+ (('e'|'E')('+'|'-')? (DIGIT)+)?
+		REVERSE_DIGIT_GROUP (('e'|'E')('+'|'-')? DIGIT_GROUP)?
 		(
 			(('f' | 'F')  { $setType(FLOAT); }) |
 			(("ms" | 's' | 'm' | 'h' | 'd') { $setType(TIMESPAN); }) |
@@ -2812,6 +2909,8 @@ GREATER_THAN: '>';
 SHIFT_RIGHT: ">>";
 
 INPLACE_SHIFT_RIGHT: ">>=";
+
+ONES_COMPLEMENT: '~';
 
 CMP_OPERATOR :  "<=" | ">=" | "!~" | "!=";
 
@@ -2992,8 +3091,8 @@ RE_ESC : '\\' (
 				'n' |
 				'e' |
 				(DIGIT)+ |
-				'x' DIGIT DIGIT |
-				'u' DIGIT DIGIT DIGIT DIGIT |
+				'x' HEXDIGIT HEXDIGIT |
+				'u' HEXDIGIT HEXDIGIT HEXDIGIT HEXDIGIT |
 				'\\' |
 				
 	// character classes
@@ -3034,6 +3133,12 @@ RE_ESC : '\\' (
 				'}'
 			 )
 			 ;
+
+protected
+DIGIT_GROUP : DIGIT (('_'! DIGIT DIGIT DIGIT) | DIGIT)*;
+
+protected
+REVERSE_DIGIT_GROUP : (DIGIT DIGIT DIGIT ({BooLexer.IsDigit(LA(2))}? '_'!)? | DIGIT)+;
 
 protected
 ID_LETTER : ('_' | 'a'..'z' | 'A'..'Z' );

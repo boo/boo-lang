@@ -120,7 +120,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 		}
 	}
 	
-	public interface IProperty : IMember, IEntityWithParameters
+	public interface IProperty : IAccessibleMember, IEntityWithParameters
 	{	
 		IMethod GetGetMethod();
 		
@@ -226,7 +226,14 @@ namespace Boo.Lang.Compiler.TypeSystem
 	}
 	
 	public interface IParameter : ITypedEntity
-	{		
+	{
+		/// <summary>
+		/// Is the parameter out or ref?
+		/// </summary>
+		bool IsByRef
+		{
+			get;
+		}
 	}
 	
 	public interface IAccessibleMember : IMember

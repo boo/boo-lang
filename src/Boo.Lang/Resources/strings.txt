@@ -1,4 +1,5 @@
 ;Compiler Error Messages
+BCE0000='{0}'
 BCE0001=The class '{0}' already has '{1}' as its base class. 
 BCE0002=Parameter name must be an identifier.
 BCE0003=Named arguments are only allowed for constructors.
@@ -121,8 +122,15 @@ BCE0119=Explode expression can only be used as the last argument to a callable w
 BCE0120='{0}' is unaccessible due to its protection level.
 BCE0121='super' is not valid in this context.
 BCE0122=Value type '{0}' does not provide an implementation for '{1}'. Value types cannot have abstract members.
+BCE0123=Invalid parameter type '{0}'.
+BCE0124=Invalid field type '{0}'.
+BCE0125=Invalid declaration type '{0}'.
+BCE0126=It is not possible to evaluate an expression of type '{0}'.
+BCE0127=A ref or out argument must be an lvalue: '{0}'
+BCE0128='try' block must be followed by either 'except' or 'ensure'.
 
 ;Compiler warnings
+BCW0000=WARNING: {0}
 BCW0001=WARNING: Type '{0}' does not provide an implementation for '{1}' and will be marked abstract
 BCW0002=WARNING: Statement modifiers have no effect in labels.
 BCW0003=WARNING: Unused local variable '{0}'.

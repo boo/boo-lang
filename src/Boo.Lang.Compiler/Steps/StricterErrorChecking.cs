@@ -45,9 +45,30 @@ namespace Boo.Lang.Compiler.Steps
 			if (AstUtil.IsTargetOfMemberReference(node)) return;
 			Error(CompilerErrorFactory.InvalidSuper(node));
 		}
+
+		public override void LeaveReturnStatement(ReturnStatement node)
+		{
+			if (null == node.Expression) return;
+			CheckExpressionType(node.Expression);
+		}
+
+		public override void LeaveYieldStatement(YieldStatement node)
+		{
+			if (null == node.Expression) return;
+			CheckExpressionType(node.Expression);
+		}
+
+		public override void LeaveExpressionInterpolationExpression(ExpressionInterpolationExpression node)
+		{
+			foreach (Expression e in node.Expressions)
+			{
+				CheckExpressionType(e);
+			}
+		}
 		
 		override public void LeaveBinaryExpression(BinaryExpression node)
 		{
+			CheckExpressionType(node.Right);
 			if (BinaryOperatorType.ReferenceEquality == node.Operator)
 			{
 				if (IsTypeReference(node.Right))
@@ -211,6 +232,13 @@ namespace Boo.Lang.Compiler.Steps
 		bool IsAddressOfBuiltin(Expression node)
 		{
 			return BuiltinFunction.AddressOf == node.Entity;
+		}
+
+		void CheckExpressionType(Expression node)
+		{
+			IType type = node.ExpressionType;
+			if (type != TypeSystemServices.VoidType) return;
+			Error(CompilerErrorFactory.InvalidExpressionType(node, type.FullName));
 		}
 	}
 }

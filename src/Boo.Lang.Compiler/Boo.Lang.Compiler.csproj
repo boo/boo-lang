@@ -609,6 +609,11 @@
                     BuildAction = "Compile"
                 />
                 <File
+                    RelPath = "Ast\ParameterModifiers.cs"
+                    SubType = "Code"
+                    BuildAction = "Compile"
+                />
+                <File
                     RelPath = "Ast\Property.cs"
                     SubType = "Code"
                     BuildAction = "Compile"
@@ -1534,6 +1539,11 @@
                     BuildAction = "Compile"
                 />
                 <File
+                    RelPath = "Steps\ExpandDuckTypedExpressions.cs"
+                    SubType = "Code"
+                    BuildAction = "Compile"
+                />
+                <File
                     RelPath = "Steps\ExpandMacros.cs"
                     SubType = "Code"
                     BuildAction = "Compile"
@@ -1625,6 +1635,11 @@
                 />
                 <File
                     RelPath = "Steps\PrintWarnings.cs"
+                    SubType = "Code"
+                    BuildAction = "Compile"
+                />
+                <File
+                    RelPath = "Steps\ProcessAssignmentsToSpecialMembers.cs"
                     SubType = "Code"
                     BuildAction = "Compile"
                 />
@@ -1885,6 +1900,11 @@
                 />
                 <File
                     RelPath = "TypeSystem\InternalProperty.cs"
+                    SubType = "Code"
+                    BuildAction = "Compile"
+                />
+                <File
+                    RelPath = "TypeSystem\MetadataUtil.cs"
                     SubType = "Code"
                     BuildAction = "Compile"
                 />

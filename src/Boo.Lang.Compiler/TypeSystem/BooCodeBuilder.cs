@@ -462,6 +462,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 
 		public ArrayLiteralExpression CreateArray(IType arrayType, ExpressionCollection items)
 		{
+			if (!arrayType.IsArray) throw new ArgumentException(string.Format("'{0}'  is not an array type!", arrayType), "arrayType");
 			ArrayLiteralExpression array = new ArrayLiteralExpression();
 			array.ExpressionType = arrayType;
 			array.Items.Extend(items);
@@ -515,11 +516,23 @@ namespace Boo.Lang.Compiler.TypeSystem
 			return notNode;
 		}
 		
-		public ParameterDeclaration CreateParameterDeclaration(int index, string name, IType type)
+		public ParameterDeclaration CreateParameterDeclaration(int index, string name, IType type, bool byref)
 		{
-			ParameterDeclaration parameter = new ParameterDeclaration(name, CreateTypeReference(type));
+			ParameterModifiers modifiers = ParameterModifiers.None;
+			if (byref)
+			{
+				modifiers |= ParameterModifiers.Ref;
+			}
+			ParameterDeclaration parameter = new ParameterDeclaration(name, 
+								CreateTypeReference(type),
+								modifiers);
 			parameter.Entity = new InternalParameter(parameter, index);
 			return parameter;
+		}
+		
+		public ParameterDeclaration CreateParameterDeclaration(int index, string name, IType type)
+		{
+			return CreateParameterDeclaration(index, name, type, false);
 		}
 		
 		public Constructor CreateConstructor(TypeMemberModifiers modifiers)
@@ -548,6 +561,14 @@ namespace Boo.Lang.Compiler.TypeSystem
 			MethodInvocationExpression mie = CreateConstructorInvocation(constructor);
 			mie.LexicalInfo = arg.LexicalInfo;			
 			mie.Arguments.Add(arg);
+			return mie;
+		}
+
+		public MethodInvocationExpression CreateConstructorInvocation(LexicalInfo lexicalInfo, IConstructor constructor, params Expression[] args)
+		{
+			MethodInvocationExpression mie = CreateConstructorInvocation(constructor);
+			mie.LexicalInfo = lexicalInfo;
+			mie.Arguments.Extend(args);
 			return mie;
 		}
 		
@@ -663,7 +684,8 @@ namespace Boo.Lang.Compiler.TypeSystem
 				method.Parameters.Add(
 					CreateParameterDeclaration(parameterIndexDelta + i,
 						p.Name,
-						p.Type));
+						p.Type,
+						p.IsByRef));
 			}
 		}
 		
@@ -676,7 +698,10 @@ namespace Boo.Lang.Compiler.TypeSystem
 			IParameter[] parameters = baseMethod.GetParameters();
 			for (int i=0; i<parameters.Length; ++i)
 			{
-				method.Parameters.Add(CreateParameterDeclaration(i + 1, "arg" + i, parameters[i].Type));
+				method.Parameters.Add(CreateParameterDeclaration(i + 1, 
+								"arg" + i, 
+								parameters[i].Type,
+								parameters[i].IsByRef));
 			}
 			method.ReturnType = CreateTypeReference(baseMethod.ReturnType);			
 			method.Entity = new InternalMethod(_tss, method);
@@ -702,6 +727,12 @@ namespace Boo.Lang.Compiler.TypeSystem
 											CreateNullLiteral());
 			test.ExpressionType = _tss.BoolType;
 			return test;
+		}
+
+		public RaiseStatement RaiseException(LexicalInfo lexicalInfo, IConstructor exceptionConstructor, params Expression[] args)
+		{
+			Debug.Assert(exceptionConstructor.DeclaringType.IsSubclassOf(this._tss.ExceptionType));
+			return new RaiseStatement(lexicalInfo, CreateConstructorInvocation(lexicalInfo, exceptionConstructor, args));
 		}
 
 		public string CreateTempName()

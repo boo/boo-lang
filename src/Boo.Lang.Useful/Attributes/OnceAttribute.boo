@@ -26,7 +26,6 @@
 // THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #endregion
 
-
 namespace Boo.Lang.Useful.Attributes
 
 import System.Threading
@@ -91,7 +90,9 @@ Usage
 		node
 			The node to apply the <OnceAttribute> to.
 	"""
-		assert node isa Method
+		if not node isa Method:
+			InvalidNodeForAttribute("Method")
+			return
 		
 		_method = node
 		
@@ -105,9 +106,9 @@ Usage
 				
 			return if not e.Step isa ProcessMethodBodies	
 			
-			# Void methods cannot be cached.
-			assert _method.ReturnType.Entity is not \
-				self.TypeSystemServices.VoidType, "once attribute cannot be applied to void methods"
+			# void methods dont need to be cached.
+			returnType = TypeSystemServices.GetEntity(_method.ReturnType)
+			return if returnType is self.TypeSystemServices.VoidType
 			
 			CreateReturnValueField()
 			PostProcessMethod()
@@ -116,7 +117,7 @@ Usage
 	"""
 	Creates the field that stores the return value of the cached method.
 	"""
-		template = self.CodeBuilder.CreateField('field', _method.ReturnType.Entity)
+		template = self.CodeBuilder.CreateField('field', TypeSystemServices.GetEntity(_method.ReturnType))
 		_returnValue = AddField(template, "___${_method.Name}_returnValue")
 
 	def CreateCachedField():

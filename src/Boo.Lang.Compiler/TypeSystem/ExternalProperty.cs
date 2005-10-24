@@ -66,7 +66,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 				if (-1 == _isDuckTyped)
 				{
 					_isDuckTyped =
-						!_property.PropertyType.IsValueType && System.Attribute.IsDefined(_property, Types.DuckTypedAttribute)
+						!_property.PropertyType.IsValueType && MetadataUtil.IsAttributeDefined(_property, Types.DuckTypedAttribute)
 						? 1
 						: 0;
 				}
@@ -81,6 +81,30 @@ namespace Boo.Lang.Compiler.TypeSystem
 			{
 				return (null != _property.GetGetMethod() ||
 						null != _property.GetSetMethod());
+			}
+		}
+		
+		public bool IsProtected
+		{
+			get
+			{
+				return false;
+			}
+		}
+		
+		public bool IsInternal
+		{
+			get
+			{
+				return false;
+			}
+		}
+		
+		public bool IsPrivate
+		{
+			get
+			{
+				return false;
 			}
 		}
 		
@@ -173,7 +197,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 			{
 				return mi;
 			}
-			return _property.GetSetMethod(true)
-;		}
+			return _property.GetSetMethod(true);
+		}
 	}
 }

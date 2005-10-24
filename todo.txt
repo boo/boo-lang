@@ -4,6 +4,15 @@ Please refer to our issue tracker at
  	
 for open issues.
 
+Those with patches are also listed here:
+http://boo.codehaus.org/Open+Issues+With+Patches
+
+Named parameters:
+	def logHistoryFile(to: [required] fname, since: startDate as date):
+		print fname
+		
+	logHistoryFile(to: "foo.txt", since: date.Now - 10s)
+
 All the issues on this file will be eventually moved there.
 
 * optimize InitializeNameResolution step and NameResolutionService
@@ -34,10 +43,6 @@ super APÓS qualquer validação:
 
 * ITypeBinding.GetDefaultMember() as IBinding => ITypeBinding.GetDefaultMembers() as (IBinding)
 
-* private base method implementations:
-	class Foo(Base):
-		override def Base.Method():
-			super()
 * macros para o SharpDevelop em boo
 
 * resolução de tipos em MethodInvocationExpression quando existe um nome no mesmo
@@ -51,7 +56,6 @@ derivada de Control (que tem uma propriedade chamada Size):
 		de ser chamado ou não);
 
 * StatementGroup para permitir o agrupamento de statements com mesmo propósito
-* float literals: 3.0f
 * binary literals: 0b001
 * WARNING: property getter should return a value
 * CompilerParameters.Properties (passed in the command line as -D:name=value just like nant)

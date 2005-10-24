@@ -38,6 +38,8 @@ namespace Boo.Lang.Compiler.TypeSystem
 
 	public class TypeSystemServices
 	{
+		private static readonly bool Version1 = Environment.Version < new Version(2, 0);
+		
 		public DuckTypeImpl DuckType;
 		
 		public ExternalType IQuackFuType;
@@ -370,6 +372,22 @@ namespace Boo.Lang.Compiler.TypeSystem
 		{
 			return (TypeType == type) || IsCallableType(type) || IsDuckType(type);
 		}
+
+		public bool IsDuckTyped(Expression expression)
+		{
+			IType type = expression.ExpressionType;
+			return null != type && this.IsDuckType(type);
+		}
+
+		public bool IsQuackBuiltin(Expression node)
+		{
+			return IsQuackBuiltin(GetOptionalEntity(node));
+		}
+		
+		public bool IsQuackBuiltin(IEntity entity)
+		{
+			return BuiltinFunction.Quack == entity;
+		}
 		
 		public bool IsDuckType(IType type)
 		{
@@ -377,9 +395,11 @@ namespace Boo.Lang.Compiler.TypeSystem
 			{
 				throw new ArgumentNullException("type");
 			}
-			return ((type == DuckType)  ||
-			        (_context.Parameters.Ducky &&
-			         (type == ObjectType || type.IsSubclassOf(IQuackFuType))));
+			return (
+				(type == DuckType)
+				|| (_context.Parameters.Ducky
+					&& (type == ObjectType
+						|| type.IsSubclassOf(IQuackFuType))));
 		}
 		
 		bool IsCallableType(IType type)
@@ -568,6 +588,25 @@ namespace Boo.Lang.Compiler.TypeSystem
 			return false;
 		}
 		
+		public static string GetReferenceTypeName(Type t)
+		{
+			string name = t.FullName;
+			if (!(name.EndsWith("&")))
+			{
+				return name+"&";
+			}
+			return name;		}
+		
+		public static string DeReferenceTypeName(IType t)
+		{
+			string name = t.FullName;
+			if (name.EndsWith("&"))
+			{
+				return name.Substring(0, t.FullName.Length-1);
+			}
+			return name;
+		}
+		
 		public static bool CheckOverrideSignature(IMethod impl, IMethod baseMethod)
 		{
 			IParameter[] implParameters = impl.GetParameters();
@@ -581,7 +620,21 @@ namespace Boo.Lang.Compiler.TypeSystem
 			{
 				for (int i=0; i<implParameters.Length; ++i)
 				{
-					if (implParameters[i].Type != baseParameters[i].Type)
+					IType impltype = implParameters[i].Type;
+					IType basetype = baseParameters[i].Type;
+					
+					if (basetype.IsByRef)
+					{
+						if (!(implParameters[i].IsByRef))
+						{
+							return false;
+						}
+						if (DeReferenceTypeName(basetype) != impltype.FullName)
+						{
+							return false;
+						}
+					}
+					else if (impltype != basetype)
 					{
 						return false;
 					}
@@ -744,18 +797,24 @@ namespace Boo.Lang.Compiler.TypeSystem
 			}
 		}
 		
+		static object EntityAnnotationKey = new object();
+		
+		public static void Bind(Node node, IEntity entity)
+		{
+			if (null == node) throw new ArgumentNullException("node");
+			node[EntityAnnotationKey] = entity;
+		}
+		
+		public static IEntity GetOptionalEntity(Node node)
+		{
+			if (null == node) throw new ArgumentNullException("node");
+			return (IEntity)node[EntityAnnotationKey];
+		}
+		
 		public static IEntity GetEntity(Node node)
 		{
-			if (null == node)
-			{
-				throw new ArgumentNullException("node");
-			}
-			
-			IEntity tag = node.Entity;
-			if (null == tag)
-			{
-				InvalidNode(node);
-			}
+			IEntity tag = GetOptionalEntity(node);
+			if (null == tag) InvalidNode(node);
 			return tag;
 		}
 		
@@ -1077,7 +1136,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 			InternalMethod beginInvokeEntity = (InternalMethod)beginInvoke.Entity;
 			
 			Method overload = CodeBuilder.CreateMethod("BeginInvoke", Map(typeof(IAsyncResult)),
-										TypeMemberModifiers.Public);
+										TypeMemberModifiers.Public|TypeMemberModifiers.Virtual);
 			CodeBuilder.DeclareParameters(overload, 1, anonymousType.GetSignature().Parameters);
 			
 			mie = CodeBuilder.CreateMethodInvocation(
@@ -1123,7 +1182,20 @@ namespace Boo.Lang.Compiler.TypeSystem
 		{
 			CallableSignature signature = anonymousType.GetSignature();
 			Method method = CodeBuilder.CreateRuntimeMethod("EndInvoke", signature.ReturnType);
-			int delta=method.Parameters.Count;
+			
+			int delta=1;
+			foreach(IParameter p in signature.Parameters)
+			{
+				if (p.IsByRef)
+				{
+					method.Parameters.Add(
+						CodeBuilder.CreateParameterDeclaration(++delta,
+								p.Name,
+								p.Type,
+								true));
+				}			
+			}
+			delta=method.Parameters.Count;
 			method.Parameters.Add(
 				CodeBuilder.CreateParameterDeclaration(delta+1, "result", Map(typeof(IAsyncResult))));
 			return method;
@@ -1205,8 +1277,13 @@ namespace Boo.Lang.Compiler.TypeSystem
 			
 			Method beginInvoke = CreateBeginInvokeMethod(anonymousType);
 			cd.Members.Add(beginInvoke);
-			cd.Members.Add(CreateBeginInvokeCallbackOnlyOverload(anonymousType, beginInvoke));
-			cd.Members.Add(CreateBeginInvokeSimplerOverload(anonymousType, beginInvoke));
+			
+			// XXX: find an alternative way to support BeginInvoke overloads... 
+			if (Version1)
+			{
+				cd.Members.Add(CreateBeginInvokeCallbackOnlyOverload(anonymousType, beginInvoke));
+				cd.Members.Add(CreateBeginInvokeSimplerOverload(anonymousType, beginInvoke));
+			}
 			
 			cd.Members.Add(CreateEndInvokeMethod(anonymousType));
 			_anonymousTypesModule.Members.Add(cd);

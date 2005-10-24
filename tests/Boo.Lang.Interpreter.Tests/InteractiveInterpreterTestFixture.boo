@@ -52,6 +52,11 @@ class InteractiveInterpreterTestFixture:
 		assert _interpreter.LastValue is null
 		
 	[Test]
+	def EvalEmptyString():
+		Eval("")
+		assert _interpreter.LastValue is null
+		
+	[Test]
 	def UseInterpreterValues():
 		using console=ConsoleCapture():
 			Eval("print(name);print(age)")
@@ -235,7 +240,7 @@ class Language:
 def foo():
 	return 42
 
-handle = foo.BeginInvoke()
+handle = foo.BeginInvoke(null, null)
 result = foo.EndInvoke(handle)
 """)
 
@@ -252,7 +257,7 @@ result = foo.EndInvoke(handle)
 def foo():
 	return 42
 
-handle = foo.BeginInvoke()
+handle = foo.BeginInvoke(null, null)
 """)
 		handle as duck = _interpreter.GetValue("handle")
 		assert handle is not null

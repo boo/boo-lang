@@ -39,16 +39,20 @@ import Boo.Lang.Compiler.IO
 
 class AbstractInterpreter:
 
-	_compiler = BooCompiler()
+	_compiler as BooCompiler
 	
-	_parser = BooCompiler()
+	_parser as BooCompiler
 	
-	_imports = ImportCollection()
+	_imports as ImportCollection
 	
-	_referenceProcessor = ProcessInterpreterReferences(self)
+	_referenceProcessor as ProcessInterpreterReferences
 	
 	[property(RememberLastValue)]
-	_rememberLastValue = false
+	_rememberLastValue as bool
+	
+	_inputId as int
+	
+	_suggestionCompiler as BooCompiler
 	
 	Ducky:
 		get:
@@ -59,11 +63,12 @@ class AbstractInterpreter:
 			if _suggestionCompiler is not null:
 				_suggestionCompiler.Parameters.Ducky = value
 	
-	_inputId = 0
-	
-	_suggestionCompiler as BooCompiler
-	
 	def constructor([required] parser as ICompilerStep):
+		
+		_compiler = BooCompiler()
+		_parser = BooCompiler()
+		_imports = ImportCollection()
+		_referenceProcessor = ProcessInterpreterReferences(self)
 		
 		pipeline = Pipelines.CompileToMemory()
 		pipeline.RemoveAt(0)
@@ -179,7 +184,8 @@ class AbstractInterpreter:
 			return match.Groups[1].Value
 		return code
 		
-	def Eval(code as string):
+	def Eval([required] code as string):
+		return CompilerContext() if 0 == len(code)
 		return EvalCompilerInput(StringInput("input${++_inputId}", code))
 		
 	def EvalCompilerInput(input as ICompilerInput):
@@ -244,8 +250,17 @@ class AbstractInterpreter:
 	private def InitializeModuleInterpreter(asm as System.Reflection.Assembly,
 										module as Module):
 		moduleType = cast(AbstractInternalType,
-						cast(ModuleEntity, module.Entity).ModuleClass.Entity).GeneratedType
+						GetEntity(GetModuleEntity(module).ModuleClass)).GeneratedType
 		moduleType.GetField("ParentInterpreter").SetValue(null, self)
+		
+	private static def GetModuleEntity(module as Module) as ModuleEntity:
+		return GetEntity(module)
+		
+	static def GetEntity(node as Node):
+		return TypeSystemServices.GetEntity(node)
+		
+	static def GetOptionalEntity(node as Node):
+		return TypeSystemServices.GetOptionalEntity(node)
 		
 	private def RecordImports(imports as ImportCollection):
 		for imp in imports:
@@ -437,7 +452,7 @@ class AbstractInterpreter:
 	
 		override def EnterModule(node as Module):
 	
-			module = cast(ModuleEntity, node.Entity).ModuleClass
+			module = GetModuleEntity(node).ModuleClass
 			return false unless module
 	
 			_interpreterField = CodeBuilder.CreateField("ParentInterpreter", TypeSystemServices.Map(AbstractInterpreter))
@@ -455,12 +470,12 @@ class AbstractInterpreter:
 	
 		override def OnReferenceExpression(node as ReferenceExpression):
 			
-			if (InterpreterEntity.IsInterpreterEntity(node.Entity) and
+			if (InterpreterEntity.IsInterpreterEntity(GetOptionalEntity(node)) and
 					not AstUtil.IsLhsOfAssignment(node)):	
 				ReplaceCurrentNode(CreateGetValue(node))
 	
 		override def LeaveBinaryExpression(node as BinaryExpression):
-			if InterpreterEntity.IsInterpreterEntity(node.Left.Entity):
+			if InterpreterEntity.IsInterpreterEntity(GetOptionalEntity(node.Left)):
 				ReplaceCurrentNode(CreateSetValue(node))
 				
 		override def LeaveExpressionStatement(node as ExpressionStatement):
@@ -541,7 +556,7 @@ class AbstractInterpreter:
 				if target.ExpressionType is not null:									
 					suggestion = target.ExpressionType
 				else:
-					suggestion = target.Entity
+					suggestion = GetOptionalEntity(target)
 				if suggestion is not null and suggestion.EntityType != EntityType.Error:
 					_context["suggestion"] = suggestion
 					// TODO: use target to display static members only for type reference expressions

@@ -86,6 +86,17 @@ namespace Boo.Lang.Compiler.Ast.Visitors
 			{
 				Visit(m.Globals.Statements);
 			}
+
+			foreach (Boo.Lang.Compiler.Ast.Attribute attribute in m.AssemblyAttributes)
+			{
+				WriteAssemblyAttribute(attribute);
+			}
+		}
+
+		private void WriteAssemblyAttribute(Attribute attribute)
+		{
+			WriteAttribute(attribute, "assembly: ");
+			WriteLine();
 		}
 
 		override public void OnNamespaceDeclaration(NamespaceDeclaration node)
@@ -335,7 +346,12 @@ namespace Boo.Lang.Compiler.Ast.Visitors
 		}
 
 		override public void OnMethod(Method m)
-		{	
+		{
+            if (m.IsRuntime)
+            {
+                WriteIndented("// runtime");
+                WriteLine();
+            }
 			WriteCallableDefinitionHeader("def ", m);
 			WriteLine(":");
 			WriteBlock(m.Body);
@@ -353,8 +369,21 @@ namespace Boo.Lang.Compiler.Ast.Visitors
 		override public void OnParameterDeclaration(ParameterDeclaration p)
 		{
 			WriteAttributes(p.Attributes, false);
-			Write(p.Name);
-			WriteTypeReference(p.Type);
+			
+			if (p.IsByRef)
+			{
+				WriteKeyword("ref ");
+			}
+			
+			if (p.ParentNode.NodeType == NodeType.CallableTypeReference)
+			{
+				Visit(p.Type);
+			}
+			else
+			{
+				Write(p.Name);
+				WriteTypeReference(p.Type);
+			}
 		}
 		
 		override public void OnTypeofExpression(TypeofExpression node)
@@ -919,6 +948,11 @@ namespace Boo.Lang.Compiler.Ast.Visitors
 				{
 					return "not ";
 				}
+
+				case UnaryOperatorType.OnesComplement:
+				{
+					return "~";
+				}
 			}
 			throw new ArgumentException("op");
 		}
@@ -1278,7 +1312,16 @@ namespace Boo.Lang.Compiler.Ast.Visitors
 		
 		void WriteAttribute(Attribute attribute)
 		{
+			WriteAttribute(attribute, null);
+		}
+
+		void WriteAttribute(Attribute attribute, string prefix)
+		{
 			WriteIndented("[");
+			if (null != prefix)
+			{
+				Write(prefix);
+			}
 			Write(attribute.Name);
 			if (attribute.Arguments.Count > 0 ||
 			    attribute.NamedArguments.Count > 0)

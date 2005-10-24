@@ -1,8 +1,8 @@
 ﻿<?xml version="1.0"?>
 <project name="boo" default="all">
 
-	<property name="boo.major.minor.release.version" value="0.6.0" />
-	<property name="boo.svn.revision" value="1858" />
+	<property name="boo.major.minor.release.version" value="0.7.0" />
+	<property name="boo.svn.revision" value="1939" />
 	<property name="boo.version" value="${boo.major.minor.release.version}.${boo.svn.revision}" dynamic="true" />
 	<property name="boo.assembly.version" value="1.0.0.0" />
 	
@@ -727,10 +727,14 @@
 			<sourcefiles basedir="src/Boo.Lang.Parser">
 				<include name="boo.g" />
 				<include name="booel.g" />
+				<include name="wsaboo.g" />
+				<include name="wsabooel.g" />
 			</sourcefiles>
 			<targetfiles basedir="src/Boo.Lang.Parser">
 				<include name="BooParserBase.cs" />
 				<include name="BooExpressionLexer.cs" />
+				<include name="WSABooParserBase.cs" />
+				<include name="WSABooExpressionLexer.cs" />
 			</targetfiles>
 		</uptodate>
 
@@ -760,6 +764,24 @@
 				<arg value="src/Boo.Lang.Parser/booel.g" />
 			</exec>
 			
+			<exec program="${java}" failonerror="true">
+				<arg value="-cp" />
+				<arg file="${antlr.jar}" />
+				<arg value="antlr.Tool" />
+				<arg value="-o" />
+				<arg value="src/Boo.Lang.Parser/" />
+				<arg value="src/Boo.Lang.Parser/wsaboo.g" />
+			</exec>
+			
+			<exec program="${java}" failonerror="true">
+				<arg value="-cp" />
+				<arg file="${antlr.jar}" />
+				<arg value="antlr.Tool" />
+				<arg value="-o" />
+				<arg value="src/Boo.Lang.Parser/" />
+				<arg value="src/Boo.Lang.Parser/wsabooel.g" />
+			</exec>
+			
 			<touch file="src/Boo.Lang.Parser/BooParserBase.cs" />
 		</if>
 	</target>
@@ -770,6 +792,7 @@
 			<sourcefiles>
 				<include name="ast.model.boo" />
 				<include name="scripts/astgen.boo" />
+				<include name="scripts/Templates/*.cs" />
 			</sourcefiles>
 			<targetfiles>
 				<include name="src/Boo.Lang.Compiler/Ast/Impl/CompileUnitImpl.cs" />

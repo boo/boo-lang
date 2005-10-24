@@ -72,5 +72,13 @@ namespace Boo.Lang.Compiler.TypeSystem
 				return _typeSystemServices.Map(_parameter.ParameterType);
 			}
 		}
+		
+		public bool IsByRef
+		{
+			get
+			{
+				return Type.IsByRef;
+			}
+		}
 	}
 }

@@ -33,6 +33,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Globalization;
 using System.Threading;
+using Boo.Lang.Compiler.Ast.Visitors;
 using Assembly = System.Reflection.Assembly;
 using Boo.Lang.Compiler;
 using Boo.Lang.Compiler.IO;
@@ -152,6 +153,8 @@ namespace BooC
 		void ParseOptions(string[] args, CompilerParameters _options)
 		{
 			bool debugSteps = false;
+			bool whiteSpaceAgnostic = false;
+			
 			ArrayList arglist = new ArrayList(args);
 			ExpandResponseFiles(ref arglist);
 			AddDefaultResponseFile(ref arglist);
@@ -168,6 +171,19 @@ namespace BooC
 						if ("-utf8" == arg) continue;
 						switch (arg[1])
 						{
+							case 'w':
+							{
+								if (arg == "-wsa")
+								{
+									whiteSpaceAgnostic = true;
+								}
+								else
+								{
+									InvalidOption(arg);
+								}
+								break;
+							}
+							
 							case 'v':
 							{
 								_options.TraceSwitch.Level = TraceLevel.Warning;
@@ -398,6 +414,10 @@ namespace BooC
 			{
 				_options.Pipeline = new CompileToFile();
 			}
+			if (whiteSpaceAgnostic)
+			{
+				_options.Pipeline[0] = new Boo.Lang.Parser.WSABooParsingStep();
+			}
 			if (debugSteps)
 			{
 				_options.Pipeline.AfterStep += new CompilerStepEventHandler(DebugModuleAfterStep);
@@ -407,7 +427,7 @@ namespace BooC
 		private void DebugModuleAfterStep(object sender, CompilerStepEventArgs args)
 		{
 			Console.WriteLine("********* {0} *********", args.Step);
-			Console.WriteLine(args.Context.CompileUnit.ToCodeString());
+			args.Context.CompileUnit.Accept(new BooPrinterVisitor(Console.Out, BooPrinterVisitor.PrintOptions.PrintLocals));
 		}
 
 		ArrayList LoadResponseFile(string file)

@@ -77,6 +77,14 @@ namespace Boo.Lang.Compiler.TypeSystem
 			}
 		}
 
+		public bool IsExtension
+		{
+			get
+			{
+				return _method.IsExtension;
+			}
+		}
+
 		public bool IsDuckTyped
 		{
 			get

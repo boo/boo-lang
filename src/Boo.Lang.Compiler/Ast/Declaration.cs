@@ -46,6 +46,10 @@ namespace Boo.Lang.Compiler.Ast
 		{
 		}
 		
+		public Declaration(LexicalInfo lexicalInfo, string name) : base(lexicalInfo, name, null)
+		{
+		}
+		
 		public Declaration(LexicalInfo lexicalInfoProvider) : base(lexicalInfoProvider)
 		{
 		}

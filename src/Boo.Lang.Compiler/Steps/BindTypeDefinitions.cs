@@ -56,20 +56,21 @@ namespace Boo.Lang.Compiler.Steps
 			cd.BaseTypes.Insert(0, CodeBuilder.CreateTypeReference(TypeSystemServices.ValueTypeType));
 			foreach (TypeMember member in cd.Members)
 			{
-				NormalizeVisibility(member);
+				if (!member.IsVisibilitySet)
+				{
+					member.Modifiers |= TypeMemberModifiers.Public;
+				}
 			}
 			OnClassDefinition(cd);
 			ReplaceCurrentNode(cd);
 		}
-		
+			
 		override public void OnClassDefinition(ClassDefinition node)
 		{
 			if (null == node.Entity)
 			{
 				node.Entity = new InternalClass(TypeSystemServices, node);
-			}
-			
-			NormalizeVisibility(node);
+			}			
 			Visit(node.Members);
 		}
 		
@@ -78,44 +79,17 @@ namespace Boo.Lang.Compiler.Steps
 			if (null != node.Entity)
 			{
 				return;
-			}
-			
-			NormalizeVisibility(node);
+			}			
 			node.Entity = new InternalInterface(TypeSystemServices, node);
-		}
+		}	
 		
 		override public void OnEnumDefinition(EnumDefinition node)
 		{
 			if (null != node.Entity)
 			{
 				return;
-			}
-			
-			NormalizeVisibility(node);
+			}			
 			node.Entity = new InternalEnum(TypeSystemServices, node);
-			
-			long lastValue = 0;
-			foreach (EnumMember member in node.Members)
-			{
-				if (null == member.Initializer)
-				{
-					member.Initializer = new IntegerLiteralExpression(lastValue);
-				}
-				lastValue = member.Initializer.Value + 1;
-				
-				if (null == member.Entity)
-				{
-					member.Entity = new InternalEnumMember(TypeSystemServices, member);
-				}
-			}
-		}
-		
-		void NormalizeVisibility(TypeMember node)
-		{
-			if (!node.IsVisibilitySet)
-			{
-				node.Modifiers |= TypeMemberModifiers.Public;
-			}
 		}
 		
 		override public void OnMethod(Method method)

@@ -49,7 +49,7 @@ namespace Boo.Lang
 		{
 			get
 			{
-				return new System.Version("0.7.0.1939");
+				return new System.Version("0.7.5.2013");
 			}
 		}
 
@@ -537,11 +537,13 @@ namespace Boo.Lang
 					return true;
 				}
 				
-				if (++_index < _enumerables.Length)
+				while (++_index < _enumerables.Length)
 				{
 					_current = iterator(_enumerables[_index]).GetEnumerator();
+					if (_current.MoveNext()) 
+						return true;
 				}
-				return _current.MoveNext();
+				return false;
 			}
 			
 			public IEnumerator GetEnumerator()

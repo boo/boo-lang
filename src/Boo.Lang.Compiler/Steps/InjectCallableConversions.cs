@@ -219,7 +219,7 @@ namespace Boo.Lang.Compiler.Steps
 			}
 		}
 		
-		override public void LeaveAsExpression(AsExpression node)
+		override public void LeaveTryCastExpression(TryCastExpression node)
 		{
 			Expression newExpression = Convert(node.ExpressionType, node.Target);
 			if (null != newExpression)
@@ -415,7 +415,7 @@ namespace Boo.Lang.Compiler.Steps
 		void RegisterAdaptor(ICallableType to, ICallableType from, ClassDefinition adaptor)
 		{
 			_adaptors.Add(new AdaptorRecord(to, from, adaptor));
-			TypeSystemServices.GetAnonymousTypesModule().Members.Add(adaptor);
+			TypeSystemServices.GetCompilerGeneratedTypesModule().Members.Add(adaptor);
 		}
 		
 		bool IsEndInvokeOnStandaloneMethodReference(MemberReferenceExpression node)

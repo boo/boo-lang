@@ -224,11 +224,6 @@
                     BuildAction = "Compile"
                 />
                 <File
-                    RelPath = "Ast\AsExpression.cs"
-                    SubType = "Code"
-                    BuildAction = "Compile"
-                />
-                <File
                     RelPath = "Ast\AstLiteralExpression.cs"
                     SubType = "Code"
                     BuildAction = "Compile"
@@ -305,6 +300,11 @@
                 />
                 <File
                     RelPath = "Ast\CompileUnit.cs"
+                    SubType = "Code"
+                    BuildAction = "Compile"
+                />
+                <File
+                    RelPath = "Ast\ConditionalExpression.cs"
                     SubType = "Code"
                     BuildAction = "Compile"
                 />
@@ -435,6 +435,16 @@
                 />
                 <File
                     RelPath = "Ast\GeneratorExpressionCollection.cs"
+                    SubType = "Code"
+                    BuildAction = "Compile"
+                />
+                <File
+                    RelPath = "Ast\GenericReferenceExpression.cs"
+                    SubType = "Code"
+                    BuildAction = "Compile"
+                />
+                <File
+                    RelPath = "Ast\GenericTypeReference.cs"
                     SubType = "Code"
                     BuildAction = "Compile"
                 />
@@ -704,12 +714,12 @@
                     BuildAction = "Compile"
                 />
                 <File
-                    RelPath = "Ast\TernaryExpression.cs"
+                    RelPath = "Ast\TimeSpanLiteralExpression.cs"
                     SubType = "Code"
                     BuildAction = "Compile"
                 />
                 <File
-                    RelPath = "Ast\TimeSpanLiteralExpression.cs"
+                    RelPath = "Ast\TryCastExpression.cs"
                     SubType = "Code"
                     BuildAction = "Compile"
                 />
@@ -809,11 +819,6 @@
                     BuildAction = "Compile"
                 />
                 <File
-                    RelPath = "Ast\Impl\AsExpressionImpl.cs"
-                    SubType = "Code"
-                    BuildAction = "Compile"
-                />
-                <File
                     RelPath = "Ast\Impl\AstLiteralExpressionImpl.cs"
                     SubType = "Code"
                     BuildAction = "Compile"
@@ -880,6 +885,11 @@
                 />
                 <File
                     RelPath = "Ast\Impl\CompileUnitImpl.cs"
+                    SubType = "Code"
+                    BuildAction = "Compile"
+                />
+                <File
+                    RelPath = "Ast\Impl\ConditionalExpressionImpl.cs"
                     SubType = "Code"
                     BuildAction = "Compile"
                 />
@@ -1000,6 +1010,16 @@
                 />
                 <File
                     RelPath = "Ast\Impl\GeneratorExpressionImpl.cs"
+                    SubType = "Code"
+                    BuildAction = "Compile"
+                />
+                <File
+                    RelPath = "Ast\Impl\GenericReferenceExpressionImpl.cs"
+                    SubType = "Code"
+                    BuildAction = "Compile"
+                />
+                <File
+                    RelPath = "Ast\Impl\GenericTypeReferenceImpl.cs"
                     SubType = "Code"
                     BuildAction = "Compile"
                 />
@@ -1204,12 +1224,12 @@
                     BuildAction = "Compile"
                 />
                 <File
-                    RelPath = "Ast\Impl\TernaryExpressionImpl.cs"
+                    RelPath = "Ast\Impl\TimeSpanLiteralExpressionImpl.cs"
                     SubType = "Code"
                     BuildAction = "Compile"
                 />
                 <File
-                    RelPath = "Ast\Impl\TimeSpanLiteralExpressionImpl.cs"
+                    RelPath = "Ast\Impl\TryCastExpressionImpl.cs"
                     SubType = "Code"
                     BuildAction = "Compile"
                 />
@@ -1499,6 +1519,11 @@
                     BuildAction = "Compile"
                 />
                 <File
+                    RelPath = "Steps\BindEnumMembers.cs"
+                    SubType = "Code"
+                    BuildAction = "Compile"
+                />
+                <File
                     RelPath = "Steps\BindNamespaces.cs"
                     SubType = "Code"
                     BuildAction = "Compile"
@@ -1594,6 +1619,11 @@
                     BuildAction = "Compile"
                 />
                 <File
+                    RelPath = "Steps\MergePartialClasses.cs"
+                    SubType = "Code"
+                    BuildAction = "Compile"
+                />
+                <File
                     RelPath = "Steps\NormalizeIterationStatements.cs"
                     SubType = "Code"
                     BuildAction = "Compile"
@@ -1615,6 +1645,11 @@
                 />
                 <File
                     RelPath = "Steps\PreErrorChecking.cs"
+                    SubType = "Code"
+                    BuildAction = "Compile"
+                />
+                <File
+                    RelPath = "Steps\PreProcessExtensionMethods.cs"
                     SubType = "Code"
                     BuildAction = "Compile"
                 />
@@ -1710,6 +1745,11 @@
                 />
                 <File
                     RelPath = "Steps\TransformCallableDefinitions.cs"
+                    SubType = "Code"
+                    BuildAction = "Compile"
+                />
+                <File
+                    RelPath = "Steps\UnfoldConstants.cs"
                     SubType = "Code"
                     BuildAction = "Compile"
                 />

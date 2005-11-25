@@ -129,13 +129,16 @@ JEdit Catalog Entry: <MODE NAME="boo" FILE="boo-jedit41.xml" FILE_NAME_GLOB="*.b
 			<KEYWORD1>is</KEYWORD1>
 			<KEYWORD1>isa</KEYWORD1>
 			<KEYWORD1>mixin</KEYWORD1>
+			<KEYWORD1>partial</KEYWORD1>
 			<KEYWORD1>namespace</KEYWORD1>
 			<KEYWORD1>not</KEYWORD1>
+			<KEYWORD1>of</KEYWORD1>
 			<KEYWORD1>or</KEYWORD1>
 			<KEYWORD1>otherwise</KEYWORD1>
 			<KEYWORD1>override</KEYWORD1>
 			<KEYWORD1>pass</KEYWORD1>
 			<KEYWORD1>raise</KEYWORD1>
+			<KEYWORD1>ref</KEYWORD1>
 			<KEYWORD1>retry</KEYWORD1>
 			<KEYWORD1>self</KEYWORD1>
 			<KEYWORD1>struct</KEYWORD1>			
@@ -212,6 +215,7 @@ JEdit Catalog Entry: <MODE NAME="boo" FILE="boo-jedit41.xml" FILE_NAME_GLOB="*.b
 			<KEYWORD3>unchecked</KEYWORD3>
 			<KEYWORD3>rawArrayIndexing</KEYWORD3>
 			<KEYWORD3>normalArrayIndexing</KEYWORD3>
+			<KEYWORD3>yieldAll</KEYWORD3>
 
 			<!-- exceptions -->
 			<!-- KEYWORD3>ArithmeticError</KEYWORD3 -->

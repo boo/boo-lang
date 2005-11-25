@@ -1,3 +1,5 @@
+using System;
+
 #region license
 // Copyright (c) 2004, Rodrigo B. de Oliveira (rbo@acm.org)
 // All rights reserved.
@@ -28,15 +30,85 @@
 
 namespace Boo.Lang.Compiler.Steps
 {	
+	using System.Collections;
 	using Boo.Lang.Compiler;
 	using Boo.Lang.Compiler.Ast;
 	using Boo.Lang.Compiler.TypeSystem;
 	
 	public class StricterErrorChecking : AbstractVisitorCompilerStep
 	{	
+		Hashtable _types = new Hashtable();
+		
 		override public void Run()
 		{
 			Visit(CompileUnit);
+		}
+		
+		override public void Dispose()
+		{
+			base.Dispose();
+			_types.Clear();
+		}
+
+		public override void LeaveCompileUnit(CompileUnit node)
+		{
+			CheckEntryPoint();
+		}
+
+		private void CheckEntryPoint()
+		{
+			Method method = ContextAnnotations.GetEntryPoint(Context);
+			if (null == method) return;
+
+			IMethod entity = (IMethod)TypeSystemServices.GetEntity(method);
+			if (IsValidEntryPointReturnType(entity.ReturnType) && IsValidEntryPointParameterList(entity.GetParameters())) return;
+
+			Errors.Add(CompilerErrorFactory.InvalidEntryPoint(method));
+		}
+
+		private bool IsValidEntryPointParameterList(IParameter[] parameters)
+		{
+			if (parameters.Length == 0) return true;
+			if (parameters.Length != 1) return false;
+			return parameters[0].Type == TypeSystemServices.GetArrayType(TypeSystemServices.StringType, 1);
+		}
+
+		private bool IsValidEntryPointReturnType(IType type)
+		{
+			return type == TypeSystemServices.VoidType
+				|| type == TypeSystemServices.IntType;
+		}
+
+		override public void LeaveClassDefinition(ClassDefinition node)
+		{
+			LeaveTypeDefinition(node);
+		}
+		
+		override public void LeaveInterfaceDefinition(InterfaceDefinition node)
+		{
+			LeaveTypeDefinition(node);
+		}
+		
+		override public void LeaveEnumDefinition(EnumDefinition node)
+		{
+			LeaveTypeDefinition(node);
+		}
+		
+		void LeaveTypeDefinition(TypeDefinition node)
+		{
+			string fullName = node.FullName;
+			if (_types.Contains(fullName))
+			{
+				Errors.Add(CompilerErrorFactory.NamespaceAlreadyContainsMember(node, GetNamespace(node), node.Name));
+				return;
+			}
+			_types.Add(fullName, node); 
+		}
+		
+		string GetNamespace(TypeDefinition node)
+		{
+			NamespaceDeclaration ns = node.EnclosingNamespace;
+			return ns == null ? "" : ns.Name;
 		}
 
 		override public void OnSuperLiteralExpression(SuperLiteralExpression node)
@@ -65,6 +137,16 @@ namespace Boo.Lang.Compiler.Steps
 				CheckExpressionType(e);
 			}
 		}
+
+		public override void LeaveUnaryExpression(UnaryExpression node)
+		{
+			switch (node.Operator)
+			{
+				case UnaryOperatorType.Explode:
+					LeaveExplodeExpression(node);
+					break;
+			}
+		}
 		
 		override public void LeaveBinaryExpression(BinaryExpression node)
 		{
@@ -77,6 +159,26 @@ namespace Boo.Lang.Compiler.Steps
 						CompilerWarningFactory.IsInsteadOfIsa(node));
 				}
 			}
+		}
+
+		protected virtual void LeaveExplodeExpression(UnaryExpression node)
+		{	
+			if (!IsLastArgumentOfVarArgInvocation(node))
+			{
+				Console.WriteLine(node.ParentNode);
+				Console.WriteLine(((MethodInvocationExpression)node.ParentNode).Target.Entity);
+				Error(CompilerErrorFactory.ExplodeExpressionMustMatchVarArgCall(node));
+			}
+		}
+
+		private bool IsLastArgumentOfVarArgInvocation(UnaryExpression node)
+		{
+			MethodInvocationExpression parent = node.ParentNode as MethodInvocationExpression;
+			if (null == parent) return false;
+			if (parent.Arguments.Count == 0 || node != parent.Arguments[-1]) return false;
+			ICallableType type = parent.Target.ExpressionType as ICallableType;
+			if (null == type) return false;
+			return type.GetSignature().AcceptVarArgs;
 		}
 		
 		bool IsTypeReference(Expression node)
@@ -154,6 +256,51 @@ namespace Boo.Lang.Compiler.Steps
 			
 			CheckUnusedLocals(node);
 			CheckAbstractMethodCantHaveBody(node);
+			CheckValidExtension(node);
+		}
+
+		private void CheckValidExtension(Method node)
+		{
+			IMethod method = GetEntity(node);
+			if (!method.IsExtension) return;
+
+			IType extendedType = method.GetParameters()[0].Type;
+			IEntity entity = NameResolutionService.Resolve(extendedType, method.Name, EntityType.Method);
+			if (null == entity) return;
+			IMethod conflicting = FindConflictingMember(method, entity);
+			if (null == conflicting) return;
+
+			Error(CompilerErrorFactory.MemberNameConflict(node, extendedType.FullName, TypeSystemServices.GetSignature(conflicting, false)));
+		}
+
+		private IMethod FindConflictingMember(IMethod extension, IEntity entity)
+		{
+			if (EntityType.Ambiguous == entity.EntityType) return FindConflictingMember(extension, ((Ambiguous)entity).Entities);
+
+			IMethod method = (IMethod)entity;
+			if (IsConflictingMember(extension, method)) return method;
+			return null;
+		}
+
+		private IMethod FindConflictingMember(IMethod extension, IEntity[] methods)
+		{
+			foreach (IMethod m in methods)
+			{
+				if (IsConflictingMember(extension, m)) return m;
+			}
+			return null;
+		}
+
+		private bool IsConflictingMember(IMethod extension, IMethod method)
+		{
+			IParameter[] xp = extension.GetParameters();
+			IParameter[] mp = method.GetParameters();
+			if (mp.Length != (xp.Length-1)) return false;
+			for (int i=0; i<mp.Length; ++i)
+			{
+				if (xp[i+1].Type != mp[i].Type) return false;
+			}
+			return true;
 		}
 
 		private void CheckAbstractMethodCantHaveBody(Method node)
@@ -204,6 +351,12 @@ namespace Boo.Lang.Compiler.Steps
 					Error(CompilerErrorFactory.AddressOfOutsideDelegateConstructor(node.Target));
 				}
 			}
+		}
+		
+		override public void LeaveConditionalExpression(ConditionalExpression node)
+		{
+			CheckExpressionType(node.TrueValue);
+			CheckExpressionType(node.FalseValue);
 		}
 		
 		bool IsSecondArgumentOfDelegateConstructor(Expression node)

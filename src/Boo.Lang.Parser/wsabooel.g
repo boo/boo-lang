@@ -154,7 +154,19 @@ CMP_OPERATOR :  "<=" | ">=" | "!~" | "!=";
 
 ASSIGN : '=' ( ('=' | '~') { $setType(CMP_OPERATOR); } )?;
 
-WS: (' ' | '\t' { tab(); } | '\r' | '\n' { newline(); })+ { $setType(Token.SKIP); };
+WS:
+	(
+		' '
+		| '\t' { tab(); }
+		|
+		(
+			(('\r' ('\n')?)
+			| '\n')
+			{ newline(); }
+		)
+	)+
+	{ $setType(Token.SKIP); }
+;
 
 SINGLE_QUOTED_STRING :
 		'\''!
@@ -197,14 +209,28 @@ protected
 RE_CHAR : RE_ESC | ~('/' | '\\' | '\r' | '\n' | ' ' | '\t');
 
 protected
-RE_ESC : '\\' (
+RE_ESC : '\\' (				
+				'+' |
+				'/' |
+				'(' |
+				')' |
+				'|' |
+				'.' |
+				'*' |
+				'?' |
+				'$' |
+				'^' |
+				'['	|
+				']' |
+				'{' |
+				'}' |
 	
 	// character scapes
 	// ms-help://MS.NETFrameworkSDKv1.1/cpgenref/html/cpconcharacterescapes.htm
 	
 				'a' |
 				'b' |
-				'c' 'A'..'Z' |
+				('c' 'A'..'Z') |
 				't' |
 				'r' |
 				'v' |
@@ -212,8 +238,8 @@ RE_ESC : '\\' (
 				'n' |
 				'e' |
 				(DIGIT)+ |
-				'x' HEXDIGIT HEXDIGIT |
-				'u' HEXDIGIT HEXDIGIT HEXDIGIT HEXDIGIT |
+				('x' HEXDIGIT HEXDIGIT) |
+				('u' HEXDIGIT HEXDIGIT HEXDIGIT HEXDIGIT) |
 				'\\' |
 				
 	// character classes
@@ -236,22 +262,7 @@ RE_ESC : '\\' (
 				'Z' |
 				'g' |
 				'B' |
-				
-				'k' |
-				
-				'/' |
-				'(' |
-				')' |
-				'|' |
-				'.' |
-				'*' |
-				'?' |
-				'$' |
-				'^' |
-				'['	|
-				']' |
-				'{' |
-				'}'
+				'k'			
 			 )
 			 ;
 

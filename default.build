@@ -1,8 +1,8 @@
 ﻿<?xml version="1.0"?>
 <project name="boo" default="all">
 
-	<property name="boo.major.minor.release.version" value="0.7.0" />
-	<property name="boo.svn.revision" value="1939" />
+	<property name="boo.major.minor.release.version" value="0.7.5" />
+	<property name="boo.svn.revision" value="2013" />
 	<property name="boo.version" value="${boo.major.minor.release.version}.${boo.svn.revision}" dynamic="true" />
 	<property name="boo.assembly.version" value="1.0.0.0" />
 	
@@ -156,6 +156,7 @@
 			<references>
 				<include name="build/Boo.Lang.dll" />
 				<include name="build/Boo.Lang.Compiler.dll" />
+				<include name="build/Boo.Lang.Parser.dll" />
 			</references>
 		</csc>
 
@@ -224,7 +225,8 @@
 		</if>
 		
 		<booc target="library"
-			output="build/Boo.Lang.Useful.dll">
+			output="build/Boo.Lang.Useful.dll"
+			tracelevel="Off">
 			<sources basedir="src/Boo.Lang.Useful">
 				<include name="**/*.boo" />
 			</sources>
@@ -609,7 +611,8 @@
 				<include name="extras/*.in" />
 				<include name="default.build" />
 				<include name="notice.txt" />
-				<include name="scripts/*.boo" />				
+				<include name="scripts/*.boo" />
+				<include name="scripts/Templates/*.cs" />
 				<include name="lib/**/*.jar" />
 				
 				<include name="src/boo.snk" />

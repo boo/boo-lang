@@ -39,12 +39,31 @@ namespace Boo.Lang.Compiler.Ast.Visitors
 	/// </summary>
 	public class BooPrinterVisitor : TextEmitter
 	{
+		[Flags]
+		public enum PrintOptions
+		{
+			None,
+			PrintLocals = 1
+		}
+
 		static Regex _identifierRE = new Regex("^[a-zA-Z.]+$");
 		
 		static Regex _extendedRE = new Regex(@"\s");
+
+		public PrintOptions Options = PrintOptions.None;
 		
 		public BooPrinterVisitor(TextWriter writer) : base(writer)
 		{
+		}
+
+		public BooPrinterVisitor(TextWriter writer, PrintOptions options) : this(writer)
+		{
+			this.Options = options;
+		}
+
+		public bool IsOptionSet(PrintOptions option)
+		{
+			return (option & Options) == option;
 		}
 
 		public void Print(CompileUnit ast)
@@ -349,12 +368,34 @@ namespace Boo.Lang.Compiler.Ast.Visitors
 		{
             if (m.IsRuntime)
             {
-                WriteIndented("// runtime");
-                WriteLine();
+                WriteImplementationComment("runtime");
             }
+			if (m.IsExtension)
+			{
+				WriteImplementationComment("extension");
+			}
 			WriteCallableDefinitionHeader("def ", m);
 			WriteLine(":");
+			WriteLocals(m);
 			WriteBlock(m.Body);
+		}
+		
+		private void WriteImplementationComment(string comment)
+		{
+			WriteIndented("// {0}", comment);
+			WriteLine();
+		}
+
+		public override void OnLocal(Local node)
+		{
+			WriteIndented("// Local {0}, {1}, PrivateScope: {2}", node.Name, node.Entity, node.PrivateScope);
+			WriteLine();
+		}
+
+		void WriteLocals(Method m)
+		{
+			if (!IsOptionSet(PrintOptions.PrintLocals)) return;
+			Visit(m.Locals);
 		}
 		
 		void WriteTypeReference(TypeReference t)
@@ -398,6 +439,25 @@ namespace Boo.Lang.Compiler.Ast.Visitors
 			Write(t.Name);
 		}
 		
+		override public void OnGenericTypeReference(GenericTypeReference node)
+		{
+			OnSimpleTypeReference(node);
+			WriteGenericArguments(node.GenericArguments);
+		}
+		
+		override public void OnGenericReferenceExpression(GenericReferenceExpression node)
+		{
+			Visit(node.Target);
+			WriteGenericArguments(node.GenericArguments);
+		}
+		
+		void WriteGenericArguments(TypeReferenceCollection arguments)
+		{
+			Write("[of ");
+			WriteCommaSeparatedList(arguments);
+			Write("]");
+		}
+		
 		override public void OnArrayTypeReference(ArrayTypeReference t)
 		{
 			Write("(");
@@ -425,7 +485,7 @@ namespace Boo.Lang.Compiler.Ast.Visitors
 			Write(e.Name);
 		}
 
-		override public void OnAsExpression(AsExpression e)
+		override public void OnTryCastExpression(TryCastExpression e)
 		{
 			Write("(");
 			Visit(e.Target);
@@ -477,8 +537,7 @@ namespace Boo.Lang.Compiler.Ast.Visitors
 		
 		override public void OnUnaryExpression(UnaryExpression node)
 		{
-			bool addParens = NodeType.ExpressionStatement != node.ParentNode.NodeType
-				&& !IsMethodInvocationArg(node);
+			bool addParens = NeedParensAround(node) && !IsMethodInvocationArg(node);
 			if (addParens)
 			{
 				Write("(");
@@ -505,10 +564,36 @@ namespace Boo.Lang.Compiler.Ast.Visitors
 			MethodInvocationExpression parent = node.ParentNode as MethodInvocationExpression;
 			return null != parent && node != parent.Target;
 		}
+		
+		override public void OnConditionalExpression(ConditionalExpression e)
+		{
+			Write("(");
+			Visit(e.TrueValue);
+			WriteKeyword(" if ");
+			Visit(e.Condition);
+			WriteKeyword(" else ");
+			Visit(e.FalseValue);
+			Write(")");
+		}
+		
+		bool NeedParensAround(Expression e)
+		{
+			if (e.ParentNode == null) return false;
+			switch (e.ParentNode.NodeType)
+			{
+				case NodeType.ExpressionStatement:
+				case NodeType.MacroStatement:
+				case NodeType.IfStatement:
+				case NodeType.WhileStatement:
+				case NodeType.UnlessStatement:
+					return false;
+			}
+			return true;
+		}
 
 		override public void OnBinaryExpression(BinaryExpression e)
 		{
-			bool needsParens = !(e.ParentNode is ExpressionStatement);
+			bool needsParens = NeedParensAround(e);
 			if (needsParens)
 			{
 				Write("(");
@@ -551,7 +636,7 @@ namespace Boo.Lang.Compiler.Ast.Visitors
 		
 		override public void OnArrayLiteralExpression(ArrayLiteralExpression node)
 		{
-			WriteArray(node.Items);
+			WriteArray(node.Items, node.Type);
 		}
 		
 		override public void OnListLiteralExpression(ListLiteralExpression node)

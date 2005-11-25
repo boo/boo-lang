@@ -128,6 +128,11 @@ BCE0125=Invalid declaration type '{0}'.
 BCE0126=It is not possible to evaluate an expression of type '{0}'.
 BCE0127=A ref or out argument must be an lvalue: '{0}'
 BCE0128='try' block must be followed by either 'except' or 'ensure'.
+BCE0129=Invalid extension definition, only static methods are allowed.
+BCE0130='partial' can only be applied to class definitions.
+BCE0132=The namespace '{0}' already contains a definition for '{1}'.
+BCE0133=Invalid signature for Main. It should be one of: 'Main() as void', 'Main() as int', 'Main(argv as (string)) as void', 'Main(argv as (string)) as int'.
+BCE0134='{0}' cannot return values.
 
 ;Compiler warnings
 BCW0000=AVISO: {0}

@@ -685,6 +685,36 @@ namespace Boo.Lang.Compiler
 		{
 			return new CompilerError("BCE0128", node.LexicalInfo);
 		}
+
+		public static CompilerError InvalidExtensionDefinition(Node node)
+		{
+			return new CompilerError("BCE0129", node.LexicalInfo);
+		}
+		
+		public static CompilerError CantBeMarkedPartial(Node node)
+		{
+			return new CompilerError("BCE0130", node.LexicalInfo);
+		}
+		
+		public static CompilerError InvalidCombinationOfModifiers(Node node, string name, string modifiers)
+		{
+			return new CompilerError("BCE0131", node.LexicalInfo, name, modifiers);
+		}
+		
+		public static CompilerError NamespaceAlreadyContainsMember(Node node, string container, string member)
+		{
+			return new CompilerError("BCE0132", node.LexicalInfo, container, member);
+		}
+
+		public static CompilerError InvalidEntryPoint(Node node)
+		{
+			return new CompilerError("BCE0133", node.LexicalInfo);
+		}
+
+		public static CompilerError CannotReturnValue(Method node)
+		{
+			return new CompilerError("BCE0134", node.LexicalInfo, node);
+		}
 		
 		public static string ToStringList(System.Collections.IEnumerable names)
 		{

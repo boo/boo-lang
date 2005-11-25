@@ -21,17 +21,18 @@ enum TypeMemberModifiers:
 	Virtual = 128
 	Override = 256
 	Abstract = 512
+	Partial = 1024
 	VisibilityMask = 15
 	
 enum MethodImplementationFlags:
 	None = 0
 	Runtime = 1
+	Extension = 2
 
 enum ParameterModifiers:
 	None = 0
 	Val = 0
 	Ref = 1
-
 
 abstract class TypeMember(Node, INodeWithAttributes):
 	Modifiers as TypeMemberModifiers
@@ -58,6 +59,9 @@ class ArrayTypeReference(TypeReference):
 class CallableTypeReference(TypeReference):
 	Parameters as ParameterDeclarationCollection
 	ReturnType as TypeReference
+	
+class GenericTypeReference(SimpleTypeReference):
+	GenericArguments as TypeReferenceCollection
 
 [collection(TypeReference)]
 class TypeReferenceCollection:
@@ -386,7 +390,7 @@ class BinaryExpression(Expression):
 	Left as Expression
 	Right as Expression
 	
-class TernaryExpression(Expression):
+class ConditionalExpression(Expression):
 	Condition as Expression
 	TrueValue as Expression
 	FalseValue as Expression
@@ -396,6 +400,10 @@ class ReferenceExpression(Expression):
 
 class MemberReferenceExpression(ReferenceExpression):
 	Target as Expression
+	
+class GenericReferenceExpression(Expression):
+	Target as Expression
+	GenericArguments as TypeReferenceCollection
 
 abstract class LiteralExpression(Expression):
 	pass
@@ -445,7 +453,7 @@ class ListLiteralExpression(LiteralExpression):
 	Items as ExpressionCollection
 
 class ArrayLiteralExpression(ListLiteralExpression):
-	pass
+	Type as ArrayTypeReference
 	
 class GeneratorExpression(Expression):
 	Expression as Expression
@@ -473,13 +481,13 @@ class SlicingExpression(Expression):
 	Target as Expression
 	Indices as SliceCollection
 
-class AsExpression(Expression):
+class TryCastExpression(Expression):
 	Target as Expression
 	Type as TypeReference
 	
 class CastExpression(Expression):
-	Type as TypeReference
 	Target as Expression
+	Type as TypeReference
 	
 class TypeofExpression(Expression):
 	Type as TypeReference

@@ -31,15 +31,16 @@ using System.Collections;
 using System.Diagnostics;
 using System.Diagnostics.SymbolStore;
 using System.IO;
-using System.Resources;
 using System.Reflection;
 using System.Reflection.Emit;
+using System.Resources;
 using System.Text;
 using System.Text.RegularExpressions;
-using Boo.Lang.Runtime;
+using System.Threading;
 using Boo.Lang.Compiler.Ast;
-using Boo.Lang.Compiler;
 using Boo.Lang.Compiler.TypeSystem;
+using Boo.Lang.Runtime;
+using Attribute = Boo.Lang.Compiler.Ast.Attribute;
 using Module = Boo.Lang.Compiler.Ast.Module;
 
 namespace Boo.Lang.Compiler.Steps
@@ -62,9 +63,11 @@ namespace Boo.Lang.Compiler.Steps
 	
 	public class EmitAssembly : AbstractVisitorCompilerStep
 	{
-		static ConstructorInfo DebuggableAttribute_Constructor = typeof(System.Diagnostics.DebuggableAttribute).GetConstructor(new Type[] { Types.Bool, Types.Bool });
+		static ConstructorInfo DebuggableAttribute_Constructor = typeof(DebuggableAttribute).GetConstructor(new Type[] { Types.Bool, Types.Bool });
 
 		static ConstructorInfo DuckTypedAttribute_Constructor = Types.DuckTypedAttribute.GetConstructor(new Type[0]);
+
+		static ConstructorInfo ExtensionAttribute_Constructor = Types.ExtensionAttribute.GetConstructor(new Type[0]);
 		
 		static ConstructorInfo ParamArrayAttribute_Constructor = Types.ParamArrayAttribute.GetConstructor(new Type[0]);
 		
@@ -98,7 +101,7 @@ namespace Boo.Lang.Compiler.Steps
 		
 		ModuleBuilder _moduleBuilder;
 		
-		ISymbolDocumentWriter _symbolDocWriter;
+		Hashtable _symbolDocWriters = new Hashtable();
 		
 		// IL generation state
 		ILGenerator _il;
@@ -111,9 +114,9 @@ namespace Boo.Lang.Compiler.Steps
 		Hashtable _typeCache = new Hashtable();
 		
 		// keeps track of types on the IL stack
-		System.Collections.Stack _types = new System.Collections.Stack();
+		Stack _types = new Stack();
 		
-		System.Collections.Stack _loopInfoStack = new System.Collections.Stack();
+		Stack _loopInfoStack = new Stack();
 		
 		AttributeCollection _assemblyAttributes = new AttributeCollection();
 		
@@ -189,9 +192,9 @@ namespace Boo.Lang.Compiler.Steps
 		
 		void GatherAssemblyAttributes()
 		{
-			foreach (Boo.Lang.Compiler.Ast.Module module in CompileUnit.Modules)
+			foreach (Module module in CompileUnit.Modules)
 			{
-				foreach (Boo.Lang.Compiler.Ast.Attribute attribute in module.AssemblyAttributes)
+				foreach (Attribute attribute in module.AssemblyAttributes)
 				{
 					_assemblyAttributes.Add(attribute);
 				}
@@ -202,7 +205,7 @@ namespace Boo.Lang.Compiler.Steps
 		{
 			if (CompileUnit.Modules.Count > 0)
 			{
-				Boo.Lang.List types = CollectTypes();
+				List types = CollectTypes();
 				
 				foreach (TypeDefinition type in types)
 				{
@@ -214,7 +217,7 @@ namespace Boo.Lang.Compiler.Steps
 					DefineTypeMembers(type);
 				}
 				
-				foreach (Boo.Lang.Compiler.Ast.Module module in CompileUnit.Modules)
+				foreach (Module module in CompileUnit.Modules)
 				{
 					OnModule(module);
 				}
@@ -223,7 +226,7 @@ namespace Boo.Lang.Compiler.Steps
 			}
 		}
 		
-		void CreateTypes(Boo.Lang.List types)
+		void CreateTypes(List types)
 		{
 			new TypeCreator(this, types).Run();
 		}
@@ -237,11 +240,11 @@ namespace Boo.Lang.Compiler.Steps
 			
 			Hashtable _created;
 			
-			Boo.Lang.List _types;
+			List _types;
 			
 			TypeMember _current;
 			
-			public TypeCreator(EmitAssembly emitter, Boo.Lang.List types)
+			public TypeCreator(EmitAssembly emitter, List types)
 			{
 				_emitter = emitter;
 				_types = types;
@@ -251,7 +254,7 @@ namespace Boo.Lang.Compiler.Steps
 			public void Run()
 			{
 				ResolveEventHandler resolveHandler = new ResolveEventHandler(OnTypeResolve);
-				AppDomain current = System.Threading.Thread.GetDomain();
+				AppDomain current = Thread.GetDomain();
 			
 				try
 				{
@@ -346,17 +349,17 @@ namespace Boo.Lang.Compiler.Steps
 			}
 		}
 		
-		Boo.Lang.List CollectTypes()
+		List CollectTypes()
 		{
-			Boo.Lang.List types = new Boo.Lang.List();
-			foreach (Boo.Lang.Compiler.Ast.Module module in CompileUnit.Modules)
+			List types = new List();
+			foreach (Module module in CompileUnit.Modules)
 			{
 				CollectTypes(types, module.Members);
 			}
 			return types;
 		}
 		
-		void CollectTypes(Boo.Lang.List types, TypeMemberCollection members)
+		void CollectTypes(List types, TypeMemberCollection members)
 		{
 			foreach (TypeMember member in members)
 			{
@@ -384,7 +387,7 @@ namespace Boo.Lang.Compiler.Steps
 			
 			_asmBuilder = null;
 			_moduleBuilder = null;
-			_symbolDocWriter = null;
+			_symbolDocWriters.Clear();
 			_il = null;
 			_returnValueLocal = null;
 			_returnType = null;
@@ -397,32 +400,13 @@ namespace Boo.Lang.Compiler.Steps
 			_assemblyAttributes.Clear();
 		}
 		
-		override public void OnAttribute(Boo.Lang.Compiler.Ast.Attribute node)
+		override public void OnAttribute(Attribute node)
 		{
 		}
 		
-		override public void OnModule(Boo.Lang.Compiler.Ast.Module module)
+		override public void OnModule(Module module)
 		{
-			InitializeDebugInfoWriter(module);
 			Visit(module.Members);
-		}
-
-		private void InitializeDebugInfoWriter(Module module)
-		{
-			if (!Parameters.Debug) return;
-			string fname = module.LexicalInfo.FileName;
-			if (null != fname)
-			{
-				_symbolDocWriter = _moduleBuilder.DefineDocument(
-					fname,
-					Guid.Empty,
-					Guid.Empty,
-					SymDocumentType.Text);
-			}
-			else
-			{
-				_symbolDocWriter = null;
-			}
 		}
 
 		override public void OnEnumDefinition(EnumDefinition node)
@@ -508,7 +492,7 @@ namespace Boo.Lang.Compiler.Steps
 			_il = methodBuilder.GetILGenerator();
 			_returnLabel = _il.DefineLabel();
 			
-			_returnType = ((IMethod)GetEntity(method)).ReturnType;
+			_returnType = GetEntity(method).ReturnType;
 			if (TypeSystemServices.VoidType != _returnType)
 			{
 				_returnValueLocal = _il.DeclareLocal(GetSystemType(_returnType));
@@ -623,9 +607,8 @@ namespace Boo.Lang.Compiler.Steps
 			// HACK: workaround - mono reports the position of
 			// raise as being the position of the next instruction
 			// after it
-			if (CanEmitDebugInfo())
+			if (EmitDebugInfo(node))
 			{
-				EmitDebugInfo(node);
 				_il.Emit(OpCodes.Nop);
 			}
 		}
@@ -717,6 +700,29 @@ namespace Boo.Lang.Compiler.Steps
 			_il.MarkLabel(((InternalLabel)node.Entity).Label);
 		}
 		
+		override public void OnConditionalExpression(ConditionalExpression node)
+		{
+			IType type = GetExpressionType(node);
+			
+			Label endLabel = _il.DefineLabel();
+			
+			EmitBranchFalse(node.Condition, endLabel);
+			node.TrueValue.Accept(this);
+			EmitCastIfNeeded(type, PopType());
+			
+			Label elseEndLabel = _il.DefineLabel();
+			_il.Emit(OpCodes.Br, elseEndLabel);
+			_il.MarkLabel(endLabel);
+			
+			endLabel = elseEndLabel;
+			node.FalseValue.Accept(this);
+			EmitCastIfNeeded(type, PopType());
+			
+			_il.MarkLabel(endLabel);
+			
+			PushType(type);
+		}
+		
 		override public void OnIfStatement(IfStatement node)
 		{
 			EmitDebugInfo(node);
@@ -786,6 +792,16 @@ namespace Boo.Lang.Compiler.Steps
 				
 				case BinaryOperatorType.ReferenceEquality:
 				{
+					if (IsNull(expression.Left))
+					{
+						EmitRawBranchFalse(expression.Right, label);
+						break;
+					}
+					if (IsNull(expression.Right))
+					{
+						EmitRawBranchFalse(expression.Left, label);
+						break;
+					}
 					Visit(expression.Left); PopType();
 					Visit(expression.Right); PopType();
 					_il.Emit(OpCodes.Beq, label);
@@ -794,6 +810,16 @@ namespace Boo.Lang.Compiler.Steps
 				
 				case BinaryOperatorType.ReferenceInequality:
 				{
+					if (IsNull(expression.Left))
+					{
+						EmitRawBranchTrue(expression.Right, label);
+						break;
+					}
+					if (IsNull(expression.Right))
+					{
+						EmitRawBranchTrue(expression.Left, label);
+						break;
+					}
 					Visit(expression.Left); PopType();
 					Visit(expression.Right); PopType();
 					_il.Emit(OpCodes.Ceq);
@@ -836,7 +862,19 @@ namespace Boo.Lang.Compiler.Steps
 				}
 			}
 		}
-		
+
+		private void EmitRawBranchFalse(Expression expression, Label label)
+		{
+			Visit(expression); PopType();
+			_il.Emit(OpCodes.Brfalse, label);
+		}
+
+		private void EmitRawBranchTrue(Expression expression, Label label)
+		{
+			Visit(expression); PopType();
+			_il.Emit(OpCodes.Brtrue, label);
+		}
+
 		void EmitBranchTrue(Expression expression, Label label)
 		{
 			switch (expression.NodeType)
@@ -894,6 +932,74 @@ namespace Boo.Lang.Compiler.Steps
 					EmitBranchFalse(expression.Right, label);
 					break;
 				}
+
+				case BinaryOperatorType.ReferenceEquality:
+				{
+					if (IsNull(expression.Left))
+					{
+						EmitRawBranchTrue(expression.Right,  label);
+					}
+					else if (IsNull(expression.Right))
+					{
+						EmitRawBranchTrue(expression.Left, label);
+					}
+					else
+					{
+						DefaultBranchFalse(expression, label);
+					}
+					break;
+				}
+
+				case BinaryOperatorType.ReferenceInequality:
+				{
+					if (IsNull(expression.Left))
+					{
+						EmitRawBranchFalse(expression.Right,  label);
+					}
+					else if (IsNull(expression.Right))
+					{
+						EmitRawBranchFalse(expression.Left, label);
+					}
+					else
+					{
+						DefaultBranchFalse(expression, label);
+					}
+					break;
+				}
+
+				case BinaryOperatorType.Equality:
+				{
+					if (IsZeroOrFalse(expression.Left))
+					{
+						EmitRawBranchTrue(expression.Right, label);
+					}
+					else if (IsZeroOrFalse(expression.Right))
+					{
+						EmitRawBranchTrue(expression.Left, label);
+					}
+					else
+					{
+						DefaultBranchFalse(expression, label);
+					}
+					break;
+				}
+
+				case BinaryOperatorType.Inequality:
+				{
+					if (IsZeroOrFalse(expression.Left))
+					{
+						EmitBranchFalse(expression.Right, label);
+					}
+					else if (IsZeroOrFalse(expression.Right))
+					{
+						EmitBranchFalse(expression.Left, label);
+					}
+					else
+					{
+						DefaultBranchFalse(expression, label);
+					}
+					break;
+				}
 				
 				default:
 				{
@@ -902,7 +1008,29 @@ namespace Boo.Lang.Compiler.Steps
 				}
 			}
 		}
-		
+
+		private bool IsNull(Expression expression)
+		{
+			return NodeType.NullLiteralExpression == expression.NodeType;
+		}
+
+		private bool IsZeroOrFalse(Expression expression)
+		{
+			return IsZero(expression) || IsFalse(expression);
+		}
+
+		private bool IsFalse(Expression expression)
+		{
+			return NodeType.BoolLiteralExpression == expression.NodeType
+				&& (false == ((BoolLiteralExpression)expression).Value);
+		}
+
+		private bool IsZero(Expression expression)
+		{
+			return NodeType.IntegerLiteralExpression == expression.NodeType
+				&& (0 == ((IntegerLiteralExpression)expression).Value);
+		}
+
 		void EmitBranchFalse(Expression expression, Label label)
 		{
 			switch (expression.NodeType)
@@ -1123,8 +1251,7 @@ namespace Boo.Lang.Compiler.Steps
 			if (leaveValueOnStack)
 			{
 				_il.Emit(OpCodes.Dup);
-				temp = _il.DeclareLocal(GetSystemType(elementType));
-				_il.Emit(OpCodes.Stloc, temp);
+				temp = StoreTempLocal(elementType);
 			}
 			
 			if (stobj)
@@ -1138,15 +1265,28 @@ namespace Boo.Lang.Compiler.Steps
 			
 			if (leaveValueOnStack)
 			{
-				_il.Emit(OpCodes.Ldloc, temp);
-				PushType(elementType);
+				LoadLocal(temp, elementType);
 			}
 			else
 			{
 				PushVoid();
 			}
 		}
-		
+
+		private void LoadLocal(LocalBuilder local, IType localType)
+		{
+			_il.Emit(OpCodes.Ldloc, local);
+			PushType(localType);
+		}
+
+		private LocalBuilder StoreTempLocal(IType elementType)
+		{
+			LocalBuilder temp;
+			temp = _il.DeclareLocal(GetSystemType(elementType));
+			_il.Emit(OpCodes.Stloc, temp);
+			return temp;
+		}
+
 		void OnAssignment(BinaryExpression node)
 		{
 			if (NodeType.SlicingExpression == node.Left.NodeType)
@@ -1170,10 +1310,10 @@ namespace Boo.Lang.Compiler.Steps
 				case EntityType.Parameter:
 				{
 					InternalParameter param = (InternalParameter)tag;
-					
 					if (param.Parameter.IsByRef)
 					{
-						LoadParam(param);
+						SetByRefParam(param, node.Right, leaveValueOnStack);
+						break;
 					}
 					
 					Visit(node.Right);
@@ -1184,23 +1324,7 @@ namespace Boo.Lang.Compiler.Steps
 						_il.Emit(OpCodes.Dup);
 						PushType(param.Type);
 					}
-					
-					if (param.Parameter.IsByRef)
-					{
-						OpCode storecode = GetStoreRefParamCode(param.Type);
-						if (IsStobj(storecode)) //passing struct/decimal byref
-						{
-							_il.Emit(storecode, GetSystemType(param.Type));
-						}
-						else
-						{
-							_il.Emit(storecode);
-						}
-					}
-					else
-					{
-						_il.Emit(OpCodes.Starg, param.Index);
-					}
+					_il.Emit(OpCodes.Starg, param.Index);
 					break;
 				}
 				
@@ -1228,12 +1352,51 @@ namespace Boo.Lang.Compiler.Steps
 				PushVoid();
 			}
 		}
-		
+
+		private void SetByRefParam(InternalParameter param, Expression right, bool leaveValueOnStack)
+		{	
+			LocalBuilder temp = null;
+			IType tempType = null;
+			if (leaveValueOnStack)
+			{
+				Visit(right);
+				tempType = PopType();
+				temp = StoreTempLocal(tempType);
+			}
+
+			LoadParam(param);
+			if (temp != null)
+			{
+				LoadLocal(temp, tempType);
+			}
+			else
+			{
+				Visit(right);
+			}
+			
+			EmitCastIfNeeded(param.Type, PopType());
+					
+			OpCode storecode = GetStoreRefParamCode(param.Type);
+			if (IsStobj(storecode)) //passing struct/decimal byref
+			{
+				_il.Emit(storecode, GetSystemType(param.Type));
+			}
+			else
+			{
+				_il.Emit(storecode);
+			}
+
+			if (null != temp)
+			{
+				LoadLocal(temp, tempType);
+			}
+		}
+
 		void EmitTypeTest(BinaryExpression node)
 		{
 			Visit(node.Left); PopType();
 			
-			System.Type type = null;
+			Type type = null;
 			if (NodeType.TypeofExpression == node.Right.NodeType)
 			{
 				type = GetSystemType(((TypeofExpression)node.Right).Type);
@@ -1580,7 +1743,7 @@ namespace Boo.Lang.Compiler.Steps
 			PushType(type);
 		}
 		
-		override public void OnAsExpression(AsExpression node)
+		override public void OnTryCastExpression(TryCastExpression node)
 		{
 			Type type = GetSystemType(node.Type);
 			
@@ -1779,6 +1942,12 @@ namespace Boo.Lang.Compiler.Steps
 					OnEval(node);
 					break;
 				}
+
+				case BuiltinFunctionType.InitValueType:
+				{
+					OnInitValueType(node);
+					break;
+				}
 				
 				default:
 				{
@@ -1787,7 +1956,21 @@ namespace Boo.Lang.Compiler.Steps
 				}
 			}
 		}
-		
+
+		private void OnInitValueType(MethodInvocationExpression node)
+		{
+			Debug.Assert(1 == node.Arguments.Count);
+			InternalLocal local = (InternalLocal)node.Arguments[0].Entity;
+
+			Debug.Assert(local.Type.IsValueType);
+			
+			LocalBuilder builder = local.LocalBuilder;
+			_il.Emit(OpCodes.Ldloca, builder);
+			_il.Emit(OpCodes.Initobj, builder.LocalType);
+
+			PushVoid();
+		}
+
 		override public void OnMethodInvocationExpression(MethodInvocationExpression node)
 		{
 			IEntity tag = TypeSystemServices.GetEntity(node.Target);
@@ -1996,7 +2179,7 @@ namespace Boo.Lang.Compiler.Steps
 			OpCode opcode = GetLoadEntityOpCode(elementType);
 			if (OpCodes.Ldelema.Value == opcode.Value)
 			{
-				System.Type systemType = GetSystemType(elementType);
+				Type systemType = GetSystemType(elementType);
 				_il.Emit(opcode, systemType);
 				_il.Emit(OpCodes.Ldobj, systemType);
 			}
@@ -2253,7 +2436,7 @@ namespace Boo.Lang.Compiler.Steps
 		
 		override public void OnMemberReferenceExpression(MemberReferenceExpression node)
 		{
-			IEntity tag = TypeSystemServices.GetEntity(node);
+			IEntity tag = TypeSystem.TypeSystemServices.GetEntity(node);
 			switch (tag.EntityType)
 			{
 				case EntityType.Method:
@@ -2388,7 +2571,7 @@ namespace Boo.Lang.Compiler.Steps
 		
 		override public void OnReferenceExpression(ReferenceExpression node)
 		{
-			IEntity info = TypeSystemServices.GetEntity(node);
+			IEntity info = TypeSystem.TypeSystemServices.GetEntity(node);
 			switch (info.EntityType)
 			{
 				case EntityType.Local:
@@ -2402,7 +2585,7 @@ namespace Boo.Lang.Compiler.Steps
 				
 				case EntityType.Parameter:
 				{
-					TypeSystem.InternalParameter param = (TypeSystem.InternalParameter)info;
+					InternalParameter param = (InternalParameter)info;
 					LoadParam(param);
 					
 					if (param.Parameter.IsByRef)
@@ -2436,7 +2619,7 @@ namespace Boo.Lang.Compiler.Steps
 			}
 		}
 		
-		void LoadParam(TypeSystem.InternalParameter param)
+		void LoadParam(InternalParameter param)
 		{
 			int index = param.Index;
 			
@@ -2586,32 +2769,65 @@ namespace Boo.Lang.Compiler.Steps
 			}
 		}
 		
-		void EmitDebugInfo(Node node)
+		bool EmitDebugInfo(Node node)
 		{
-			EmitDebugInfo(node, node);
+			return EmitDebugInfo(node, node);
 		}
 		
-		void EmitDebugInfo(Node startNode, Node endNode)
+		bool EmitDebugInfo(Node startNode, Node endNode)
 		{
-			if (!CanEmitDebugInfo()) return;
+			if (!Parameters.Debug) return false;
 			
 			LexicalInfo start = startNode.LexicalInfo;
-			if (start.IsValid)
-			{
-				try
-				{	
-					_il.MarkSequencePoint(_symbolDocWriter, start.Line, 0, start.Line+1, 0);
-				}
-				catch (Exception x)
-				{
-					Error(CompilerErrorFactory.InternalError(startNode, x));
-				}
+			if (!start.IsValid) return false;
+
+			ISymbolDocumentWriter writer = GetDocumentWriter(start.FileName);
+			if (null == writer) return false;
+
+			try
+			{	
+				_il.MarkSequencePoint(writer, start.Line, 0, start.Line+1, 0);
 			}
+			catch (Exception x)
+			{
+				Error(CompilerErrorFactory.InternalError(startNode, x));
+				return false;
+			}
+
+			return true;
 		}
 
-		private bool CanEmitDebugInfo()
+		private ISymbolDocumentWriter GetDocumentWriter(string fname)
+		{	
+			string fullname = SafeGetFullPath(fname);
+			ISymbolDocumentWriter writer = GetCachedDocumentWriter(fullname);
+			if (null != writer) return writer;
+			
+			writer = _moduleBuilder.DefineDocument(
+				fullname,
+				Guid.Empty,
+				Guid.Empty,
+				SymDocumentType.Text);
+			_symbolDocWriters.Add(fullname, writer);
+			
+			return writer;
+		}
+
+		private string SafeGetFullPath(string fname)
 		{
-			return null != _symbolDocWriter;
+			try
+			{
+				return Path.GetFullPath(fname);
+			}
+			catch (Exception)
+			{
+			}
+			return fname;
+		}
+
+		private ISymbolDocumentWriter GetCachedDocumentWriter(string fname)
+		{
+			return (ISymbolDocumentWriter) _symbolDocWriters[fname];
 		}
 
 		bool IsBoolOrInt(IType type)
@@ -2673,12 +2889,12 @@ namespace Boo.Lang.Compiler.Steps
 		MethodInfo GetToDecimalConversionMethod(IType type)
 		{
 			MethodInfo method =
-				typeof(System.Decimal).GetMethod("op_Implicit", new Type[] { GetSystemType(type) });
+				typeof(Decimal).GetMethod("op_Implicit", new Type[] { GetSystemType(type) });
 			
 			if (method == null)
 			{
 				method =
-					typeof(System.Decimal).GetMethod("op_Explicit", new Type[] { GetSystemType(type) });
+					typeof(Decimal).GetMethod("op_Explicit", new Type[] { GetSystemType(type) });
 				if (method == null)
 				{
 					NotImplemented(string.Format("Numeric promotion for {0} to decimal not implemented!", type));
@@ -2692,7 +2908,7 @@ namespace Boo.Lang.Compiler.Steps
 			string toType = "To" + type.ToString().Replace("System.", "");
 
 			MethodInfo method =
-				typeof(System.Decimal).GetMethod(toType, new Type[] { typeof(System.Decimal) });
+				typeof(Decimal).GetMethod(toType, new Type[] { typeof(Decimal) });
 			if (method == null)
 			{
 				NotImplemented(string.Format("Numeric promotion for decimal to {0} not implemented!", type));
@@ -3089,7 +3305,7 @@ namespace Boo.Lang.Compiler.Steps
 		
 		void DefineAssemblyAttributes()
 		{
-			foreach (Boo.Lang.Compiler.Ast.Attribute attribute in _assemblyAttributes)
+			foreach (Attribute attribute in _assemblyAttributes)
 			{
 				_asmBuilder.SetCustomAttribute(GetCustomAttributeBuilder(attribute));
 			}
@@ -3310,12 +3526,12 @@ namespace Boo.Lang.Compiler.Steps
 		
 		string GetArrayTypeName(IType tag)
 		{
-			System.Text.StringBuilder builder = new System.Text.StringBuilder();
+			StringBuilder builder = new StringBuilder();
 			GetArrayTypeName(builder, tag);
 			return builder.ToString();
 		}
 		
-		void GetArrayTypeName(System.Text.StringBuilder buffer, IType tag)
+		void GetArrayTypeName(StringBuilder buffer, IType tag)
 		{
 			if (tag.IsArray)
 			{
@@ -3334,13 +3550,13 @@ namespace Boo.Lang.Compiler.Steps
 			}
 		}
 		
-		void AppendFullTypeName(System.Text.StringBuilder buffer, IType type)
+		void AppendFullTypeName(StringBuilder buffer, IType type)
 		{
 			AbstractInternalType internalType = (AbstractInternalType)type;
 			AppendFullTypeName(buffer, internalType.TypeDefinition);
 		}
 		
-		void AppendFullTypeName(System.Text.StringBuilder buffer, TypeDefinition type)
+		void AppendFullTypeName(StringBuilder buffer, TypeDefinition type)
 		{
 			TypeDefinition parent = type.DeclaringType;
 			if (null != parent)
@@ -3593,7 +3809,7 @@ namespace Boo.Lang.Compiler.Steps
 				builder.SetSetMethod(setterBuilder);
 			}
 			
-			foreach (Boo.Lang.Compiler.Ast.Attribute attribute in property.Attributes)
+			foreach (Attribute attribute in property.Attributes)
 			{
 				builder.SetCustomAttribute(GetCustomAttributeBuilder(attribute));
 			}
@@ -3612,7 +3828,7 @@ namespace Boo.Lang.Compiler.Steps
 			FieldBuilder builder = typeBuilder.DefineField(field.Name,
 			                                               GetSystemType(field),
 			                                               GetFieldAttributes(field));
-			foreach (Boo.Lang.Compiler.Ast.Attribute attribute in field.Attributes)
+			foreach (Attribute attribute in field.Attributes)
 			{
 				builder.SetCustomAttribute(GetCustomAttributeBuilder(attribute));
 			}
@@ -3629,7 +3845,7 @@ namespace Boo.Lang.Compiler.Steps
 				{
 					SetParamArrayAttribute(paramBuilder);
 				}
-				foreach (Boo.Lang.Compiler.Ast.Attribute attribute in parameters[i].Attributes)
+				foreach (Attribute attribute in parameters[i].Attributes)
 				{
 					paramBuilder.SetCustomAttribute(GetCustomAttributeBuilder(attribute));
 				}
@@ -3647,7 +3863,7 @@ namespace Boo.Lang.Compiler.Steps
 				{
 					SetParamArrayAttribute(paramBuilder);
 				}
-				foreach (Boo.Lang.Compiler.Ast.Attribute attribute in parameters[i].Attributes)
+				foreach (Attribute attribute in parameters[i].Attributes)
 				{
 					paramBuilder.SetCustomAttribute(GetCustomAttributeBuilder(attribute));
 				}
@@ -3699,21 +3915,32 @@ namespace Boo.Lang.Compiler.Steps
 			DefineParameters(builder, parameters);
 			
 			SetBuilder(method, builder);
-			foreach (Boo.Lang.Compiler.Ast.Attribute attribute in method.Attributes)
+			foreach (Attribute attribute in method.Attributes)
 			{
 				builder.SetCustomAttribute(GetCustomAttributeBuilder(attribute));
 			}
 
-			if (GetEntity(method).IsDuckTyped)
+			IMethod methodEntity = GetEntity(method);
+			if (methodEntity.IsDuckTyped)
 			{
 				builder.SetCustomAttribute(CreateDuckTypedCustomAttribute());
 			}
+			if (methodEntity.IsExtension)
+			{
+				builder.SetCustomAttribute(CreateExtensionAttribute());
+			}
+
 			return builder;
 		}
 
 		private CustomAttributeBuilder CreateDuckTypedCustomAttribute()
 		{
 			return new CustomAttributeBuilder(DuckTypedAttribute_Constructor, new object[0]);
+		}
+
+		private CustomAttributeBuilder CreateExtensionAttribute()
+		{
+			return new CustomAttributeBuilder(ExtensionAttribute_Constructor, new object[0]);
 		}
 
 		void DefineConstructor(TypeBuilder typeBuilder, Method constructor)
@@ -3750,7 +3977,7 @@ namespace Boo.Lang.Compiler.Steps
 			Type baseType = null;
 			if (IsEnumDefinition(type))
 			{
-				baseType = typeof(System.Enum);
+				baseType = typeof(Enum);
 			}
 			else if (IsValueType(type))
 			{
@@ -3793,7 +4020,7 @@ namespace Boo.Lang.Compiler.Steps
 		
 		void EmitAttributes(TypeBuilder typeBuilder, TypeDefinition typeDefinition)
 		{
-			foreach (Boo.Lang.Compiler.Ast.Attribute attribute in typeDefinition.Attributes)
+			foreach (Attribute attribute in typeDefinition.Attributes)
 			{
 				typeBuilder.SetCustomAttribute(GetCustomAttributeBuilder(attribute));
 			}
@@ -3804,7 +4031,7 @@ namespace Boo.Lang.Compiler.Steps
 			throw new NotImplementedException(feature);
 		}
 		
-		CustomAttributeBuilder GetCustomAttributeBuilder(Boo.Lang.Compiler.Ast.Attribute node)
+		CustomAttributeBuilder GetCustomAttributeBuilder(Attribute node)
 		{
 			IConstructor constructor = (IConstructor)GetEntity(node);
 			ConstructorInfo constructorInfo = GetConstructorInfo(constructor);
@@ -3835,10 +4062,10 @@ namespace Boo.Lang.Compiler.Steps
 							out FieldInfo[] outNamedFields,
 							out object[] outFieldValues)
 		{
-			Boo.Lang.List namedProperties = new Boo.Lang.List();
-			Boo.Lang.List propertyValues = new Boo.Lang.List();
-			Boo.Lang.List namedFields = new Boo.Lang.List();
-			Boo.Lang.List fieldValues = new Boo.Lang.List();
+			List namedProperties = new List();
+			List propertyValues = new List();
+			List namedFields = new List();
+			List fieldValues = new List();
 			foreach (ExpressionPair pair in values)
 			{
 				ITypedEntity entity = (ITypedEntity)GetEntity(pair.First);
@@ -3906,6 +4133,11 @@ namespace Boo.Lang.Compiler.Steps
 				{
 					return GetSystemType(((TypeofExpression)expression).Type);
 				}
+
+				case NodeType.CastExpression:
+				{
+					return GetValue(expectedType, ((CastExpression)expression).Target);
+				}
 				
 				default:
 				{
@@ -3931,9 +4163,20 @@ namespace Boo.Lang.Compiler.Steps
 		
 		object ConvertValue(IType expectedType, object value)
 		{
+			if (expectedType.IsEnum)
+			{
+				return Convert.ChangeType(value, GetUnderlyingEnumType(expectedType));
+			}
 			return Convert.ChangeType(value, GetSystemType(expectedType));
 		}
-		
+
+		private Type GetUnderlyingEnumType(IType expectedType)
+		{	
+			return expectedType is IInternalEntity
+				? Types.Int
+				: Enum.GetUnderlyingType(GetSystemType(expectedType));
+		}
+
 		void DefineTypeMembers(TypeDefinition typeDefinition)
 		{
 			if (IsEnumDefinition(typeDefinition))
@@ -4029,7 +4272,7 @@ namespace Boo.Lang.Compiler.Steps
 
 			public bool EmbedFile(string resourceName, string fname)
 			{
-				MethodInfo embed_res = typeof (System.Reflection.Emit.AssemblyBuilder).GetMethod(
+				MethodInfo embed_res = typeof (AssemblyBuilder).GetMethod(
 					"EmbedResourceFile", BindingFlags.Instance|BindingFlags.Public|BindingFlags.NonPublic,
 					null, CallingConventions.Any, new Type[] { typeof(string), typeof(string) }, null);
 				if (embed_res != null)
@@ -4123,7 +4366,7 @@ namespace Boo.Lang.Compiler.Steps
 		
 		string GetAssemblyAttributeValue(string name)
 		{
-			Boo.Lang.Compiler.Ast.Attribute attribute = GetAssemblyAttribute(name);
+			Attribute attribute = GetAssemblyAttribute(name);
 			if (null != attribute)
 			{
 				return ((StringLiteralExpression)attribute.Arguments[0]).Value;
@@ -4131,9 +4374,9 @@ namespace Boo.Lang.Compiler.Steps
 			return null;
 		}
 		
-		Boo.Lang.Compiler.Ast.Attribute GetAssemblyAttribute(string name)
+		Attribute GetAssemblyAttribute(string name)
 		{
-			Boo.Lang.Compiler.Ast.Attribute[] attributes = _assemblyAttributes.Get(name);
+			Attribute[] attributes = _assemblyAttributes.Get(name);
 			if (attributes.Length > 0)
 			{
 				Debug.Assert(1 == attributes.Length);

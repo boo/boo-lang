@@ -89,11 +89,13 @@ tokens
 	IN="in";	
 	NOT="not";	
 	NULL="null";
+	OF="of";
 	OR="or";
 	OTHERWISE="otherwise";
 	OVERRIDE="override";	
 	PASS="pass";
 	NAMESPACE="namespace";
+	PARTIAL="partial";
 	PUBLIC="public";
 	PROTECTED="protected";
 	PRIVATE="private";
@@ -630,22 +632,28 @@ interface_method [TypeMemberCollection container]
 			
 protected
 interface_property [TypeMemberCollection container]
-	{
-		Property p = null;
-		TypeReference tr = null;
-	}:
-	id:ID (AS tr=type_reference)?
-	{
-		p = new Property(ToLexicalInfo(id));
-		p.Name = id.getText();
-		p.Type = tr;
-		AddAttributes(p.Attributes);
-		container.Add(p);
-	}
-	begin_with_doc[p]
-		(interface_property_accessor[p])+
-	end[p]
-	;
+        {
+                Property p = null;
+                TypeReference tr = null;
+                ParameterDeclarationCollection parameters = null;
+        }:
+        (id:ID)
+        {
+                p = new Property(ToLexicalInfo(id));
+                p.Name = id.getText();
+                AddAttributes(p.Attributes);
+                container.Add(p);
+                parameters = p.Parameters;
+        }
+        (LPAREN parameter_declaration_list[parameters] RPAREN)?
+        (AS tr=type_reference)?
+        {
+                p.Type = tr;
+        }
+        begin_with_doc[p]
+                (interface_property_accessor[p])+
+        end[p]
+        ; 
 			
 protected
 interface_property_accessor[Property p]
@@ -739,23 +747,25 @@ method [TypeMemberCollection container]
 		StatementCollection statements = null;
 	}: 
 	t:DEF
-	(
-		(emi=explicit_member_info)? id:ID {
-			if (emi != null)
+	(		
+		(
+			(emi=explicit_member_info)? id:ID
 			{
-				m = new Method(emi.LexicalInfo);
+				if (emi != null)
+				{
+					m = new Method(emi.LexicalInfo);
+				}
+				else
+				{
+					m = new Method(ToLexicalInfo(id));
+				}
+				m.Name = id.getText();
+				m.ExplicitInfo  = emi;
 			}
-			else
-			{
-				m = new Method(ToLexicalInfo(id));
-			}
-			m.Name = id.getText();
-			m.ExplicitInfo  = emi;
-		}
-		|
-		c:CONSTRUCTOR { m = new Constructor(ToLexicalInfo(c)); } |
-		d:DESTRUCTOR { m = new Destructor(ToLexicalInfo(d)); }
-	)	
+		)
+		| c:CONSTRUCTOR { m = new Constructor(ToLexicalInfo(c)); }
+		| d:DESTRUCTOR { m = new Destructor(ToLexicalInfo(d)); }
+	)
 	{
 		m.Modifiers = _modifiers;
 		AddAttributes(m.Attributes);
@@ -763,7 +773,12 @@ method [TypeMemberCollection container]
 		body = m.Body;
 		statements = body.Statements;
 	}
-	LPAREN parameter_declaration_list[parameters] RPAREN
+	LPAREN	
+	(
+		(SELF)=>extension_method_parameter_declaration_list[m]
+		| parameter_declaration_list[parameters]
+	)
+	RPAREN
 			(AS rt=type_reference { m.ReturnType = rt; })?
 			attributes { AddAttributes(m.ReturnTypeAttributes); }
 			begin_block_with_doc[m, body]
@@ -922,7 +937,8 @@ modifiers
 	TRANSIENT { _modifiers |= TypeMemberModifiers.Transient; } |
 	OVERRIDE { _modifiers |= TypeMemberModifiers.Override; } |
 	ABSTRACT { _modifiers |= TypeMemberModifiers.Abstract; } |
-	VIRTUAL { _modifiers |= TypeMemberModifiers.Virtual; }	
+	VIRTUAL { _modifiers |= TypeMemberModifiers.Virtual; } |
+	PARTIAL { _modifiers |= TypeMemberModifiers.Partial; }
 	)*
 ;
 
@@ -934,9 +950,27 @@ parameter_modifier returns [ParameterModifiers pm]
 	(
 		REF { pm = ParameterModifiers.Ref; }
 	)
-	;
+;
+	
+protected
+extension_method_parameter_declaration_list[Method m]
+{
+	TypeReference tr = null;
+	ParameterDeclarationCollection parameters = m.Parameters;
+}: 
+	id:SELF (AS tr=type_reference)?
+	{
+		ParameterDeclaration pd = new ParameterDeclaration(ToLexicalInfo(id));
+		pd.Name = id.getText();
+		pd.Type = tr;
+		parameters.Add(pd);
+		
+		m.ImplementationFlags |= MethodImplementationFlags.Extension;
+	}
+	(COMMA parameter_declaration_list[parameters])?
+;
 
-protected	
+protected
 parameter_declaration_list[ParameterDeclarationCollection c]
 	{
 		bool variableArguments = false;
@@ -1043,10 +1077,22 @@ array_type_reference returns [ArrayTypeReference atr]
 	;
 
 protected
+type_reference_list [TypeReferenceCollection container]
+	{
+		TypeReference tr = null;
+	}:
+	tr=type_reference { container.Add(tr); }
+	(options { greedy=true; }:
+		COMMA tr=type_reference { container.Add(tr); }
+	)*
+;
+
+protected
 type_reference returns [TypeReference tr]
 	{
-		tr=null;
+		tr = null;
 		IToken id = null;
+		TypeReferenceCollection arguments = null;
 	}: 
 	tr=array_type_reference
 	|
@@ -1054,11 +1100,33 @@ type_reference returns [TypeReference tr]
 	|
 	(
 		id=type_name
-		{
-			SimpleTypeReference str = new SimpleTypeReference(ToLexicalInfo(id));
-			str.Name = id.getText();
-			tr = str;
-		}
+		(
+			(
+				LBRACK OF
+				{
+					GenericTypeReference gtr = new GenericTypeReference(ToLexicalInfo(id), id.getText());
+					arguments = gtr.GenericArguments;
+					tr = gtr;
+				}
+				type_reference_list[arguments]
+				RBRACK
+			)
+			|
+			(
+				OF tr=type_reference
+				{
+					GenericTypeReference gtr = new GenericTypeReference(ToLexicalInfo(id), id.getText());
+					gtr.GenericArguments.Add(tr);
+					tr = gtr;
+				}
+			)
+			|
+			{
+				SimpleTypeReference str = new SimpleTypeReference(ToLexicalInfo(id));
+				str.Name = id.getText();
+				tr = str;
+			}
+		)
 	)
 	;
 	
@@ -1284,6 +1352,7 @@ closure_expression returns [Expression e]
 	anchorBegin:LBRACE
 		{
 			e = cbe = new CallableBlockExpression(ToLexicalInfo(anchorBegin));
+			cbe.Annotate("inline");
 			parameters = cbe.Parameters;
 			body = cbe.Body;
 		}
@@ -1681,33 +1750,33 @@ array_or_expression returns [Expression e]
 		e = null;
 		ArrayLiteralExpression tle = null;
 	} :
-		(
-			// tupla vazia: , ou (,)
-			c:COMMA { e = new ArrayLiteralExpression(ToLexicalInfo(c)); }
-		) |
-		(
-			e=expression
+	(
+		// tupla vazia: , ou (,)
+		c:COMMA { e = new ArrayLiteralExpression(ToLexicalInfo(c)); }
+	) |
+	(
+		e=expression
+		( options { greedy=true; }:
+			t:COMMA
+			{					
+				tle = new ArrayLiteralExpression(e.LexicalInfo);
+				tle.Items.Add(e);		
+			}
 			( options { greedy=true; }:
-				t:COMMA
-				{					
-					tle = new ArrayLiteralExpression(e.LexicalInfo);
-					tle.Items.Add(e);		
-				}
+				e=expression { tle.Items.Add(e); }
 				( options { greedy=true; }:
+					COMMA
 					e=expression { tle.Items.Add(e); }
-					( options { greedy=true; }:
-						COMMA
-						e=expression { tle.Items.Add(e); }
-					)*
-					(COMMA)?
-				)?
-				{
-					e = tle;
-				}
+				)*
+				(COMMA)?
 			)?
-		)
-	;
-			
+			{
+				e = tle;
+			}
+		)?
+	)	
+;
+
 protected
 expression returns [Expression e]
 	{
@@ -1716,8 +1785,7 @@ expression returns [Expression e]
 		ExtendedGeneratorExpression mge = null;
 		GeneratorExpression ge = null;
 	} :
-	e=boolean_expression
-		
+	e=boolean_expression		
 	( options { greedy = true; } :
 		f:FOR
 		{
@@ -2018,16 +2086,11 @@ conditional_expression returns [Expression e]
 			(tgt:GREATER_THAN { op = BinaryOperatorType.GreaterThan; token = tgt; } ) |
 			(tlt:LESS_THAN { op = BinaryOperatorType.LessThan; token = tlt; }) |
 			(tnot:IS NOT { op = BinaryOperatorType.ReferenceInequality; token = tnot; }) |
-			(tis:IS { op = BinaryOperatorType.ReferenceEquality; token = tis; })
-		 )
-		 r=sum
-	  ) |
-	  (
-	  	(
+			(tis:IS { op = BinaryOperatorType.ReferenceEquality; token = tis; }) |
 			(tnint:NOT IN { op = BinaryOperatorType.NotMember; token = tnint; }) |
 			(tin:IN { op = BinaryOperatorType.Member; token = tin; } )
-		)		
-		r=array_or_expression
+		 )
+		 r=sum
 	  ) |	
 	  (
 	  	tisa:ISA
@@ -2140,7 +2203,7 @@ exponentiation returns [Expression e]
 		t:AS
 		tr=type_reference
 		{
-			AsExpression ae = new AsExpression(ToLexicalInfo(t));
+			TryCastExpression ae = new TryCastExpression(ToLexicalInfo(t));
 			ae.Target = e;
 			ae.Type = tr;
 			e = ae; 
@@ -2232,7 +2295,7 @@ cast_expression returns [Expression e]
 	}:
 	t:CAST LPAREN tr=type_reference COMMA target=expression RPAREN
 	{
-		e = new CastExpression(ToLexicalInfo(t), tr, target);
+		e = new CastExpression(ToLexicalInfo(t), target, tr);
 	}
 	;
 	
@@ -2266,35 +2329,60 @@ reference_expression returns [ReferenceExpression e]
 ;
 	
 protected
-paren_expression returns [Expression e] { e = null; }:
-	LPAREN e=array_or_expression RPAREN
-	;
+paren_expression returns [Expression e]
+{
+	e = null;
+	Expression condition = null;
+	Expression falseValue = null;
+}:
+    (LPAREN OF)=>e=typed_array
+	|
+	(
+		lparen:LPAREN
+		e=array_or_expression
+		(
+			IF condition=boolean_expression
+			ELSE falseValue=array_or_expression
+			{
+				ConditionalExpression ce = new ConditionalExpression(ToLexicalInfo(lparen));
+				ce.Condition = condition;
+				ce.TrueValue = e;
+				ce.FalseValue = falseValue;
+				
+				e = ce;
+			}
+		)?
+		RPAREN
+	)
+;
 
 protected
-array returns [Expression e]
+typed_array returns [Expression e]
 	{
-		ArrayLiteralExpression tle = null;
 		e = null;
+		ArrayLiteralExpression tle = null;
+		TypeReference tr = null;
+		Expression item = null;
 	}:
 	t:LPAREN
-	e=expression
+	OF tr=type_reference COLON
+	{
+		e = tle = new ArrayLiteralExpression(ToLexicalInfo(t));
+		tle.Type = new ArrayTypeReference(tr.LexicalInfo, tr);
+	}
 	(
 		COMMA
-		{
-			tle = new ArrayLiteralExpression(ToLexicalInfo(t));
-			tle.Items.Add(e);
-		}
+		|
 		(
-			e=expression { tle.Items.Add(e); }
+			item=expression { tle.Items.Add(item); }
 			(
 				COMMA
-				e=expression { tle.Items.Add(e); }
+				item=expression { tle.Items.Add(item); }
 			)*
-		)?
-		{ e = tle; }
-	)?
+		)
+	)
 	RPAREN
-	;
+;
 	
 protected
 method_invocation_with_block returns [Statement s]
@@ -2377,18 +2465,43 @@ slicing_expression returns [Expression e]
 		SlicingExpression se = null;
 		MethodInvocationExpression mce = null;
 		IToken memberName = null;
+		TypeReference genericArgument = null;
+		TypeReferenceCollection genericArguments = null;
 	} :
 	e=atom
 	( options { greedy=true; }:
 		(
 			lbrack:LBRACK
-			{
-				se = new SlicingExpression(ToLexicalInfo(lbrack));				
-				se.Target = e;
-				e = se;
-			}
-			slice[se] (COMMA slice[se])*
+			(
+				(
+					OF
+					{
+						GenericReferenceExpression gre = new GenericReferenceExpression(ToLexicalInfo(lbrack));
+						gre.Target = e;
+						e = gre;
+						genericArguments = gre.GenericArguments;
+					}
+					type_reference_list[genericArguments]					
+				)
+				|				
+				{
+					se = new SlicingExpression(ToLexicalInfo(lbrack));				
+					se.Target = e;
+					e = se;
+				}
+				slice[se] (COMMA slice[se])*
+			)
 			RBRACK
+		)
+		|
+		(
+			oft:OF genericArgument=type_reference
+			{
+				GenericReferenceExpression gre = new GenericReferenceExpression(ToLexicalInfo(oft));
+				gre.Target = e;
+				e = gre;
+				gre.GenericArguments.Add(genericArgument);
+			}
 		)
 		|
 		(
@@ -3076,14 +3189,28 @@ X_RE_CHAR: RE_CHAR | ' ' | '\t';
 
 
 protected
-RE_ESC : '\\' (
+RE_ESC : '\\' (				
+				'+' |
+				'/' |
+				'(' |
+				')' |
+				'|' |
+				'.' |
+				'*' |
+				'?' |
+				'$' |
+				'^' |
+				'['	|
+				']' |
+				'{' |
+				'}' |
 	
 	// character scapes
 	// ms-help://MS.NETFrameworkSDKv1.1/cpgenref/html/cpconcharacterescapes.htm
 	
 				'a' |
 				'b' |
-				'c' 'A'..'Z' |
+				('c' 'A'..'Z') |
 				't' |
 				'r' |
 				'v' |
@@ -3091,8 +3218,8 @@ RE_ESC : '\\' (
 				'n' |
 				'e' |
 				(DIGIT)+ |
-				'x' HEXDIGIT HEXDIGIT |
-				'u' HEXDIGIT HEXDIGIT HEXDIGIT HEXDIGIT |
+				('x' HEXDIGIT HEXDIGIT) |
+				('u' HEXDIGIT HEXDIGIT HEXDIGIT HEXDIGIT) |
 				'\\' |
 				
 	// character classes
@@ -3115,25 +3242,10 @@ RE_ESC : '\\' (
 				'Z' |
 				'g' |
 				'B' |
-				
-				'k' |
-				
-				'/' |
-				'(' |
-				')' |
-				'|' |
-				'.' |
-				'*' |
-				'?' |
-				'$' |
-				'^' |
-				'['	|
-				']' |
-				'{' |
-				'}'
+				'k'			
 			 )
 			 ;
-
+			 
 protected
 DIGIT_GROUP : DIGIT (('_'! DIGIT DIGIT DIGIT) | DIGIT)*;
 

@@ -109,6 +109,7 @@ tokens
 	TYPEOF="typeof";
 	UNLESS="unless";
 	VIRTUAL="virtual";
+	PARTIAL="partial";
 	WHEN="when";
 	WHILE="while";
 	YIELD="yield";
@@ -620,22 +621,28 @@ interface_method [TypeMemberCollection container]
 			
 protected
 interface_property [TypeMemberCollection container]
-	{
-		Property p = null;
-		TypeReference tr = null;
-	}:
-	id:ID (AS tr=type_reference)?
-	{
-		p = new Property(ToLexicalInfo(id));
-		p.Name = id.getText();
-		p.Type = tr;
-		AddAttributes(p.Attributes);
-		container.Add(p);
-	}
-	begin_with_doc[p]
-		(interface_property_accessor[p])+
-	end[p]
-	;
+        {
+                Property p = null;
+                TypeReference tr = null;
+                ParameterDeclarationCollection parameters = null;
+        }:
+        (id:ID)
+        {
+                p = new Property(ToLexicalInfo(id));
+                p.Name = id.getText();
+                AddAttributes(p.Attributes);
+                container.Add(p);
+                parameters = p.Parameters;
+        }
+        (LPAREN parameter_declaration_list[parameters] RPAREN)?
+        (AS tr=type_reference)?
+        {
+                p.Type = tr;
+        }
+        begin_with_doc[p]
+                (interface_property_accessor[p])+
+        end[p]
+        ; 
 			
 protected
 interface_property_accessor[Property p]
@@ -909,7 +916,8 @@ modifiers
 	TRANSIENT { _modifiers |= TypeMemberModifiers.Transient; } |
 	OVERRIDE { _modifiers |= TypeMemberModifiers.Override; } |
 	ABSTRACT { _modifiers |= TypeMemberModifiers.Abstract; } |
-	VIRTUAL { _modifiers |= TypeMemberModifiers.Virtual; }	
+	VIRTUAL { _modifiers |= TypeMemberModifiers.Virtual; } |
+	PARTIAL { _modifiers |= TypeMemberModifiers.Partial; }	
 	)*
 ;
 
@@ -1270,6 +1278,7 @@ closure_expression returns [Expression e]
 	anchorBegin:LBRACE
 		{
 			e = cbe = new CallableBlockExpression(ToLexicalInfo(anchorBegin));
+			cbe.Annotate("inline");
 			parameters = cbe.Parameters;
 			body = cbe.Body;
 		}
@@ -2006,17 +2015,12 @@ conditional_expression returns [Expression e]
 			(tgt:GREATER_THAN { op = BinaryOperatorType.GreaterThan; token = tgt; } ) |
 			(tlt:LESS_THAN { op = BinaryOperatorType.LessThan; token = tlt; }) |
 			(tnot:IS NOT { op = BinaryOperatorType.ReferenceInequality; token = tnot; }) |
-			(tis:IS { op = BinaryOperatorType.ReferenceEquality; token = tis; })
+			(tis:IS { op = BinaryOperatorType.ReferenceEquality; token = tis; }) |
+			(tnint:NOT IN { op = BinaryOperatorType.NotMember; token = tnint; }) |
+			(tin:IN { op = BinaryOperatorType.Member; token = tin; } )
 		 )
 		 r=sum
 	  ) |
-	  (
-	  	(
-			(tnint:NOT IN { op = BinaryOperatorType.NotMember; token = tnint; }) |
-			(tin:IN { op = BinaryOperatorType.Member; token = tin; } )
-		)		
-		r=array_or_expression
-	  ) |	
 	  (
 	  	tisa:ISA
 		tr=type_reference
@@ -2128,7 +2132,7 @@ exponentiation returns [Expression e]
 		t:AS
 		tr=type_reference
 		{
-			AsExpression ae = new AsExpression(ToLexicalInfo(t));
+			TryCastExpression ae = new TryCastExpression(ToLexicalInfo(t));
 			ae.Target = e;
 			ae.Type = tr;
 			e = ae; 
@@ -2220,7 +2224,7 @@ cast_expression returns [Expression e]
 	}:
 	t:CAST LPAREN tr=type_reference COMMA target=expression RPAREN
 	{
-		e = new CastExpression(ToLexicalInfo(t), tr, target);
+		e = new CastExpression(ToLexicalInfo(t), target, tr);
 	}
 	;
 	
@@ -2255,34 +2259,37 @@ reference_expression returns [ReferenceExpression e]
 	
 protected
 paren_expression returns [Expression e] { e = null; }:
-	LPAREN e=array_or_expression RPAREN
-	;
+    (LPAREN OF)=>e=typed_array
+	| LPAREN e=array_or_expression RPAREN
+;
 
 protected
-array returns [Expression e]
+typed_array returns [Expression e]
 	{
-		ArrayLiteralExpression tle = null;
 		e = null;
+		ArrayLiteralExpression tle = null;
+		TypeReference tr = null;
+		Expression item = null;
 	}:
 	t:LPAREN
-	e=expression
+	OF tr=type_reference COLON
+	{
+		e = tle = new ArrayLiteralExpression(ToLexicalInfo(t));
+		tle.Type = new ArrayTypeReference(tr.LexicalInfo, tr);
+	}
 	(
 		COMMA
-		{
-			tle = new ArrayLiteralExpression(ToLexicalInfo(t));
-			tle.Items.Add(e);
-		}
+		|
 		(
-			e=expression { tle.Items.Add(e); }
+			item=expression { tle.Items.Add(item); }
 			(
 				COMMA
-				e=expression { tle.Items.Add(e); }
+				item=expression { tle.Items.Add(item); }
 			)*
-		)?
-		{ e = tle; }
-	)?
+		)
+	)
 	RPAREN
-	;
+;
 	
 protected
 method_invocation_with_block returns [Statement s]
@@ -2980,7 +2987,7 @@ ML_COMMENT:
 WS :
 	(
 		' ' |
-		'\t' |
+		'\t' { tab(); } |
 		'\f'
 	)+
 	{
@@ -2994,13 +3001,16 @@ X_RE_LITERAL: '@'!'/' (X_RE_CHAR)+ '/' { $setType(RE_LITERAL); };
 
 NEWLINE:
 	(
-		'\n' |
 		(
+			'\n'
+			|
+			(
 			'\r' ('\n')?
+			)
 		)
+		{ newline(); }
 	)+
 	{
-		newline();
 		if (SkipWhitespace)
 		{
 			$setType(Token.SKIP);
@@ -3063,16 +3073,29 @@ RE_CHAR : RE_ESC | ~('/' | '\\' | '\r' | '\n' | ' ' | '\t' );
 protected
 X_RE_CHAR: RE_CHAR | ' ' | '\t';
 
-
 protected
-RE_ESC : '\\' (
+RE_ESC : '\\' (				
+				'+' |
+				'/' |
+				'(' |
+				')' |
+				'|' |
+				'.' |
+				'*' |
+				'?' |
+				'$' |
+				'^' |
+				'['	|
+				']' |
+				'{' |
+				'}' |
 	
 	// character scapes
 	// ms-help://MS.NETFrameworkSDKv1.1/cpgenref/html/cpconcharacterescapes.htm
 	
 				'a' |
 				'b' |
-				'c' 'A'..'Z' |
+				('c' 'A'..'Z') |
 				't' |
 				'r' |
 				'v' |
@@ -3080,8 +3103,8 @@ RE_ESC : '\\' (
 				'n' |
 				'e' |
 				(DIGIT)+ |
-				'x' HEXDIGIT HEXDIGIT |
-				'u' HEXDIGIT HEXDIGIT HEXDIGIT HEXDIGIT |
+				('x' HEXDIGIT HEXDIGIT) |
+				('u' HEXDIGIT HEXDIGIT HEXDIGIT HEXDIGIT) |
 				'\\' |
 				
 	// character classes
@@ -3104,25 +3127,10 @@ RE_ESC : '\\' (
 				'Z' |
 				'g' |
 				'B' |
-				
-				'k' |
-				
-				'/' |
-				'(' |
-				')' |
-				'|' |
-				'.' |
-				'*' |
-				'?' |
-				'$' |
-				'^' |
-				'['	|
-				']' |
-				'{' |
-				'}'
+				'k'			
 			 )
 			 ;
-
+			 
 protected
 DIGIT_GROUP : DIGIT (('_'! DIGIT DIGIT DIGIT) | DIGIT)*;
 

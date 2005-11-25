@@ -109,12 +109,14 @@ OR
 		<keyword>private</keyword>
 		<keyword>public</keyword>
 		<keyword>internal</keyword>
+		<keyword>partial</keyword>
 		
 		<keyword>class</keyword>
 		<keyword>struct</keyword>
 		<keyword>interface</keyword>
 		<keyword>enum</keyword>
 		<keyword>callable</keyword>
+		<keyword>of</keyword>
 		
 		<keyword>def</keyword>
 		<keyword>constructor</keyword>
@@ -197,5 +199,6 @@ OR
 		<keyword>print</keyword>
 		<keyword>array</keyword>
 		<keyword>matrix</keyword>
+		<keyword>yieldAll</keyword>
 	</keyword-list>
 </language>

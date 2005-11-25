@@ -147,6 +147,48 @@ namespace Boo.Lang.Compiler.TypeSystem
 			}
 			return false;
 		}
+
+		public IEntity ResolveExtension(INamespace ns, string name)
+		{
+			IType type = ns as IType;
+			if (null == type) return null;
+			
+			INamespace current = _current;
+			while (null != current)
+			{
+				IEntity found = ResolveExtensionForType(current, type, name);
+				if (null != found) return found;
+				current = current.ParentNamespace;
+			}
+
+			return null;
+		}
+
+		class IsNotExtensionOf
+		{
+			private IType _type;
+
+			public IsNotExtensionOf(IType type)
+			{
+				_type = type;
+			}
+
+			public bool Match(object item)
+			{
+				IMethod m = item as IMethod;
+				if (m == null) return true;
+				if (!m.IsExtension) return true;
+				return !m.GetParameters()[0].Type.IsAssignableFrom(_type);
+			}
+		}
+
+		private IEntity ResolveExtensionForType(INamespace ns, IType type, string name)
+		{
+			_buffer.Clear();
+			if (!ns.Resolve(_buffer, name, EntityType.Method)) return null;
+			_buffer.RemoveAll(new Predicate(new IsNotExtensionOf(type).Match));
+			return GetEntityFromBuffer();
+		}
 		
 		public IEntity ResolveQualifiedName(string name)
 		{			
@@ -247,17 +289,42 @@ namespace Boo.Lang.Compiler.TypeSystem
 				info = Resolve(node.Name, EntityType.Type);
 			}
 			
-			if (null == info || EntityType.Type != info.EntityType)
+			if (null == info)
 			{
-				_context.Errors.Add(CompilerErrorFactory.NameNotType(node, node.Name));
-				info = TypeSystemServices.ErrorEntity;
+				info = NameNotType(node);
 			}
 			else
 			{
-				node.Name = info.FullName;
+				if (EntityType.Type != info.EntityType)
+				{
+					if (EntityType.Ambiguous == info.EntityType)
+					{
+						info = AmbiguousReference(node, (Ambiguous)info);
+					}
+					else
+					{
+						info = NameNotType(node);
+					}
+				}
+				else
+				{
+					node.Name = info.FullName;
+				}
 			}
 			
 			node.Entity = info;
+		}
+		
+		private IEntity NameNotType(SimpleTypeReference node)
+		{
+			_context.Errors.Add(CompilerErrorFactory.NameNotType(node, node.Name));
+			return TypeSystemServices.ErrorEntity;
+		}
+		
+		private IEntity AmbiguousReference(SimpleTypeReference node, Ambiguous entity)
+		{
+			_context.Errors.Add(CompilerErrorFactory.AmbiguousReference(node, node.Name, entity.Entities));
+			return TypeSystemServices.ErrorEntity;
 		}
 		
 		public IField ResolveField(IType type, string name)

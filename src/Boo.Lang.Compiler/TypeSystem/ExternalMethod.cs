@@ -44,11 +44,27 @@ namespace Boo.Lang.Compiler.TypeSystem
 		int _acceptVarArgs = -1;
 
 		int _isDuckTyped = -1;
+
+		int _isExtension = -1;
 		
 		internal ExternalMethod(TypeSystemServices manager, MethodBase mi)
 		{
 			_typeSystemServices = manager;
 			_mi = mi;
+		}
+
+		public bool IsExtension
+		{
+			get
+			{
+				if (-1 == _isExtension)
+				{
+					_isExtension = MetadataUtil.IsAttributeDefined(_mi,  Types.ExtensionAttribute)
+						? 1
+						: 0;
+				}
+				return 1 == _isExtension;
+			}
 		}
 
 		public bool IsDuckTyped

@@ -44,11 +44,18 @@ namespace antlr
 	public abstract class Parser : IParserDebugSubject
 	{
 		// Used to store event delegates
-		private EventHandlerList events_ = new EventHandlerList();
+		private EventHandlerList events_; 
 
 		protected internal EventHandlerList Events 
 		{
-			get	{ return events_;	}
+			get
+			{
+				if (null == events_)
+				{
+					events_ = new EventHandlerList();
+				}
+				return events_;
+			}
 		}
 
 		// The unique keys for each event that Parser [objects] can generate
@@ -81,7 +88,7 @@ namespace antlr
 		protected internal AST returnAST;
 		
 		/*AST support code; parser and treeparser delegate to this object */
-		protected internal ASTFactory astFactory = new ASTFactory();
+		protected internal ASTFactory _astFactory;
 		
 		private bool ignoreInvalidDebugCalls = false;
 		
@@ -262,6 +269,24 @@ namespace antlr
 		{
 			return returnAST;
 		}
+		
+		public virtual ASTFactory astFactory
+		{
+			get
+			{
+				if (null == _astFactory)
+				{
+					_astFactory = new ASTFactory();
+				}
+				return _astFactory;
+			}
+			
+			set
+			{
+				_astFactory = value;
+			}
+		}
+		
 		public virtual ASTFactory getASTFactory()
 		{
 			return astFactory;

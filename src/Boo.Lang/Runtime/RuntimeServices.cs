@@ -30,6 +30,7 @@ using System;
 using System.Reflection;
 using System.Collections;
 using System.IO;
+using System.Reflection.Emit;
 using System.Text;
 using System.Text.RegularExpressions;
 
@@ -51,7 +52,8 @@ namespace Boo.Lang.Runtime
 
 		const BindingFlags InvokeOperatorBindingFlags = BindingFlags.Public |
 												BindingFlags.Static |
-												BindingFlags.InvokeMethod;
+												BindingFlags.InvokeMethod |
+												BindingFlags.FlattenHierarchy;
 
 		const BindingFlags SetPropertyBindingFlags = DefaultBindingFlags |
 												BindingFlags.SetProperty |
@@ -867,15 +869,12 @@ namespace Boo.Lang.Runtime
 
 		public static bool EqualityOperator(object lhs, object rhs)
 		{
-			if (lhs == rhs)
-			{
-				return true;
-			}
-
-			if (null == lhs || null == rhs)
-			{
-				return false;
-			}
+			if (lhs == rhs) return true;
+			
+			// Some types do overload Equals to compare
+			// against null values
+			if (null == lhs) return rhs.Equals(lhs);			
+			if (null == rhs) return lhs.Equals(rhs);
 
 			TypeCode lhsTypeCode = Type.GetTypeCode(lhs.GetType());
 			TypeCode rhsTypeCode = Type.GetTypeCode(rhs.GetType());
@@ -1387,6 +1386,11 @@ namespace Boo.Lang.Runtime
 		public static IConvertible CheckNumericPromotion(object value)
 		{
 			IConvertible convertible = (IConvertible)value;
+			return CheckNumericPromotion(convertible);
+		}
+		
+		public static IConvertible CheckNumericPromotion(IConvertible convertible)
+		{
 			if (IsPromotableNumeric(convertible.GetTypeCode()))
 			{
 				return convertible;
@@ -1510,19 +1514,21 @@ namespace Boo.Lang.Runtime
 			}
 			return CheckNumericPromotion(value).ToBoolean(null);
 		}
+		
+#region bool conversion
+		private static IDictionary _converterCache = Hashtable.Synchronized(new Hashtable());
+
+		private delegate bool BoolConverter(object value);
 
 		public static bool ToBool(object value)
 		{
-			if (null == value)
-			{
-				return false;
-			}
-
-			if (value is ValueType)
-			{
-				return UnboxBoolean(value);
-			}
-
+			if (null == value) return false;
+			BoolConverter converter = GetBoolConverter(value.GetType());
+			return converter(value);
+		}
+		
+		private static bool ToBoolTrue(object value)
+		{
 			return true;
 		}
 
@@ -1530,6 +1536,79 @@ namespace Boo.Lang.Runtime
 		{
 			return 0 != value;
 		}
+		
+		static BoolConverter GetBoolConverter(Type type)
+		{
+			BoolConverter converter = (BoolConverter) _converterCache[type];
+			if (null == converter)
+			{
+				converter = CreateBoolConverter(type);
+				_converterCache.Add(type, converter);
+			}
+			return converter;
+		}
+		
+		static BoolConverter CreateBoolConverter(Type type)
+		{
+			MethodInfo method = FindImplicitConversionOperator(type, typeof(bool));
+			if (null != method) return EmitBoolConverter(type, method);
+			if (type.IsValueType) return new BoolConverter(UnboxBoolean);
+			return new BoolConverter(ToBoolTrue);
+		}
+
+		private static BoolConverter EmitBoolConverter(Type from, MethodInfo conversion)
+		{
+			MethodInfo generatedMethod = EmitConversionProxy(from, typeof (bool), conversion);
+			return (BoolConverter)Delegate.CreateDelegate(typeof(BoolConverter), generatedMethod);
+		}
+
+#endregion
+
+#region conversion proxy helpers
+		private static MethodInfo EmitConversionProxy(Type from, Type to, MethodInfo conversion)
+		{
+			AssemblyName name = new AssemblyName();
+			name.Name = "converter-proxy-" + _converterCache.Count;
+			AssemblyBuilder builder = AppDomain.CurrentDomain.DefineDynamicAssembly(name, AssemblyBuilderAccess.Run);
+			ModuleBuilder module = builder.DefineDynamicModule(name.Name);
+			TypeBuilder type = module.DefineType("ConverterProxy", TypeAttributes.Public);
+			MethodBuilder m = type.DefineMethod("Invoke", MethodAttributes.Static | MethodAttributes.Public, to,
+			                                    new Type[] {typeof (object)});
+			ILGenerator il = m.GetILGenerator();
+			il.Emit(OpCodes.Ldarg_0);
+	
+			if (from.IsValueType)
+			{
+				il.Emit(OpCodes.Unbox, from);
+				il.Emit(OpCodes.Ldobj, from);
+			}
+			else
+			{
+				il.Emit(OpCodes.Castclass, from);
+			}
+	
+			il.EmitCall(OpCodes.Call, conversion, null);
+			il.Emit(OpCodes.Ret);
+
+			return type.CreateType().GetMethod("Invoke");
+		}
+
+		private static MethodInfo FindImplicitConversionOperator(Type from, Type to)
+		{
+			const BindingFlags ConversionOperatorFlags = BindingFlags.Static | BindingFlags.Public | BindingFlags.FlattenHierarchy;
+			MethodInfo[] methods = from.GetMethods(ConversionOperatorFlags);
+			foreach (MethodInfo m in methods)
+			{
+				if (m.Name != "op_Implicit") continue;
+				if (m.ReturnType != to) continue;
+				ParameterInfo[] parameters = m.GetParameters();
+				if (parameters.Length != 1) continue;
+				if (!parameters[0].ParameterType.IsAssignableFrom(from)) continue;
+				return m;
+			}
+			return null;
+		}
+#endregion
 
 		static void Error(string name, params object[] args)
 		{

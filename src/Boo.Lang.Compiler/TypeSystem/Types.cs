@@ -107,6 +107,8 @@ namespace Boo.Lang.Compiler.TypeSystem
 		
 		public static readonly Type IntPtr = typeof(IntPtr);
 		
+		public static readonly Type UIntPtr = typeof(UIntPtr);
+		
 		public static readonly Type Type = typeof(Type);
 		
 		public static readonly Type MulticastDelegate = typeof(MulticastDelegate);
@@ -116,10 +118,14 @@ namespace Boo.Lang.Compiler.TypeSystem
 		public static readonly Type DuckTypedAttribute = typeof(Boo.Lang.DuckTypedAttribute);
 
 		public static readonly Type ExtensionAttribute = typeof(Boo.Lang.ExtensionAttribute);
+		
+		public static readonly Type DllImportAttribute = typeof(System.Runtime.InteropServices.DllImportAttribute);
 
 		public static readonly Type ModuleAttribute = typeof(Boo.Lang.ModuleAttribute);
 
 		public static readonly Type ParamArrayAttribute = typeof(ParamArrayAttribute);
+		
+		public static readonly Type DefaultMemberAttribute = typeof(System.Reflection.DefaultMemberAttribute);
 
 	}
 }

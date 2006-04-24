@@ -41,13 +41,14 @@ if "--debug" in argv:
 
 print """Welcome to booish, an interpreter for the boo programming language.
 
-Running boo ${BooVersion}.
+Running boo ${BooVersion} in CLR v${Environment.Version}.
 
 The following builtin functions are available:
     dir(Type): lists the members of a type
     help(Type): prints detailed information about a type
     load(string): evals an external boo file
     globals(): returns the names of all variables known to the interpreter
+	getRootNamespace(): namespace navigation
 
 Enter boo code in the prompt below."""
 

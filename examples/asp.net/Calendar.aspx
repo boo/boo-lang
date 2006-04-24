@@ -1,10 +1,18 @@
 <script language="Boo" runat="server">
-    def Calendar1Selected():
+         /* 
+	 Inline boo code is supported, as is -wsa mode ("end" instead of indenting):
+	 
+	 To enable whitespace agnostic mode, add this to the top of your asp page:
+	 < %@ Page Language="Boo" CompilerOptions="-wsa" % >
+	 */
+
+def Calendar1Selected():
         Label1.Text = 'Boo for .NET says you picked ' + Calendar1.SelectedDate.ToString('D')
 
-    def Button1Click():
+def Button1Click():
         Calendar1.VisibleDate = System.Convert.ToDateTime(Edit1.Text)
         Label1.Text = 'Boo for .NET says you set ' + Calendar1.VisibleDate.ToString('D')
+	
 </script>
 
 <body style="font:18pt Verdana">

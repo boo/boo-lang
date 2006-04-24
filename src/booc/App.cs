@@ -39,6 +39,7 @@ using Boo.Lang.Compiler;
 using Boo.Lang.Compiler.IO;
 using Boo.Lang.Compiler.Pipelines;
 using Boo.Lang.Compiler.Resources;
+using Boo.Lang;
 
 namespace BooC
 {
@@ -47,9 +48,12 @@ namespace BooC
 	/// </summary>
 	class App
 	{
-        ArrayList _responseFileList = new ArrayList();
-        CompilerParameters _options = null;
-
+		ArrayList _responseFileList = new ArrayList();
+		CompilerParameters _options = null;
+		
+		ArrayList _references = new ArrayList();
+		bool _noConfig = false;
+		
 		/// <summary>
 		/// The main entry point for the application.
 		/// </summary>
@@ -60,11 +64,10 @@ namespace BooC
 			{
 				using (StreamWriter writer = new StreamWriter(Console.OpenStandardOutput(), Encoding.UTF8))
 				{
+					// leave the byte order mark in its own line and out
+					writer.WriteLine();
+					
 					Console.SetOut(writer);
-
-					// leave the byte order mark in its own line
-					Console.WriteLine(); 
-
 					return new App().Run(args);
 				}
 			}
@@ -80,20 +83,41 @@ namespace BooC
 			
 			AppDomain.CurrentDomain.AssemblyResolve += new ResolveEventHandler(AssemblyResolve);
 			
+			CheckBooCompiler();
+			
 			try
 			{
 				DateTime start = DateTime.Now;
 				
-				BooCompiler compiler = new BooCompiler();
-				_options = compiler.Parameters;
+				_options = new CompilerParameters(false); //false means no stdlib loading yet
 				_options.GenerateInMemory = false;
 				
+				BooCompiler compiler = new BooCompiler(_options);
+				
 				ParseOptions(args, _options);
+				
 				if (0 == _options.Input.Count)
 				{
 					throw new ApplicationException(Boo.Lang.ResourceManager.GetString("BooC.NoInputSpecified"));
 				}
-
+				
+				//move standard libpaths below any new ones:
+				_options.LibPaths.Add(_options.LibPaths[0]);
+				_options.LibPaths.Add(_options.LibPaths[1]);
+				_options.LibPaths.RemoveAt(0);
+				_options.LibPaths.RemoveAt(0);
+				
+				if (_options.StdLib)
+				{
+					_options.LoadDefaultReferences();
+				}
+				else if (!_noConfig)
+				{
+					_references.Insert(0,"mscorlib");
+				}
+				
+				LoadReferences();
+				
 				if (_options.TraceSwitch.TraceInfo)
 				{
 					compiler.Parameters.Pipeline.BeforeStep += new CompilerStepEventHandler(OnBeforeStep);
@@ -138,6 +162,39 @@ namespace BooC
 			return resultCode;
 		}
 		
+		void LoadReferences()
+		{
+			foreach(string r in _references)
+			{
+				_options.References.Add(_options.LoadAssembly(r, true));
+			}
+		}
+		
+		void CheckBooCompiler()
+		{
+			string path = Path.Combine(Path.GetDirectoryName(
+						Assembly.GetExecutingAssembly().Location),
+					"Boo.Lang.Compiler.dll");
+			if (File.Exists(path))
+			{
+				foreach (Assembly a in AppDomain.CurrentDomain.GetAssemblies())
+				{
+					if (a.FullName.StartsWith("Boo.Lang.Compiler"))
+					{
+						if (string.Compare(a.Location, path, true) != 0)
+						{
+							//can't use ResourceManager, boo.lang.dll may be out of date
+							string msg=string.Format("WARNING: booc is not using the Boo.Lang.Compiler.dll next to booc.exe.  Using '{0}' instead of '{1}'.  You may need to remove boo dlls from the GAC using gacutil or Mscorcfg.",
+									a.Location, path);
+							//has to be all 1 line for things like msbuild that parse booc output.
+							Console.WriteLine(msg);
+						}
+						break;
+					}
+				}
+			}
+		}
+		
 		string Consume(TextReader reader)
 		{
 			StringWriter writer = new StringWriter();
@@ -149,11 +206,18 @@ namespace BooC
 			}
 			return writer.ToString();
 		}
-
+		
+		void DoLogo()
+		{
+			Console.Write("Boo Compiler version "+Builtins.BooVersion.ToString());
+			Console.WriteLine(" (CLR v"+Environment.Version.ToString()+")");
+		}
+		
 		void ParseOptions(string[] args, CompilerParameters _options)
 		{
 			bool debugSteps = false;
 			bool whiteSpaceAgnostic = false;
+			bool noLogo = false;
 			
 			ArrayList arglist = new ArrayList(args);
 			ExpandResponseFiles(ref arglist);
@@ -195,6 +259,7 @@ namespace BooC
 										case "vv":
 										{
 											_options.TraceSwitch.Level = TraceLevel.Info;
+											MonitorAppDomain();
 											break;
 										}
 										
@@ -214,7 +279,7 @@ namespace BooC
 
 							case 'r':
 							{
-								if (arg.IndexOf(":") > 2)
+								if (arg.IndexOf(":") > 2 && arg.Substring(1, 9) != "reference")
 								{
 									switch (arg.Substring(1, 8))
 									{
@@ -222,17 +287,16 @@ namespace BooC
 										{
 											string resourceFile;
 											int start = arg.IndexOf(":") + 1;
-											int comma = arg.LastIndexOf(',');
+											resourceFile = StripQuotes(arg.Substring(start));
+											int comma = resourceFile.LastIndexOf(',');
 											if (comma >= 0)
 											{
-												resourceFile = arg.Substring(start, comma-start);
-												string resourceName = arg.Substring(comma+1);
+												string resourceName = resourceFile.Substring(comma+1);
+												resourceFile = resourceFile.Substring(0, comma);
 												_options.Resources.Add(new NamedFileResource(resourceFile, resourceName));
-
 											}
 											else
 											{
-												resourceFile = arg.Substring(start);
 												_options.Resources.Add(new FileResource(resourceFile));
 											}
 											break;
@@ -247,15 +311,72 @@ namespace BooC
 								}
 								else
 								{
-									string assemblyName = arg.Substring(3);
-									_options.References.Add(LoadAssembly(assemblyName));
+									string assemblyName = StripQuotes(arg.Substring(arg.IndexOf(":")+1));
+									_references.Add(assemblyName);
+								}
+								break;
+							}
+							
+							case 'l':
+							{
+								switch (arg.Substring(1, 3))
+								{
+									case "lib":
+									{
+										string paths = arg.Substring(arg.IndexOf(":")+1);
+										if (paths == "")
+										{
+											Console.WriteLine(Boo.Lang.ResourceManager.Format("BooC.BadLibPath", arg));
+											break;
+										}
+										
+										foreach(string dir in paths.Split(new Char[] {','}))
+										{
+											if (Directory.Exists(dir))
+											{
+												_options.LibPaths.Add(dir);
+											}
+											else
+											{
+												Console.WriteLine(Boo.Lang.ResourceManager.Format("BooC.BadLibPath", dir));
+											}
+										}
+										break;
+									}
+
+									default:
+									{
+										InvalidOption(arg);
+										break;
+									}
+								}
+								break;
+							}
+							
+							case 'n':
+							{
+								if (arg == "-nologo")
+								{
+									noLogo = true;
+								}
+								else if (arg == "-noconfig")
+								{
+									_noConfig = true;
+								}
+								else if (arg == "-nostdlib")
+								{
+									_options.StdLib = false;
+								}
+								else
+								{
+									InvalidOption(arg);
 								}
 								break;
 							}
 							
 							case 'o':
 							{
-								_options.OutputAssembly = arg.Substring(arg.IndexOf(":")+1);
+								_options.OutputAssembly = StripQuotes(arg.Substring(arg.IndexOf(":")+1));
 								break;
 							}
 							
@@ -311,7 +432,7 @@ namespace BooC
 								{
 									case "srcdir":
 									{
-										string path = arg.Substring(8);
+										string path = StripQuotes(arg.Substring(8));
 										AddFilesForPath(path, _options);
 										break;
 									}
@@ -324,7 +445,24 @@ namespace BooC
 								}
 								break;
 							}
-
+							
+							case 'k':
+							{
+								if (arg.Substring(1, 7) == "keyfile")
+								{
+									_options.KeyFile = StripQuotes(arg.Substring(9));
+								}
+								else if (arg.Substring(1, 12) == "keycontainer")
+								{
+									_options.KeyContainer = StripQuotes(arg.Substring(14));
+								}	
+								else
+								{
+									InvalidOption(arg);
+								}
+								break;
+							}
+							
 							case 'd':
 							{
 								switch (arg.Substring(1))
@@ -354,6 +492,12 @@ namespace BooC
 										break;
 									}
 									
+									case "delaysign":
+									{
+										_options.DelaySign = true;
+										break;
+									}
+									
 									default:
 									{
 										InvalidOption(arg);
@@ -372,16 +516,16 @@ namespace BooC
 										// TODO: Add check for runtime support for "mono resources"
 										string resourceFile;
 										int start = arg.IndexOf(":") + 1;
-										int comma = arg.LastIndexOf(',');
+										resourceFile = StripQuotes(arg.Substring(start));
+										int comma = resourceFile.LastIndexOf(',');
 										if (comma >= 0)
 										{
-											resourceFile = arg.Substring(start, comma-start);
-											string resourceName = arg.Substring(comma+1);
+											string resourceName = resourceFile.Substring(comma+1);
+											resourceFile = resourceFile.Substring(0, comma);
 											_options.Resources.Add(new NamedEmbeddedFileResource(resourceFile, resourceName));
 										}
 										else
 										{
-											resourceFile = arg.Substring(start);
 											_options.Resources.Add(new EmbeddedFileResource(resourceFile));
 										}
 										break;
@@ -405,7 +549,7 @@ namespace BooC
 					}
 					else
 					{
-						_options.Input.Add(new FileInput(arg));
+						_options.Input.Add(new FileInput(StripQuotes(arg)));
 					}
 				}
 			}
@@ -420,14 +564,44 @@ namespace BooC
 			}
 			if (debugSteps)
 			{
-				_options.Pipeline.AfterStep += new CompilerStepEventHandler(DebugModuleAfterStep);
+				_options.Pipeline.AfterStep += new CompilerStepEventHandler(new StepDebugger().AfterStep);
+			}
+			if (!noLogo)
+			{
+				DoLogo();
 			}
 		}
-
-		private void DebugModuleAfterStep(object sender, CompilerStepEventArgs args)
+		
+		private string StripQuotes(string s)
 		{
-			Console.WriteLine("********* {0} *********", args.Step);
-			args.Context.CompileUnit.Accept(new BooPrinterVisitor(Console.Out, BooPrinterVisitor.PrintOptions.PrintLocals));
+			if (s.Length > 1 && s.StartsWith("\"") && s.EndsWith("\""))
+			{
+				return s.Substring(1,s.Length-2);
+			}
+			return s;
+		}
+		
+		private class StepDebugger
+		{
+			string _last;
+			
+			public void AfterStep(object sender, CompilerStepEventArgs args)
+			{
+				Console.WriteLine("********* {0} *********", args.Step);
+				
+				StringWriter writer = new StringWriter();				
+				args.Context.CompileUnit.Accept(new BooPrinterVisitor(writer, BooPrinterVisitor.PrintOptions.PrintLocals));
+				string code = writer.ToString();
+				if (code != _last)
+				{
+					Console.WriteLine(code);
+				}
+				else
+				{
+					Console.WriteLine("no changes");
+				}
+				_last = code;
+			}
 		}
 
 		ArrayList LoadResponseFile(string file)
@@ -499,19 +673,18 @@ namespace BooC
 		void AddDefaultResponseFile(ref ArrayList arglist)
 		{
 			ArrayList result = new ArrayList();
-			bool loadDefault = true;
 			foreach (string arg in arglist)
 			{
 				if (arg == "-noconfig")
 				{
-					loadDefault = false;
+					_noConfig = true;
 				}
 				else
 				{
 					result.Add(arg);
 				}
 			}
-			if (loadDefault)
+			if (!_noConfig)
 			{
 				string file = Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "booc.rsp");
 				if (File.Exists(file))
@@ -520,26 +693,6 @@ namespace BooC
 				}
 			}
 			arglist = result;
-		}
-
-		Assembly LoadAssembly(string assemblyName)
-		{
-			string fname = Path.GetFullPath(assemblyName);
-			if (File.Exists(fname)) return Assembly.LoadFrom(fname);
-		
-			Assembly reference = null;
-			try
-			{
-				reference = Assembly.LoadWithPartialName(assemblyName);
-			}
-			catch (FileLoadException x)
-			{
-			}			
-			if (null == reference)
-			{
-				throw new ApplicationException(Boo.Lang.ResourceManager.Format("BooC.UnableToLoadAssembly", assemblyName));
-			}
-			return reference;
 		}
 		
 		void OnBeforeStep(object sender, CompilerStepEventArgs args)
@@ -559,7 +712,7 @@ namespace BooC
 
 		bool IsFlag(string arg)
 		{
-            return arg[0] == '-';
+			return arg[0] == '-';
 		}
 
 		void AddFilesForPath(string path, CompilerParameters _options)
@@ -575,7 +728,38 @@ namespace BooC
 			}
 		}
 		
-		static public Assembly AssemblyResolve(object sender, ResolveEventArgs args)
+		void MonitorAppDomain()
+		{
+			if (_options.TraceSwitch.TraceInfo)
+			{
+				AppDomain.CurrentDomain.AssemblyLoad += new AssemblyLoadEventHandler(OnAssemblyLoad);
+				foreach(Assembly a in AppDomain.CurrentDomain.GetAssemblies())
+				{
+					Trace.WriteLine("ASSEMBLY AT STARTUP: "+GetAssemblyLocation(a));
+				}
+			}
+		}
+		
+		static void OnAssemblyLoad(object sender, AssemblyLoadEventArgs args)
+		{
+			Trace.WriteLine("ASSEMBLY LOADED: " + GetAssemblyLocation(args.LoadedAssembly));
+		}
+		
+		static string GetAssemblyLocation(Assembly a)
+		{
+			string loc;
+			try
+			{
+				loc = a.Location;
+			}
+			catch (Exception x)
+			{
+				loc = "<dynamic>"+a.FullName;
+			}
+			return loc;
+		}
+		
+		static Assembly AssemblyResolve(object sender, ResolveEventArgs args)
 		{
 			string simpleName = args.Name.Split(',')[0];
 			string fileName = Path.Combine(Environment.CurrentDirectory, 

@@ -54,6 +54,8 @@ namespace Boo.Lang.Compiler.TypeSystem
 		
 		public ExternalType IntPtrType;
 		
+		public ExternalType UIntPtrType;
+		
 		public ExternalType ObjectType;
 		
 		public ExternalType ValueTypeType;
@@ -121,6 +123,8 @@ namespace Boo.Lang.Compiler.TypeSystem
 		public ExternalType IListType;
 		
 		public ExternalType IDictionaryType;
+		
+		public ExternalType SystemAttribute;
 		
 		protected Hashtable _primitives = new Hashtable();
 		
@@ -197,8 +201,10 @@ namespace Boo.Lang.Compiler.TypeSystem
 			Cache(ApplicationExceptionType = new ExternalType(this, Types.ApplicationException));
 			Cache(ExceptionType = new ExternalType(this, Types.Exception));
 			Cache(IntPtrType = new ExternalType(this, Types.IntPtr));
+			Cache(UIntPtrType = new ExternalType(this, Types.UIntPtr));
 			Cache(MulticastDelegateType = new ExternalType(this, Types.MulticastDelegate));
 			Cache(DelegateType = new ExternalType(this, Types.Delegate));
+			Cache(SystemAttribute = new ExternalType(this, typeof(System.Attribute)));
 						
 			ObjectArrayType = GetArrayType(ObjectType, 1);
 
@@ -579,7 +585,69 @@ namespace Boo.Lang.Compiler.TypeSystem
 			return lhs.IsAssignableFrom(rhs)
 				|| (lhs.IsInterface && !rhs.IsFinal)
 				|| (rhs.IsInterface && !lhs.IsFinal)
-				|| CanBeReachedByDownCastOrPromotion(lhs, rhs);
+				|| CanBeReachedByDownCastOrPromotion(lhs, rhs)
+				|| FindImplicitConversionOperator(rhs,lhs) != null;
+		}
+		
+		public IMethod FindExplicitConversionOperator(IType fromType, IType toType)
+		{
+			return FindConversionOperator("op_Explicit", fromType, toType);
+		}
+		
+		public IMethod FindImplicitConversionOperator(IType fromType, IType toType)
+		{
+			return FindConversionOperator("op_Implicit", fromType, toType);
+		}
+
+		public IMethod FindConversionOperator(string name, IType fromType, IType toType)
+		{	
+			while (fromType != this.ObjectType)
+			{
+				foreach (IEntity entity in fromType.GetMembers())
+				{
+					if (EntityType.Method == entity.EntityType &&
+						name == entity.Name)
+					{
+						IMethod method = (IMethod)entity;
+						if (IsConversionOperator(method, fromType, toType))
+						{
+							return method;
+						}
+					}
+				}
+				foreach (IEntity entity in toType.GetMembers())
+				{
+					if (EntityType.Method == entity.EntityType &&
+						name == entity.Name)
+					{
+						IMethod method = (IMethod)entity;
+						if (IsConversionOperator(method, fromType, toType))
+						{
+							return method;
+						}
+					}
+				}
+				fromType = fromType.BaseType;
+				if (null == fromType) break;
+			}
+			return null;
+		}
+		
+		bool IsConversionOperator(IMethod method, IType fromType, IType toType)
+		{
+			if (method.IsStatic)
+			{
+				if (method.ReturnType == toType)
+				{
+					IParameter[] parameters = method.GetParameters();
+					if (1 == parameters.Length &&
+						fromType == parameters[0].Type)
+					{
+						return true;
+					}
+				}
+			}
+			return false;
 		}
 		
 		public bool IsCallableTypeAssignableFrom(ICallableType lhs, IType rhs)
@@ -875,6 +943,20 @@ namespace Boo.Lang.Compiler.TypeSystem
 			return null;
 		}
 		
+		public virtual bool IsModule(Type type)
+		{
+			//return MetadataUtil.IsAttributeDefined(type, Types.ModuleAttribute);
+			return type.IsClass
+				&& type.IsSealed
+				&& !type.IsNestedPublic
+				&& MetadataUtil.IsAttributeDefined(type, Types.ModuleAttribute);			
+		}
+		
+		public bool IsAttribute(IType type)
+		{
+			return type.IsSubclassOf(SystemAttribute);
+		}
+		
 		public static IType GetType(Node node)
 		{
 			return ((ITypedEntity)GetEntity(node)).Type;
@@ -1074,7 +1156,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 			{
 				if (i > 0) { _buffer.Append(", "); }
 				if (method.AcceptVarArgs && i == parameters.Length-1) { _buffer.Append('*'); }
-				_buffer.Append(parameters[i].Type.FullName);
+				_buffer.Append(parameters[i].Type);
 			}
 			_buffer.Append(")");
 			return _buffer.ToString();
@@ -1141,6 +1223,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 		protected void AddPrimitiveType(string name, ExternalType type)
 		{
 			_primitives[name] = type;
+			type.PrimitiveName = name;
 		}
 		
 		protected void AddBuiltin(BuiltinFunction function)
@@ -1342,7 +1425,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 		{
 			throw CompilerErrorFactory.InvalidNode(node);
 		}
-
+		
 		public class DuckTypeImpl : ExternalType
 		{
 			public DuckTypeImpl(TypeSystemServices typeSystemServices) :

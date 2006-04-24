@@ -69,7 +69,7 @@ class InteractiveInterpreter(AbstractInterpreter):
 		InitializeStandardReferences()
 		
 	def ConsoleLoopEval():			
-		while line=prompt(">>> "):
+		while (line=prompt(">>> ")) is not null:
 			try:		
 				line = ReadBlock(line) if line[-1:] in _blockStarters
 				InternalLoopEval(line)
@@ -134,6 +134,7 @@ class InteractiveInterpreter(AbstractInterpreter):
 		SetValue("print", { value | _print(value) })
 		SetValue("load", load)
 		SetValue("globals", globals)
+		SetValue("getRootNamespace", Namespace.GetRootNamespace)
 		
 	def globals():
 		return array(string, _values.Keys)

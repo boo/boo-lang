@@ -51,8 +51,112 @@ class CodeGeneratorTestFixture:
 		stmt.Name = "anArray"
 		stmt.Type = CodeTypeReference(typeof((int)))
 		
-		expected = "anArray as (int, 1)"
+		expected = "anArray as (int)"
 		
 		buffer = StringWriter()
 		_generator.GenerateCodeFromStatement(stmt, buffer, CodeGeneratorOptions())
 		Assert.AreEqual(expected, buffer.ToString().Trim())
+		
+	[Test]
+	def TestArrayCreateSize():
+		e = CodeArrayCreateExpression(CodeTypeReference(int), 10)
+		
+		expected = "array(int, 10)"
+		
+		buffer = StringWriter()
+		_generator.GenerateCodeFromExpression(e, buffer, CodeGeneratorOptions())
+		Assert.AreEqual(expected, buffer.ToString().Trim())
+		
+	[Test]
+	def TestArrayCreateSizeExpression():
+		e = CodeArrayCreateExpression(CodeTypeReference(int), 
+			CodeVariableReferenceExpression("sz"))
+		
+		expected = "array(int, sz)"
+		
+		buffer = StringWriter()
+		_generator.GenerateCodeFromExpression(e, buffer, CodeGeneratorOptions())
+		Assert.AreEqual(expected, buffer.ToString().Trim())
+		
+	[Test]
+	def TestArrayCreateSingle():
+		e = CodeArrayCreateExpression(CodeTypeReference(int), *(CodePrimitiveExpression(2),))
+		
+		expected = "(of int: 2)"
+		
+		buffer = StringWriter()
+		_generator.GenerateCodeFromExpression(e, buffer, CodeGeneratorOptions())
+		Assert.AreEqual(expected, buffer.ToString().Trim())
+		
+	[Test]
+	def TestArrayCreateMultiple():
+		e = CodeArrayCreateExpression(CodeTypeReference(int), CodePrimitiveExpression(2),
+			CodePrimitiveExpression(3), CodePrimitiveExpression(4))
+		
+		expected = "(of int: 2, 3, 4)"
+		
+		buffer = StringWriter()
+		_generator.GenerateCodeFromExpression(e, buffer, CodeGeneratorOptions())
+		Assert.AreEqual(expected, buffer.ToString().Trim())
+	
+	[Test]
+	def TestFixIndent1():
+		//1. code is indented one tab, but needs to be indented 8 spaces.
+		//2. also, there are comments before the code that should be ignored
+		//3. also, stuff inside triple quoted strings should not be altered
+		//3. extra leading whitespace converted to spaces as well,
+		//   so tabs and spaces aren't mixed on the same line
+		code = """
+	//asdf
+	   #asgdawg
+/* 
+	 Inline boo code 
+	 	/*is 
+		supported:
+		*/
+	 */
+	def Calendar1Selected():
+		Label1.Text = ("""
+		code+='"""'
+		code+="""Boo for .NET 
+	says 
+		you picked """
+		code+='"""'
+		code+=""" + Calendar1.SelectedDate.ToString('D'))
+
+	def Button1Click():
+		Calendar1.VisibleDate = System.Convert.ToDateTime(Edit1.Text)
+		Label1.Text = 'Boo for .NET says you set ' + Calendar1.VisibleDate.ToString('D')
+	
+"""
+
+		expected = """
+        	//asdf
+        	   #asgdawg
+        /* 
+        	 Inline boo code 
+        	 	/*is 
+        		supported:
+        		*/
+        	 */
+        def Calendar1Selected():
+            Label1.Text = ("""
+		expected+='"""'
+		expected+="""Boo for .NET 
+	says 
+		you picked """
+		expected+='"""'
+		expected+=""" + Calendar1.SelectedDate.ToString('D'))
+        
+        def Button1Click():
+            Calendar1.VisibleDate = System.Convert.ToDateTime(Edit1.Text)
+            Label1.Text = 'Boo for .NET says you set ' + Calendar1.VisibleDate.ToString('D')
+        
+        
+"""
+		
+		result = Boo.Lang.CodeDom.BooCodeGenerator.FixIndent(code, "    ", 2, false)
+		result = result.Replace("\r\n","\n").Trim()
+		expected = expected.Replace("\r\n","\n").Trim()
+		Assert.AreEqual(expected, result)
+

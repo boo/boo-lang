@@ -143,7 +143,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 		{
 			IEntity entity = node.Entity;
 			
-			if (null == entity) return false;
+			if (null == entity) return true;
 			
 			switch (entity.EntityType)
 			{
@@ -206,7 +206,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 				int score = candidate.AcceptVarArgs
 					? CalculateVarArgsScore(parameters, args)
 					: CalculateExactArgsScore(parameters, args);
-				
+
 				if (score >= 0)
 				{
 					// only positive scores are compatible
@@ -277,19 +277,68 @@ namespace Boo.Lang.Compiler.TypeSystem
 		private int CalculateArgumentScore(IParameter param, IType parameterType, Node arg)
 		{
 			IType argumentType = GetExpressionTypeOrEntityType(arg);
-			if (IsValidByRefArg(param, parameterType, argumentType, arg))
+			if (param.IsByRef)
 			{
-				// boo does not like byref
-				return 3;
+				if (IsValidByRefArg(param, parameterType, argumentType, arg))
+				{
+					return 8;
+				}
 			}
 			else if (parameterType == argumentType)
 			{
 				// exact match
+				return 7;
+			}
+			else if (TypeSystemServices.FindImplicitConversionOperator(argumentType, parameterType) != null)
+			{
+				// implicit conversion
 				return 6;
 			}
 			else if (parameterType.IsAssignableFrom(argumentType))
-			{
+			{				
 				// upcast
+				// parameterType == ICallableType, "ThreadStart"
+				// argumentType == ICallableType, "Anonymous Closure"
+				// RULES:
+				// Number of arguments for argumentType && parameterType == same
+				// Either: all arguments "IsAssignableFrom"
+				//			OR
+				//			all arguments == exactly (best case scenario)
+				// 7 -- "exact match" (best case)
+				// 6 -- "not exact match, but very close" (this is OK)
+				// 5 -- "assignable, but wrong number of parameters / whatever" (boo does the normal thing)
+				ICallableType callableType = parameterType as ICallableType;
+				ICallableType callableArg = argumentType as ICallableType;
+				if (callableType != null && callableArg != null)
+				{
+					CallableSignature siggyType = callableType.GetSignature();
+					CallableSignature siggyArg = callableArg.GetSignature();
+					// Ensuring that these callables have same number of arguments.
+					// def foo(a, b,c) == { a, b, c| print foobar }					
+					if (siggyType.Parameters.Length == siggyArg.Parameters.Length)
+					{
+						bool exactMatch = true;
+						bool closeEnough = true;
+						
+						for (int i = 0; i < siggyType.Parameters.Length; i++)
+						{
+							if (siggyType.Parameters[i] != siggyArg.Parameters[i])
+							{
+								exactMatch = false;
+								// In the case that these parameters simply don't match								
+								if (!siggyType.Parameters[i].Type.IsAssignableFrom(siggyArg.Parameters[i].Type))
+								{
+									closeEnough = false;
+									break;
+								}
+							}
+						}
+						if (closeEnough)
+						{
+							return exactMatch == true ? 7 : 6;
+						}
+					}
+				}
 				return 5;
 			}
 			else if (TypeSystemServices.CanBeReachedByDownCastOrPromotion(parameterType, argumentType))

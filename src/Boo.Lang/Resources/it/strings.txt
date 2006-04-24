@@ -105,7 +105,7 @@ BCE0102=I generator non possono ritrnare un valore.
 BCE0103=Non e' possibile estendere il tipo final '{0}'.
 BCE0104='transient' puo' essere applicato solo a classi, field o definizioni di eventi.
 BCE0105='abstract' puo' essere applicato solo a classi, metodi, proprieta' e definizioni di eventi.
-BCE0106=Impossibile accedere ai tipi definiti nell'assembly '{0}'.
+BCE0106=Impossibile accedere ai tipi definiti nell'assembly {0}.
 BCE0107=un value type non possono dichiarare costruttori senza parametri.
 BCE0108=un value type non puo' avere inizializzatori per i prorpi campi.
 BCE0109=Array '{0}' is rank '{1}', not rank '{2}'.
@@ -133,6 +133,8 @@ BCE0130='partial' can only be applied to class definitions.
 BCE0132=The namespace '{0}' already contains a definition for '{1}'.
 BCE0133=Invalid signature for Main. It should be one of: 'Main() as void', 'Main() as int', 'Main(argv as (string)) as void', 'Main(argv as (string)) as int'.
 BCE0134='{0}' cannot return values.
+BCE0135=Invalid name: '{0}'
+BCE0136=Use a colon(:) instead of equal sign(=) for named parameters.
 
 ;Compiler warnings
 BCW0000=WARNING: {0}
@@ -143,6 +145,9 @@ BCW0004=WARNING: l'operando di destra di 'is' e' un type reference, 'isa' potreb
 BCW0005=WARNING: Unsubscribing from event '{0}' with an adapted method reference. Either change the signature of the method to '{1}' or use a cached reference of the correct type.
 BCW0006=WARNING: Assignment to temporary.
 BCW0007=WARNING: Assignment inside a conditional. Did you mean == instead of = here?: '{0}'
+BCW0008=WARNING: Duplicate namespace: '{0}'.
+BCW0009=WARNING: The -keyfile option will override your AssemblyKeyFile attribute.
+BCW0010=WARNING: The -keycontainer option will override your AssemblyKeyName attribute.
 
 ; BooC Command Line Errors
 BCE0500=Response file '{0}' indicato piu' di una volta nella lista.
@@ -163,6 +168,12 @@ BooC.UnableToLoadPipeline=Impossibile caricare la pipaline {0}, causa: {1}.
 BooC.NoPipeline=Nessuna pipeline di compilazione specificata (/p:<PIPELINE>)
 BooC.NoInputSpecified=Nessun inputs specificato
 BooC.NoOutputSpecified=Nessun output specificato
+BooC.UnableToLoadAssembly=Unable to load assembly: {0}
+BooC.BadFormat=Unable to load assembly (bad file format): {0}
+BooC.NullAssembly=Unable to load assembly (null argument)
+BooC.CannotFindAssembly=Cannot find assembly: '{0}'
+BooC.NoSystemPath=Cannot find path to mscorlib.
+BooC.BadLibPath=Not a valid directory for -lib argument: '{0}'
 
 ;Boo.Lang
 ListWasModified=La lista e' stata modificata.
@@ -173,3 +184,20 @@ CantUnpackNull=Impossibile eseguire l'unpack di null.
 UnpackArrayOfWrongSize=Unpack di un array di dimensione errata (attesa={0}, effettiva={1}).
 CantCompareItems=Almeno un operando deve implementare IComparable o entrambi devono implementare IEnumerable.
 AssertArgCount=assert accetta 1 o 2 argomenti ma e' stata utilizzata con {0}
+
+;boo command line utility
+boo.CommandLine.culture=the culture {code} to use when running the application
+boo.CommandLine.debug=emit debugging information
+boo.CommandLine.ducky=treat object references as duck
+boo.CommandLine.embedres=embeds the specified file as a unmanaged resource
+boo.CommandLine.output=file name for the generated assembly
+boo.CommandLine.pipeline=which compilation pipeline to use, it can be either the name of a builtin pipeline like 'boo' or a full type name
+boo.CommandLine.reference=references an assembly
+boo.CommandLine.resource=adds a managed resource
+boo.CommandLine.target=one of exe, winexe, library
+boo.CommandLine.utf8=use UTF8 when writing to the console
+boo.CommandLine.wsa=use the white space agnostic parser
+boo.CommandLine.help=display help information and exit
+
+boo.CommandLine.header=boo command line utility
+boo.CommandLine.usage=Usage: boo [options] [source files]

@@ -31,6 +31,7 @@ import System.IO
 import System.Reflection
 import System.Security.Permissions
 import System.Threading
+import Boo.Lang.Parser
 import Boo.Lang.Compiler
 import Boo.Lang.Compiler.IO
 import Boo.Lang.Compiler.Pipelines
@@ -77,24 +78,36 @@ def Main(argv as (string)):
 	if len(argv) < 1:
 		print("booi <script.boo>") 
 		return -1
-		
+	
+	resolver = AssemblyResolver()
+	AppDomain.CurrentDomain.AssemblyResolve += resolver.AssemblyResolve
+	
 	compiler = BooCompiler()
 	compiler.Parameters.Pipeline = CompileToMemory()
-
-	resolver = AssemblyResolver()
-	AppDomain.CurrentDomain.AssemblyResolve += resolver.AssemblyResolve	
 	
 	consumedArgs = 1
+	asm as Assembly = null
 	for arg in argv:
 		if "-" == arg:
 			compiler.Parameters.Input.Add(StringInput("<stdin>", consume(Console.In)))
 			break
 		elif "-ducky" == arg:
 			compiler.Parameters.Ducky = true
+		elif "-wsa" == arg:
+			compiler.Parameters.Pipeline[0] = Boo.Lang.Parser.WSABooParsingStep()
 		elif "-w" == arg:
 			printWarnings = true
 		elif arg.StartsWith("-r:"):			
-			compiler.Parameters.References.Add(resolver.LoadAssembly(arg[3:]))
+			//compiler.Parameters.References.Add(resolver.LoadAssembly(arg[3:]))
+			try:
+				asm = compiler.Parameters.LoadAssembly(arg[3:])
+				if asm is null:
+					print Boo.Lang.ResourceManager.Format("BooC.UnableToLoadAssembly", arg[3:])
+				else:
+					compiler.Parameters.References.Add(asm)
+					resolver.AddAssembly(asm)
+			except e:
+				print e.Message
 		else:
 			compiler.Parameters.Input.Add(FileInput(arg))
 			break

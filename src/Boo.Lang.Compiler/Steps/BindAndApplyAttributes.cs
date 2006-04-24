@@ -171,8 +171,6 @@ namespace Boo.Lang.Compiler.Steps
 		
 		IType _astAttributeInterface;
 		
-		IType _systemAttributeBaseClass;
-		
 		Boo.Lang.List _elements = new Boo.Lang.List();
 
 		public BindAndApplyAttributes()
@@ -183,7 +181,6 @@ namespace Boo.Lang.Compiler.Steps
 		override public void Run()
 		{
 			_astAttributeInterface = TypeSystemServices.Map(typeof(IAstAttribute));
-			_systemAttributeBaseClass = TypeSystemServices.Map(typeof(System.Attribute));
 			
 			int step = 0;
 			while (step < Parameters.MaxAttributeSteps)
@@ -272,6 +269,7 @@ namespace Boo.Lang.Compiler.Steps
 								// remember the attribute's type
 								attribute.Name = attributeType.FullName;
 								attribute.Entity = attributeType;
+								CheckAttributeParameters(attribute);
 							}
 						}
 					}
@@ -280,6 +278,50 @@ namespace Boo.Lang.Compiler.Steps
 			else
 			{
 				Error(attribute, CompilerErrorFactory.UnknownAttribute(attribute, attribute.Name));
+			}
+		}
+		
+		private void CheckAttributeParameters(Boo.Lang.Compiler.Ast.Attribute node)
+		{
+			foreach(Expression e in node.Arguments)
+			{
+				if (e.NodeType == NodeType.BinaryExpression
+					&& ((BinaryExpression)e).Operator == BinaryOperatorType.Assign)
+				{
+					Error(node, CompilerErrorFactory.ColonInsteadOfEquals(node));
+				}
+			}
+		}
+		
+		override public void LeaveProperty(Property node)
+		{
+			if (node.Name == "self")
+			{
+				node.Name = "Item";
+			}
+			if (node.Name == "Item" && node.Parameters.Count > 0 && !node.IsStatic)
+			{
+				TypeDefinition t = node.ParentNode as TypeDefinition;
+				if (t != null)
+				{
+					bool already_has_attribute = false;
+					foreach(Boo.Lang.Compiler.Ast.Attribute a in t.Attributes)
+					{
+						if (a.Name.IndexOf("DefaultMember") >= 0)
+						{
+							already_has_attribute = true;
+							break;
+						}
+					}
+					if (!already_has_attribute)
+					{
+						Boo.Lang.Compiler.Ast.Attribute att = new Boo.Lang.Compiler.Ast.Attribute(t.LexicalInfo);
+						att.Name = Types.DefaultMemberAttribute.FullName;
+						att.Arguments.Add(new StringLiteralExpression(node.Name));
+						t.Attributes.Add(att);
+						Visit(att);
+					}
+				}
 			}
 		}
 		
@@ -313,7 +355,7 @@ namespace Boo.Lang.Compiler.Steps
 		
 		bool IsSystemAttribute(IType type)
 		{
-			return type.IsSubclassOf(_systemAttributeBaseClass);
+			return TypeSystemServices.IsAttribute(type);
 		}
 
 		bool IsAstAttribute(IType type)

@@ -55,7 +55,7 @@ namespace WSABoo.Parser.Tests
 				print 'foo again'
 				end
 				
-				item(key):
+				item[key]:
 				get:
 					return key
 				end
@@ -83,7 +83,7 @@ class Foo(Bar):
 				print 'uops...'
 		print 'foo again'
 
-	item(key):
+	item[key]:
 		get:
 			return key
 
@@ -108,6 +108,18 @@ class Foo(Bar):
 def SayHello(name as string):
 	return ""Hello, ${name}""
 	";
+			Assert.AreEqual(normalize(expected), normalize(module.ToCodeString()));
+		}
+		
+		[Test]
+		public void NoLineBreakBeforeEOF()
+		{
+			string code = "print \"hello\"";
+			
+			Module module = parse(code);
+			
+			string expected = "print 'hello'";
+			
 			Assert.AreEqual(normalize(expected), normalize(module.ToCodeString()));
 		}
 		

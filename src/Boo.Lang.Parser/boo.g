@@ -52,6 +52,7 @@ tokens
 	ELIST; // expression list
 	DLIST; // declaration list
 	ESEPARATOR; // expression separator (imaginary token)
+	EOL;
 	ABSTRACT="abstract";
 	AND="and";
 	AS="as";
@@ -129,6 +130,8 @@ tokens
 
 	protected bool _inArray;
 	
+	protected bool _compact = false;
+	
 	protected void ResetMemberData()
 	{
 		_modifiers = TypeMemberModifiers.None;
@@ -149,7 +152,13 @@ tokens
 	
 	protected SourceLocation ToSourceLocation(antlr.IToken token)
 	{
-		return new SourceLocation(token.getLine(), token.getColumn()+token.getText().Length-1);
+		return new SourceLocation(token.getLine(), token.getColumn());
+	}
+	
+	protected SourceLocation ToEndSourceLocation(antlr.IToken token)
+	{
+		return new SourceLocation(token.getLine(),
+						token.getColumn()+token.getText().Length-1);
 	}
 
 	protected BinaryOperatorType ParseCmpOperator(string op)
@@ -312,9 +321,9 @@ start[CompileUnit cu] returns [Module module]
 		
 		cu.Modules.Add(module);
 	}:
-	(options { greedy=true;}: EOS)*
+	(eos)?
 	docstring[module]
-	(options { greedy=true;}: EOS)*			 
+	(eos)?
 	(namespace_directive[module])?
 	(import_directive[module])*
 	(type_member[module.Members])*	
@@ -326,12 +335,12 @@ start[CompileUnit cu] returns [Module module]
 protected docstring[Node node]:
 	(
 		doc:TRIPLE_QUOTED_STRING { node.Documentation = MassageDocString(doc.getText()); }
-		(options { greedy=true; }: EOS)*
+		(eos)?
 	)?
 	;
 			
 protected
-eos : (options { greedy = true; }: EOS)+;
+eos : (options { greedy = true; }: (EOL|EOS))+;
 
 protected
 import_directive[Module container]
@@ -481,7 +490,7 @@ attributes
 			)*
 		)?
 		RBRACK		
-		(EOS)*
+		(eos)?
 	)*
 	;
 			
@@ -546,7 +555,7 @@ class_definition [TypeMemberCollection container]
 	(
 		(PASS eos) |
 		(
-			(EOS)*
+			(eos)?
 			(type_definition_member[members])+			
 		)
 	)
@@ -626,18 +635,19 @@ interface_method [TypeMemberCollection container]
 	LPAREN parameter_declaration_list[m.Parameters] RPAREN
 	(AS rt=type_reference { m.ReturnType=rt; })?			
 	(
-		(eos docstring[m]) | (empty_block[m] (EOS)*)
+		(eos docstring[m]) | (empty_block[m] (eos)?)
 	)
 	;
 			
 protected
 interface_property [TypeMemberCollection container]
         {
+		IToken id = null;
                 Property p = null;
                 TypeReference tr = null;
                 ParameterDeclarationCollection parameters = null;
         }:
-        (id:ID)
+        (id1:ID {id=id1;} | s:SELF {id=s;})
         {
                 p = new Property(ToLexicalInfo(id));
                 p.Name = id.getText();
@@ -645,7 +655,7 @@ interface_property [TypeMemberCollection container]
                 container.Add(p);
                 parameters = p.Parameters;
         }
-        (LPAREN parameter_declaration_list[parameters] RPAREN)?
+        ((LBRACK|LPAREN) parameter_declaration_list[parameters] (RBRACK|RPAREN))?
         (AS tr=type_reference)?
         {
                 p.Type = tr;
@@ -791,8 +801,9 @@ method [TypeMemberCollection container]
 
 protected
 property_header:	
-	(ID (DOT ID)*)
+	((ID|SELF) (DOT ID)*)
 	(
+		LBRACK |
 		LPAREN |
 		((AS type_reference)? COLON)
 	)
@@ -801,6 +812,7 @@ property_header:
 protected
 field_or_property [TypeMemberCollection container]
 	{
+		IToken id = null;
 		TypeMember tm = null;
 		TypeReference tr = null;
 		Property p = null;
@@ -810,7 +822,7 @@ field_or_property [TypeMemberCollection container]
 		ParameterDeclarationCollection parameters = null;
 	}: 
 	(property_header)=>(
-		(emi=explicit_member_info)? id:ID
+		(emi=explicit_member_info)? (id1:ID {id=id1;}| s:SELF {id=s;})
 		(		
 			
 			{
@@ -823,7 +835,7 @@ field_or_property [TypeMemberCollection container]
 				AddAttributes(p.Attributes);
 				parameters = p.Parameters;
 			}
-			(LPAREN parameter_declaration_list[parameters] RPAREN)?
+			((LBRACK|LPAREN) parameter_declaration_list[parameters] (RBRACK|RPAREN))?
 			(AS tr=type_reference)?
 			{							
 				p.Type = tr;
@@ -870,6 +882,14 @@ declaration_initializer returns [Expression e]
 	(e=ast_literal)
 ;
 
+simple_initializer returns [Expression e]
+{
+	e = null;
+}:
+	e=array_or_expression |
+	e=callable_expression
+;
+
 protected
 property_accessor[Property p]
 	{		
@@ -907,13 +927,13 @@ property_accessor[Property p]
 	
 protected
 globals[Module container]:	
-	(EOS)*
+	(eos)?
 	(stmt[container.Globals.Statements])*
 	;
 	
 protected
 block[StatementCollection container]:
-	(EOS)* 
+	(eos)?
 	(
 		(PASS eos) |
 		(			
@@ -1142,11 +1162,11 @@ protected
 begin: COLON INDENT;
 
 protected
-begin_with_doc[Node node]: COLON (EOS docstring[node])? INDENT;
+begin_with_doc[Node node]: COLON (eos docstring[node])? INDENT;
 	
 protected
 begin_block_with_doc[Node node, Block block]:
-	COLON (EOS docstring[node])?
+	COLON (eos docstring[node])?
 	begin:INDENT
 	{
 		block.LexicalInfo = ToLexicalInfo(begin);
@@ -1156,23 +1176,38 @@ begin_block_with_doc[Node node, Block block]:
 protected
 end[Node node] :
 	t:DEDENT { node.EndSourceLocation = ToSourceLocation(t); }
-	(options { greedy=true; }: EOS)*
+	(eos)?
 	;
 
 protected
 compound_stmt[Block b]
 {
-	StatementCollection statements = null;
+	StatementCollection statements = b.Statements;
+	IToken lastEOL = null;
 }:
-		COLON begin:INDENT
-		{
-			b.LexicalInfo = ToLexicalInfo(begin);
-			statements = b.Statements;
-		}
+		(
+			COLON
+			(
+				PASS
+				|
+				(
+				simple_stmt[statements]
+				(options { greedy = true; }: EOS (simple_stmt[statements])?)*
+				)
+			)
+			(options { greedy = true; }: eolToken:EOL { lastEOL = eolToken; })+
+			{ b.EndSourceLocation = ToSourceLocation(lastEOL); }
+		) |
+		(
+			COLON begin:INDENT
+			{
+				b.LexicalInfo = ToLexicalInfo(begin);
+			}
 			block[statements]
-		end[b]
+			end[b]
+		)
 		;
-		
+
 protected
 closure_macro_stmt returns [MacroStatement returnValue]
 	{
@@ -1276,6 +1311,40 @@ stmt [StatementCollection container]
 	;		
 
 protected
+simple_stmt [StatementCollection container]
+	{
+		Statement s = null;
+		_compact = true;
+	}:
+	(
+		{IsValidMacroArgument(LA(2))}? s=closure_macro_stmt |
+		(slicing_expression ASSIGN)=> s=assignment_or_method_invocation |
+		s=return_expression_stmt |
+		(declaration COMMA)=> s=unpack |
+		s=declaration_stmt |
+		(		
+			(
+				s=goto_stmt |
+				s=label_stmt |
+				s=yield_stmt |
+				s=break_stmt |
+				s=continue_stmt |				
+				s=raise_stmt |
+				s=retry_stmt |
+				s=expression_stmt				
+			)
+		)
+	)
+	{
+		if (null != s)
+		{
+			container.Add(s);
+		}
+	}
+	{_compact=false;}
+	;
+
+protected
 stmt_modifier returns [StatementModifier m]
 	{
 		m = null;
@@ -1371,7 +1440,10 @@ closure_expression returns [Expression e]
 			)*
 		)
 	anchorEnd:RBRACE
-	;
+	{
+		body.EndSourceLocation = ToEndSourceLocation(anchorEnd);
+	}
+;
 	
 protected
 callable_expression returns [Expression e]
@@ -1474,8 +1546,15 @@ declaration_stmt returns [DeclarationStatement s]
 	}:
 	id:ID AS tr=type_reference
 	(
-		(ASSIGN initializer=declaration_initializer) |
-		((m=stmt_modifier)? eos)
+		(
+			ASSIGN 
+			(
+				{_compact}?initializer=simple_initializer |
+				initializer=declaration_initializer
+			)
+		) 
+		|
+		({!_compact}? (m=stmt_modifier)? eos)
 	)
 	{
 		Declaration d = new Declaration(ToLexicalInfo(id));
@@ -1508,7 +1587,7 @@ return_expression_stmt returns [ReturnStatement s]
 		StatementModifier modifier = null;
 	}:
 	r:RETURN (e=array_or_expression)?
-	(modifier=stmt_modifier)?
+	({!_compact}?modifier=stmt_modifier)?
 	{
 		s = new ReturnStatement(ToLexicalInfo(r));
 		s.Modifier = modifier;
@@ -1696,7 +1775,7 @@ unpack_stmt returns [UnpackStatement s]
 	{
 		s = null;
 		StatementModifier m = null;
-	}:	
+	}:
 	s=unpack (m=stmt_modifier)? eos
 	{
 		s.Modifier = m;
@@ -1837,7 +1916,7 @@ boolean_expression returns [Expression e]
 		e=boolean_term
 		(
 			ot:OR
-			r=expression
+			r=boolean_term
 			{
 				BinaryExpression be = new BinaryExpression(ToLexicalInfo(ot));
 				be.Operator = BinaryOperatorType.Or;
@@ -1859,7 +1938,7 @@ boolean_term returns [Expression e]
 	e=not_expression
 	(
 		at:AND
-		r=expression
+		r=not_expression
 		{
 			BinaryExpression be = new BinaryExpression(ToLexicalInfo(at));
 			be.Operator = BinaryOperatorType.And;
@@ -1922,20 +2001,35 @@ ast_literal_block[AstLiteralExpression e]
 
 ast_literal_closure[AstLiteralExpression e]
 {
+	Block block = new Block();
 	Node node = null;
 }:
 	LBRACE
 	(
-		(expression)=>node=expression { e.Node = node; } |
-		node=ast_literal_closure_stmt { e.Node = node; }
+		(expression RBRACE)=>node=expression { e.Node = node; } |
+		(
+			internal_closure_stmt[block]
+			(
+				eos
+				(internal_closure_stmt[block])?
+			)*
+			{ 
+				e.Node = block;
+				if (block.Statements.Count == 1)
+				{
+					e.Node = block.Statements[0];
+				}
+			}
+		)
 	)
 	RBRACE
 ;
 
-ast_literal_closure_stmt returns [Statement s]
+
+ast_literal_closure_stmt[Block block]
 {
-	s = null;
-	StatementModifier modifier;
+		Statement s = null;
+		StatementModifier modifier = null;
 }:
 	s=return_expression_stmt |
 	(
@@ -1947,6 +2041,12 @@ ast_literal_closure_stmt returns [Statement s]
 		)
 		(modifier=stmt_modifier { s.Modifier = modifier; })?		
 	)
+	{
+		if (null != s)
+		{
+			block.Add(s);
+		}
+	}
 ;
 
 protected
@@ -1969,10 +2069,11 @@ assignment_or_method_invocation_with_block_stmt returns [Statement stmt]
 			(
 			op:ASSIGN { token = op; binaryOperator = ParseAssignOperator(op.getText()); }
 				(
+					{_compact}?rhs=array_or_expression |
 					(DEF|DO)=>rhs=callable_expression |
 					(
 						rhs=array_or_expression
-						(		
+						(
 							(DO)=>method_invocation_block[rhs] |
 							(modifier=stmt_modifier eos) |
 							eos
@@ -1990,6 +2091,34 @@ assignment_or_method_invocation_with_block_stmt returns [Statement stmt]
 			}
 		)
 	)
+	;
+	
+protected
+assignment_or_method_invocation returns [Statement stmt]
+	{
+		stmt = null;
+		Expression lhs = null;
+		Expression rhs = null;
+		StatementModifier modifier = null;
+		BinaryOperatorType binaryOperator = BinaryOperatorType.None;
+		IToken token = null;
+	}:
+	lhs=slicing_expression
+	(
+		op:ASSIGN { token = op; binaryOperator = ParseAssignOperator(op.getText()); }
+		(
+			rhs=array_or_expression
+			|
+			rhs=ast_literal
+		)
+	)
+	{
+		stmt = new ExpressionStatement(
+				new BinaryExpression(ToLexicalInfo(token),
+					binaryOperator,
+					lhs, rhs));
+		stmt.Modifier = modifier;
+	}
 	;
 	
 protected
@@ -2379,6 +2508,7 @@ typed_array returns [Expression e]
 				COMMA
 				item=expression { tle.Items.Add(item); }
 			)*
+			(COMMA)?
 		)
 	)
 	RPAREN
@@ -2722,6 +2852,7 @@ hash_literal returns [HashLiteralExpression dle]
 			pair=expression_pair
 			{ dle.Items.Add(pair); }
 		)*
+		(COMMA)?
 	)?
 	RBRACE
 	;
@@ -2918,7 +3049,7 @@ options
 }
 
 ID options { testLiterals = true; }:
-		ID_LETTER (ID_LETTER | DIGIT)*
+	(ID_PREFIX)? ID_LETTER (ID_LETTER | DIGIT)*
 	;
 	
 LINE_CONTINUATION:
@@ -3105,7 +3236,7 @@ ML_COMMENT:
     "*/"
     { $setType(Token.SKIP); }
 	;   
-			
+
 WS :
 	(
 		' ' |
@@ -3120,7 +3251,7 @@ WS :
 		}
 	}
 	;
-		
+
 EOS: ';';
 
 X_RE_LITERAL: '@'!'/' (X_RE_CHAR)+ '/' { $setType(RE_LITERAL); };
@@ -3253,7 +3384,10 @@ protected
 REVERSE_DIGIT_GROUP : (DIGIT DIGIT DIGIT ({BooLexer.IsDigit(LA(2))}? '_'!)? | DIGIT)+;
 
 protected
-ID_LETTER : ('_' | 'a'..'z' | 'A'..'Z' );
+ID_PREFIX : '$' | '@' | '?';
+
+protected
+ID_LETTER : ('_' | 'a'..'z' | 'A'..'Z' | {System.Char.IsLetter(LA(1))}? '\u0080'..'\uFFFE');
 
 protected
 DIGIT : '0'..'9';

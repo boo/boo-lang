@@ -47,6 +47,8 @@ namespace Boo.Lang.Compiler.TypeSystem
 
 		int _isExtension = -1;
 		
+		int _isPInvoke = -1;
+		
 		internal ExternalMethod(TypeSystemServices manager, MethodBase mi)
 		{
 			_typeSystemServices = manager;
@@ -59,7 +61,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 			{
 				if (-1 == _isExtension)
 				{
-					_isExtension = MetadataUtil.IsAttributeDefined(_mi,  Types.ExtensionAttribute)
+					_isExtension = IsStatic && MetadataUtil.IsAttributeDefined(_mi,  Types.ExtensionAttribute)
 						? 1
 						: 0;
 				}
@@ -79,6 +81,20 @@ namespace Boo.Lang.Compiler.TypeSystem
 						: 0;
 				}
 				return 1 == _isDuckTyped;
+			}
+		}
+		
+		public bool IsPInvoke
+		{
+			get
+			{
+				if (-1 == _isPInvoke)
+				{
+					_isPInvoke = IsStatic && MetadataUtil.IsAttributeDefined(_mi,  Types.DllImportAttribute)
+						? 1
+						: 0;
+				}
+				return 1 == _isPInvoke;
 			}
 		}
 		
@@ -166,7 +182,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 		{
 			get
 			{
-				return _mi.DeclaringType.FullName + "." + _mi.Name;
+				return this.DeclaringType + "." + _mi.Name;
 			}
 		}
 
@@ -188,8 +204,10 @@ namespace Boo.Lang.Compiler.TypeSystem
 		private bool IsParamArray(ParameterInfo parameter)
 		{
 			/* Hack to fix problem with mono-1.1.8.* and older */
-			return Attribute.IsDefined(parameter, Types.ParamArrayAttribute)
-				|| parameter.GetCustomAttributes(Types.ParamArrayAttribute, false).Length > 0;
+			return parameter.ParameterType.IsArray
+				&& (
+					Attribute.IsDefined(parameter, Types.ParamArrayAttribute)
+					|| parameter.GetCustomAttributes(Types.ParamArrayAttribute, false).Length > 0);
 		}
 
 		

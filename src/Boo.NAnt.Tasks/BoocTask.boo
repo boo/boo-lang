@@ -28,150 +28,183 @@
 
 namespace Boo.NAnt
 
-import System.Diagnostics
+import System
+import System.Globalization
 import System.IO
+import System.Text.RegularExpressions
 import NAnt.Core
 import NAnt.Core.Attributes
 import NAnt.Core.Types
-import Boo.Lang.Compiler
-import Boo.Lang.Compiler.IO
-import Boo.Lang.Compiler.Resources
+import NAnt.Core.Util
+import NAnt.DotNet.Types
 
-[TaskName("booc")]
-class BoocTask(AbstractBooTask):
-	
-	_output as FileInfo
-	
-	_target = "exe"
-	
-	_sourceFiles = FileSet()
-	
-	_resources = FileSet()
-	
-	_traceLevel = System.Diagnostics.TraceLevel.Off
-	
-	_rebuild = false
-	
-	_generateInMemory = false
-	
-	_debug = true
-	
-	[TaskAttribute("debug")]
-	Debug:
-		get:
-			return _debug
-		set:
-			_debug = value
-	
-	[BuildElement("rebuild")]
-	Rebuild:
-		get:
-			return _rebuild
-		set:
-			_rebuild = value
-	
-	[BuildElement("resources")]
-	Resources:
-		get:
-			return _resources
-		set:
-			_resources = value
-	
-	[TaskAttribute("output", Required: true)]
-	Output:
-		get:
-			return _output
-		set:
-			_output = value
-			
-	[TaskAttribute("tracelevel")]
-	TraceLevel:
-		get:
-			return _traceLevel
-			
-		set:
-			_traceLevel = value
-			
-	[TaskAttribute("target")]
-	Target:
-		get:
-			return _target
-		set:
-			if value not in ("exe", "winexe", "library"):
-				raise BuildException(
-						"target must be one of: exe, winexe, library",
-						Location)
-			_target = value
-			
-	[TaskAttribute("generateInMemory")]
-	GenerateInMemory:
-		get:
-			return _generateInMemory
-		set:
-			_generateInMemory = false
-			
-	[BuildElement("sources", Required: true)]
-	Sources:
-		get:
-			return _sourceFiles
-		set:
-			_sourceFiles = value
-	
-	override def ExecuteTask():
-		return unless NeedsCompiling()
-		
-		files = _sourceFiles.FileNames
-		LogInfo("Compiling ${len(files)} file(s) to ${_output}.")
-		
-		if _traceLevel != TraceLevel.Off:
-			Trace.Listeners.Add(TextWriterTraceListener(System.Console.Out))
-		
-		compiler = BooCompiler()
-		parameters = compiler.Parameters
-		parameters.TraceSwitch.Level = _traceLevel
-		parameters.OutputAssembly = _output.ToString()
-		parameters.OutputType = GetOutputType()
-		parameters.GenerateInMemory = _generateInMemory
-		parameters.Debug = _debug
-		
-		for fname as string in files:
-			print("source: ${fname}")
-			parameters.Input.Add(FileInput(fname))
-			
-		for fname as string in _resources.FileNames:
-			LogVerbose(fname)
-			parameters.Resources.Add(FileResource(fname))
-			
-		RunCompiler(compiler)
-		
-	override def GetDefaultPipeline():
-		return Boo.Lang.Compiler.Pipelines.CompileToFile()
+import NAnt.DotNet.Tasks
+import System.Reflection
 
-	private def GetOutputType():
-		if "exe" == _target:
-			return CompilerOutputType.ConsoleApplication
+[TaskName('booc')]
+public class BoocTask(CompilerBase):
+	#region Private Instance Fields
+	private _debugOutput as DebugOutput = DebugOutput.Enable
+	private _exe as string
+	
+	private _useruntime = true //keep true for mono compatibility (don't call booc.exe directly)
+	private _noconfig = false
+	private _nostdlib = false
+	private _wsa = false
+	private _ducky = false
+	private _pipeline as string
+	
+	#endregion Private Instance Fields
+	#region Private Static Fields
+	private static _classNameRegex = Regex('^((?<comment>/\\*.*?(\\*/|$))|[\\s\\.\\{]+|class\\s+(?<class>\\w+)|(?<keyword>\\w+))*')
+
+	private static _namespaceRegex = Regex('^((?<comment>/\\*.*?(\\*/|$))|[\\s\\.\\{]+|namespace\\s+(?<namespace>(\\w+(\\.\\w+)*)+)|(?<keyword>\\w+))*')
+
+	#endregion Private Static Fields
+	
+	def constructor():
+		SupportsKeyFile = true
+		SupportsKeyContainer = true
+	
+	[FrameworkConfigurable("exename")]
+	[TaskAttribute('exename')]
+	public override ExeName as string:
+		get:
+			return _exe
+		set:
+			_exe = value
+	
+	[FrameworkConfigurable("useruntimeengine")]
+	[TaskAttribute('useruntimeengine')]
+	override UseRuntimeEngine as bool:
+		get:
+			return _useruntime
+		set:
+			_useruntime = value
+	
+	#region Public Instance Properties
+
+	[TaskAttribute('debug')]
+	public DebugOutput as DebugOutput:
+		get:
+			return _debugOutput
+		set:
+			_debugOutput = value
+			
+	[TaskAttribute('pipeline')]
+	public Pipeline:
+		get:
+			return _pipeline
+		set:
+			_pipeline = value
+
+	public Debug as bool:
+		get:
+			return (DebugOutput != DebugOutput.None)
+		set:
+			if value:
+				DebugOutput = DebugOutput.Enable
+			else:
+				DebugOutput = DebugOutput.None
+
+	[FrameworkConfigurable('noconfig')]
+	[TaskAttribute('noconfig')]
+	[BooleanValidator]
+	public NoConfig as bool:
+		get:
+			return _noconfig
+		set:
+			_noconfig = value
+			
+	[FrameworkConfigurable('nostdlib')]
+	[TaskAttribute('nostdlib')]
+	[BooleanValidator]
+	public NoStdLib as bool:
+		get:
+			return _nostdlib
+		set:
+			_nostdlib = value
+	
+	[TaskAttribute('wsa')]
+	[BooleanValidator]
+	public WhiteSpaceAgnostic as bool:
+		get:
+			return _wsa
+		set:
+			_wsa = value
+	
+	[TaskAttribute('ducky')]
+	[BooleanValidator]
+	public Ducky as bool:
+		get:
+			return _ducky
+		set:
+			_ducky = value
+	
+	private def FindBooc() as string:
+		path as string
+		dir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location)
+		if Project.TargetFramework:
+			frameworkname = Project.TargetFramework.Name
+			path = Path.Combine(Path.Combine(dir, frameworkname), "booc.exe")
+			if File.Exists(path):
+				return path
+			//treat mono-1.0==net-1.1 and mono-##==net-##
+			frameworkname = frameworkname.Replace("mono-1.0","net-1.1").Replace("mono-","net-")
+			path = Path.Combine(Path.Combine(dir, frameworkname), "booc.exe")
+			if File.Exists(path):
+				return path
+		path = Path.Combine(dir, "booc.exe")
+		if File.Exists(path):
+			return path
+		_useruntime = false
+		return "booc" //try booc in PATH
+		
+	protected override def ExecuteTask():
+		if not ExeName or ExeName == string.Empty:
+			ExeName = FindBooc()
+		super()
+		
+	#endregion Public Instance Properties
+	#region Override implementation of CompilerBase
+	protected override def WriteOptions(writer as TextWriter):
+		if DebugOutput != DebugOutput.None:
+			WriteOption(writer, 'debug')
 		else:
-			if "winexe" == _target:
-				return CompilerOutputType.WindowsApplication
-		return CompilerOutputType.Library
+			WriteOption(writer, 'debug-')
+		if NoConfig and (not Arguments.Contains('-noconfig')):
+			Arguments.Add(Argument('-noconfig'))
+		if NoStdLib:
+			WriteOption(writer, "nostdlib")
+		if Verbose:
+			WriteOption(writer, "vv")
+		if WhiteSpaceAgnostic:
+			WriteOption(writer, "wsa")
+		if Ducky:
+			WriteOption(writer, "ducky")
+		if Pipeline:
+			WriteOption(writer, "p", _pipeline)
+	
+	protected override def WriteOption(writer as TextWriter, name as string):
+		writer.WriteLine("-{0}", name)
 		
-	private def NeedsCompiling():
-		if _rebuild:
-			LogVerbose("rebuild requested.")
-			return true
-			
-		if not _output.Exists:
-			LogVerbose("${_output} does not exist.")
-			return true
-		return (
-			HasMoreRecentFile(_sourceFiles) or
-			HasMoreRecentFile(_references) or
-			HasMoreRecentFile(_resources))
-			
-	def HasMoreRecentFile(fs as FileSet):
-		found = FileSet.FindMoreRecentLastWriteTime(fs.FileNames, _output.LastWriteTime)
-		if found is not null:
-			LogVerbose("${found} is newer than ${_output}.")
-			return true
+	protected override def WriteOption(writer as TextWriter, name as string, value as string):
+		if value.IndexOf(" ") > 0 and (not value.StartsWith("\"")
+						or not value.EndsWith("\"")):
+			writer.WriteLine("-{0}:\"{1}\"", name, value)
+		else:
+			writer.WriteLine("-{0}:{1}", name, value)
+	
+	public Extension as string:
+		get:
+			return 'boo'
 
+	protected ClassNameRegex as Regex:
+		get:
+			return _classNameRegex
+
+	protected NamespaceRegex as Regex:
+		get:
+			return _namespaceRegex
+	#endregion Override implementation of CompilerBase
 

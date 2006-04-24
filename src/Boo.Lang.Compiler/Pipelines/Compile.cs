@@ -35,7 +35,9 @@ namespace Boo.Lang.Compiler.Pipelines
 		public Compile()
 		{	
 			Add(new UnfoldConstants());
+			Add(new OptimizeIterationStatements());
 
+			Add(new CheckIdentifiers());
 			Add(new StricterErrorChecking());
 
 			Add(new ExpandDuckTypedExpressions());
@@ -46,7 +48,6 @@ namespace Boo.Lang.Compiler.Pipelines
 			
 			Add(new CheckMembersProtectionLevel());
 
-			//Add(new OptimizeIterationStatements());
 			Add(new NormalizeIterationStatements());
 			
 			Add(new ProcessSharedLocals());			
@@ -57,6 +58,9 @@ namespace Boo.Lang.Compiler.Pipelines
 			
 			Add(new InjectCallableConversions());
 			Add(new ImplementICallableOnCallableDefinitions());
+
+			// TODO:
+			//Add(new InjectCastsAndConversions());
 		}
 	}
 }

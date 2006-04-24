@@ -29,6 +29,17 @@
 			</sources>
 		</booc>
 		
+		<!--
+		<booc
+			target="library"
+			output="build/BooMacros.dll">
+			
+			<sources basedir="BooMacros">
+				<include name="*.boo" />
+			</sources>
+		</booc>
+		-->
+		
 		<csc
 			target="library"
 			output="build/BooCompiler.Tests.dll"
@@ -161,10 +172,14 @@
 			<fileset basedir="../build">
 				<include name="*.dll" />
 				<include name="*.pdb" />
+				<include name="boo*.exe" />
+				<include name="*.config" />
+				<include name="*.targets" />
 				<include name="pt/*.dll" />
 			</fileset>
 		</copy>
 		<copy todir="build" file="${nunit.framework.dll}" />
 		<loadtasks assembly="build/Boo.NAnt.Tasks.dll" />
+		<echo message="Starting boo tests.  Running in framework: ${nant.settings.currentframework}" />
 	</target>
 </project>

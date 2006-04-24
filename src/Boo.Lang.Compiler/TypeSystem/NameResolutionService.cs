@@ -31,7 +31,8 @@ namespace Boo.Lang.Compiler.TypeSystem
 	using System;
 	using System.Collections;
 	using Boo.Lang.Compiler.Ast;
-
+	using System.Reflection;
+	
 	public class NameResolutionService
 	{
 		public static readonly char[] DotArray = new char[] { '.' };
@@ -397,6 +398,58 @@ namespace Boo.Lang.Compiler.TypeSystem
 		public static bool IsFlagSet(EntityType flags, EntityType flag)
 		{
 			return flag == (flags & flag);
-		}		
+		}
+		
+		public void OrganizeAssemblyTypes(Assembly asm)
+		{
+			Type[] types = asm.GetTypes();
+			foreach (Type type in types)
+			{
+				if (type.IsPublic)
+				{
+					string ns = type.Namespace;
+					if (null == ns)
+					{
+						ns = string.Empty;
+					}
+				
+					GetNamespace(ns).Add(type);
+				}
+			}
+		}
+		
+		public NamespaceEntity GetNamespace(string ns)
+		{
+			string[] namespaceHierarchy = ns.Split('.');
+			string topLevelName = namespaceHierarchy[0];
+			NamespaceEntity topLevel = GetTopLevelNamespace(topLevelName);
+			NamespaceEntity current = topLevel;
+			for (int i=1; i<namespaceHierarchy.Length; ++i)
+			{
+				current = current.GetChildNamespace(namespaceHierarchy[i]);
+			}
+			return current;
+		}
+		
+		NamespaceEntity GetTopLevelNamespace(string topLevelName)
+		{
+			INamespace ns = _global;
+			GlobalNamespace globals = ns as GlobalNamespace;
+			while (globals == null && ns != null)
+			{
+				ns = ns.ParentNamespace;
+				globals = ns as GlobalNamespace;
+			}
+			if (globals == null) return null;
+			
+			NamespaceEntity tag = (NamespaceEntity)globals.GetChild(topLevelName);
+			if (null == tag)
+			{
+				tag = new NamespaceEntity(null, _context.TypeSystemServices, topLevelName);
+				globals.SetChild(topLevelName, tag);
+			}
+			return tag;
+		}
+		
 	}
 }

@@ -307,26 +307,26 @@ start[CompileUnit cu] returns [Module module]
 		
 		cu.Modules.Add(module);
 	}:
-	(options { greedy=true;}: EOS)*
+	(eos)?
 	docstring[module]
-	(options { greedy=true;}: EOS)*			 
+	(eos)?		 
 	(namespace_directive[module])?
 	(import_directive[module])*
 	(type_member[module.Members])*	
 	globals[module]
 	(assembly_attribute[module] eos)*
-	EOF
+	(EOF)?
 	;
 			
 protected docstring[Node node]:
 	(
 		doc:TRIPLE_QUOTED_STRING { node.Documentation = MassageDocString(doc.getText()); }
-		(options { greedy=true; }: EOS)*
+		(eos)?
 	)?
 	;
 			
 protected
-eos : (options { greedy = true; }: EOS)+;
+eos : EOF | (options { greedy = true; }: EOS)+;
 
 protected
 import_directive[Module container]
@@ -476,7 +476,7 @@ attributes
 			)*
 		)?
 		RBRACK		
-		(EOS)*
+		(eos)?
 	)*
 	;
 			
@@ -539,7 +539,7 @@ class_definition [TypeMemberCollection container]
 	(base_types[baseTypes])?
 	begin_with_doc[td]					
 	(
-		(EOS)*
+		(eos)?
 		(type_definition_member[members])+
 	)
 	end[td]
@@ -615,18 +615,19 @@ interface_method [TypeMemberCollection container]
 	LPAREN parameter_declaration_list[m.Parameters] RPAREN
 	(AS rt=type_reference { m.ReturnType=rt; })?			
 	(
-		(eos docstring[m]) | (empty_block[m] (EOS)*)
+		(eos docstring[m]) | (empty_block[m] (eos)?)
 	)
 	;
 			
 protected
 interface_property [TypeMemberCollection container]
         {
+		IToken id = null;
                 Property p = null;
                 TypeReference tr = null;
                 ParameterDeclarationCollection parameters = null;
         }:
-        (id:ID)
+        (id1:ID {id=id1;} | s:SELF {id=s;})
         {
                 p = new Property(ToLexicalInfo(id));
                 p.Name = id.getText();
@@ -634,7 +635,7 @@ interface_property [TypeMemberCollection container]
                 container.Add(p);
                 parameters = p.Parameters;
         }
-        (LPAREN parameter_declaration_list[parameters] RPAREN)?
+        ((LBRACK|LPAREN) parameter_declaration_list[parameters] (RBRACK|RPAREN))?
         (AS tr=type_reference)?
         {
                 p.Type = tr;
@@ -773,8 +774,9 @@ method [TypeMemberCollection container]
 
 protected
 property_header:	
-	(ID (DOT ID)*)
+	((ID|SELF) (DOT ID)*)
 	(
+		LBRACK |
 		LPAREN |
 		((AS type_reference)? COLON)
 	)
@@ -783,6 +785,7 @@ property_header:
 protected
 field_or_property [TypeMemberCollection container]
 	{
+		IToken id = null;
 		TypeMember tm = null;
 		TypeReference tr = null;
 		Property p = null;
@@ -792,7 +795,7 @@ field_or_property [TypeMemberCollection container]
 		ParameterDeclarationCollection parameters = null;
 	}: 
 	(property_header)=>(
-		(emi=explicit_member_info)? id:ID
+		(emi=explicit_member_info)? (id1:ID {id=id1;}| s:SELF {id=s;})
 		(		
 			
 			{
@@ -805,7 +808,7 @@ field_or_property [TypeMemberCollection container]
 				AddAttributes(p.Attributes);
 				parameters = p.Parameters;
 			}
-			(LPAREN parameter_declaration_list[parameters] RPAREN)?
+			((LBRACK|LPAREN) parameter_declaration_list[parameters] (RBRACK|RPAREN))?
 			(AS tr=type_reference)?
 			{							
 				p.Type = tr;
@@ -889,13 +892,13 @@ property_accessor[Property p]
 	
 protected
 globals[Module container]:	
-	(EOS)*
+	(eos)?
 	(stmt[container.Globals.Statements])*
 	;
 	
 protected
 block[StatementCollection container]:
-	(EOS)*
+	(eos)?
 	(			
 		stmt[container]
 	)*
@@ -1069,11 +1072,11 @@ protected
 begin: COLON;
 
 protected
-begin_with_doc[Node node]: COLON (EOS docstring[node])?;
+begin_with_doc[Node node]: COLON (eos docstring[node])?;
 	
 protected
 begin_block_with_doc[Node node, Block block]:
-	begin:COLON (EOS docstring[node])?
+	begin:COLON (eos docstring[node])?
 	{
 		block.LexicalInfo = ToLexicalInfo(begin);
 	}
@@ -1082,7 +1085,7 @@ begin_block_with_doc[Node node, Block block]:
 protected
 end[Node node] :
 	t:END { node.EndSourceLocation = ToSourceLocation(t); }
-	(options { greedy=true; }: EOS)*
+	(eos)?
 	;
 
 protected
@@ -1766,7 +1769,7 @@ boolean_expression returns [Expression e]
 		e=boolean_term
 		(
 			ot:OR
-			r=expression
+			r=boolean_term
 			{
 				BinaryExpression be = new BinaryExpression(ToLexicalInfo(ot));
 				be.Operator = BinaryOperatorType.Or;
@@ -1788,7 +1791,7 @@ boolean_term returns [Expression e]
 	e=not_expression
 	(
 		at:AND
-		r=expression
+		r=not_expression
 		{
 			BinaryExpression be = new BinaryExpression(ToLexicalInfo(at));
 			be.Operator = BinaryOperatorType.And;
@@ -2286,6 +2289,7 @@ typed_array returns [Expression e]
 				COMMA
 				item=expression { tle.Items.Add(item); }
 			)*
+			(COMMA)?
 		)
 	)
 	RPAREN
@@ -2600,6 +2604,7 @@ hash_literal returns [HashLiteralExpression dle]
 			pair=expression_pair
 			{ dle.Items.Add(pair); }
 		)*
+		(COMMA)?
 	)?
 	RBRACE
 	;
@@ -2796,7 +2801,7 @@ options
 }
 
 ID options { testLiterals = true; }:
-		ID_LETTER (ID_LETTER | DIGIT)*
+	(ID_PREFIX)? ID_LETTER (ID_LETTER | DIGIT)*
 	;
 	
 LINE_CONTINUATION:
@@ -3138,7 +3143,10 @@ protected
 REVERSE_DIGIT_GROUP : (DIGIT DIGIT DIGIT ({WSABooLexer.IsDigit(LA(2))}? '_'!)? | DIGIT)+;
 
 protected
-ID_LETTER : ('_' | 'a'..'z' | 'A'..'Z' );
+ID_PREFIX : '$' | '@' | '?';
+
+protected
+ID_LETTER : ('_' | 'a'..'z' | 'A'..'Z' | {System.Char.IsLetter(LA(1))}? '\u0080'..'\uFFFE');
 
 protected
 DIGIT : '0'..'9';

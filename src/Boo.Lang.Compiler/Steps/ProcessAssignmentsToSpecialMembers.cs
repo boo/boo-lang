@@ -90,10 +90,10 @@ namespace Boo.Lang.Compiler.Steps
 
 		public class ChainItem
 		{
-			public MemberReferenceExpression Container;
+			public Expression Container;
 			public InternalLocal Local;
 
-			public ChainItem(MemberReferenceExpression container)
+			public ChainItem(Expression container)
 			{
 				this.Container = container;
 			}
@@ -154,7 +154,7 @@ namespace Boo.Lang.Compiler.Steps
 			}
 		}
 
-		List WalkMemberChain(MemberReferenceExpression memberRef)
+		protected virtual List WalkMemberChain(MemberReferenceExpression memberRef)
 		{
 			List chain = new List();
 			while (true)

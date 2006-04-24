@@ -1,9 +1,10 @@
 """
+[System.Reflection.DefaultMemberAttribute('Item')]
 public class LockedList(System.Object):
 
 	protected _list as Boo.Lang.List
 
-	public Item(index as System.Int32) as System.Object:
+	public Item[index as System.Int32] as System.Object:
 		public get:
 			__monitor1__ = self._list
 			System.Threading.Monitor.Enter(__monitor1__)
@@ -23,7 +24,7 @@ class LockedList:
 	
 	_list = []
 	
-	Item(index as int):
+	self[index as int]:
 		[lock(_list)]
 		get:
 			return _list[index]

@@ -110,8 +110,22 @@ namespace BooCompiler.Tests
 		}
 	}
 	
+	public struct ValueTypeOverrideBoolOperator
+	{
+		public static implicit operator bool(ValueTypeOverrideBoolOperator instance)
+		{
+			Console.WriteLine("ValueTypeOverrideBoolOperator.operator bool");
+			return false;
+		}
+	}
+	
 	public class ExtendsOverridenBoolOperator : OverrideBoolOperator
 	{
+		[Boo.Lang.DuckTypedAttribute]
+		public ExtendsOverridenBoolOperator GetFoo()
+		{
+			return new ExtendsOverridenBoolOperator();
+		}
 	}
 	
 	public class OverrideEqualityOperators
@@ -345,6 +359,21 @@ namespace BooCompiler.Tests
 		public virtual void Method1()
 		{
 			Console.WriteLine("BaseClass.Method1");
+		}
+		
+		//for BOO-632 regression test
+		protected int _protectedfield = 0;
+		protected int ProtectedProperty
+		{
+			get
+			{
+				return _protectedfield;
+			}
+			
+			set
+			{
+				_protectedfield = value;
+			}
 		}
 	}
 	

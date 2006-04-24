@@ -185,7 +185,7 @@ class AbstractInterpreter:
 		return code
 		
 	def Eval([required] code as string):
-		return CompilerContext() if 0 == len(code)
+		return CompilerContext(false) if 0 == len(code)
 		return EvalCompilerInput(StringInput("input${++_inputId}", code))
 		
 	def EvalCompilerInput(input as ICompilerInput):
@@ -239,8 +239,22 @@ class AbstractInterpreter:
 		
 		InitializeModuleInterpreter(asm, module)
 		
-		result.GeneratedAssembly.EntryPoint.Invoke(null, (null,)) if hasStatements
+		ExecuteEntryPoint(asm) if hasStatements
+			
 		return result
+		
+	def ExecuteEntryPoint(asm as System.Reflection.Assembly):
+		AppDomain.CurrentDomain.AssemblyResolve += AppDomain_AssemblyResolve
+		try:
+			asm.EntryPoint.Invoke(null, (null,)) 
+		ensure:
+			AppDomain.CurrentDomain.AssemblyResolve -= AppDomain_AssemblyResolve
+			
+	def AppDomain_AssemblyResolve(sender, args as ResolveEventArgs) as System.Reflection.Assembly:
+		for reference in _compiler.Parameters.References:
+			if reference.FullName == args.Name:
+				return reference
+		return null
 		
 	def Parse(input as ICompilerInput):
 		_parser.Parameters.Input.Clear()

@@ -4038,10 +4038,15 @@ namespace Boo.Lang.Compiler.Steps
 		{
 			node.Arguments.Insert(0, ((MemberReferenceExpression)node.Target).Target);
 		}
+		
+		protected virtual bool IsDuckTyped(IMember entity)
+		{
+			return entity.IsDuckTyped;
+		}
 
 		private IType GetInferredType(IMethod entity)
 		{
-			return entity.IsDuckTyped
+			return IsDuckTyped(entity)
 				? this.TypeSystemServices.DuckType
 				: entity.ReturnType;
 		}
@@ -4049,7 +4054,7 @@ namespace Boo.Lang.Compiler.Steps
 		private IType GetInferredType(IMember entity)
 		{
 			Debug.Assert(EntityType.Method != entity.EntityType);
-			return entity.IsDuckTyped
+			return IsDuckTyped(entity)
 				? this.TypeSystemServices.DuckType
 				: entity.Type;
 		}
@@ -4925,9 +4930,7 @@ namespace Boo.Lang.Compiler.Steps
 
 		bool CheckVarArgsParameters(ICallableType method, ExpressionCollection args)
 		{
-			IParameter[] parameters = method.GetSignature().Parameters;
-			if (args.Count < parameters.Length-1) return false;
-			return _callableResolution.CalculateVarArgsScore(parameters, args) >= 0;
+			return _callableResolution.IsValidVargsInvocation(method.GetSignature().Parameters, args);
 		}
 
 		bool CheckExactArgsParameters(ICallableType method, ExpressionCollection args, bool reportErrors)

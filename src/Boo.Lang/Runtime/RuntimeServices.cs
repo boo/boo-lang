@@ -1,5 +1,5 @@
 ﻿#region license
-// Copyright (c) 2004, Rodrigo B. de Oliveira (rbo@acm.org)
+// Copyright (c) 2004, 2007 Rodrigo B. de Oliveira (rbo@acm.org)
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without modification,
@@ -79,43 +79,45 @@ namespace Boo.Lang.Runtime
 			set { _defaultTargetInvocationExceptionAction = value; }
 		}
 		
-		static TargetInvocationExceptionAction _defaultTargetInvocationExceptionAction = TargetInvocationExceptionAction.ThrowInner;
+		private static TargetInvocationExceptionAction _defaultTargetInvocationExceptionAction = TargetInvocationExceptionAction.ThrowInner;
 		
-		static readonly Type RuntimeServicesType = typeof(RuntimeServices);
+		private static readonly Type RuntimeServicesType = typeof(RuntimeServices);
+
+		internal const BindingFlags InstanceMemberFlags = BindingFlags.Public |
+		                                                 BindingFlags.NonPublic |
+		                                                 BindingFlags.Instance;
 		
-		const BindingFlags DefaultBindingFlags = BindingFlags.Public |
-												BindingFlags.NonPublic |
+		internal const BindingFlags DefaultBindingFlags = InstanceMemberFlags |
 												BindingFlags.OptionalParamBinding |
-												BindingFlags.Static |
-												BindingFlags.FlattenHierarchy |
-												BindingFlags.Instance;
-
-		const BindingFlags InvokeBindingFlags = DefaultBindingFlags |
-												BindingFlags.InvokeMethod;
-
-		const BindingFlags StaticMemberBindingFlags = BindingFlags.Public |
 												BindingFlags.Static |
 												BindingFlags.FlattenHierarchy;
 
-		const BindingFlags InvokeOperatorBindingFlags = StaticMemberBindingFlags |
+		private const BindingFlags InvokeBindingFlags = DefaultBindingFlags |
 												BindingFlags.InvokeMethod;
 
-		const BindingFlags SetPropertyBindingFlags = DefaultBindingFlags |
+		private const BindingFlags StaticMemberBindingFlags = BindingFlags.Public |
+												BindingFlags.Static |
+												BindingFlags.FlattenHierarchy;
+
+		private const BindingFlags InvokeOperatorBindingFlags = StaticMemberBindingFlags |
+												BindingFlags.InvokeMethod;
+
+		private const BindingFlags SetPropertyBindingFlags = DefaultBindingFlags |
 												BindingFlags.SetProperty |
 												BindingFlags.SetField;
 
-		const BindingFlags GetPropertyBindingFlags = DefaultBindingFlags |
+		private const BindingFlags GetPropertyBindingFlags = DefaultBindingFlags |
 												BindingFlags.GetProperty |
 												BindingFlags.GetField;
 
-		const BindingFlags InvokeExtensionBindingFlags = InvokeOperatorBindingFlags;
+		private const BindingFlags InvokeExtensionBindingFlags = InvokeOperatorBindingFlags;
 		
-		const BindingFlags GetPropertyExtensionBindingFlags = StaticMemberBindingFlags |
+		private const BindingFlags GetPropertyExtensionBindingFlags = StaticMemberBindingFlags |
 		                                                      BindingFlags.GetProperty |
 		                                                      BindingFlags.GetField;
 		
 		
-		static List _extensions = new List();
+		private static List _extensions = new List();
 		
 		public static void RegisterExtensions(System.Type extensionContainer)
 		{
@@ -176,23 +178,31 @@ namespace Boo.Lang.Runtime
 		
 		private static object InvokeMethod(object target, string name, object[] args)
 		{
-			return target.GetType().InvokeMember(name,
-												 InvokeBindingFlags,
-												 null,
-												 target,
-												 args);
+			Type targetType = target.GetType();
+			if (targetType.IsCOMObject)
+			{
+				// COM methods cant be seen through reflection
+				// so maybe the proper way to support parameter conversions
+				// is indeed by creating a specific Binder object
+				// which knows the boo conversion rules
+				return targetType.InvokeMember(name, InvokeBindingFlags, null, target, args);
+			}
+			return ResolveAndInvokeMethod(target, targetType, name, args);
 		}
-		
+
+		private static object ResolveAndInvokeMethod(object target, Type targetType, string name, object[] args)
+		{
+			MethodResolver resolver = new MethodResolver(target, targetType, name, args);
+			return resolver.InvokeResolvedMethod();
+		}
+
 		private static object DoInvoke(object target, string name, object[] args)
 		{
 			Type type = target as Type;
 			if (null != type)
-			{	// static method
-				return type.InvokeMember(name,
-										InvokeBindingFlags,
-										null,
-										null,
-										args);
+			{	
+				// static method
+				return ResolveAndInvokeMethod(null, type, name, args);
 			}
 			
 			if (!HasRegisteredExtensions)
@@ -337,15 +347,17 @@ namespace Boo.Lang.Runtime
 				}
 				catch (System.MissingMemberException)
 				{
+					object[] extensionArgs = new object[] { target };
 					foreach (Type extension in RegisteredExtensions)
 					{
 						try
 						{
+							
 							return extension.InvokeMember(name,
 												   GetPropertyExtensionBindingFlags,
 												   null,
 												   null,
-												   new object[] {target});
+												   extensionArgs);
 						}
 						catch (System.MissingMemberException)
 						{	
@@ -430,7 +442,15 @@ namespace Boo.Lang.Runtime
                     }
                 case MemberTypes.Property:
                     {
-                        return GetGetMethod((PropertyInfo)member).Invoke(target, args);
+						MethodInfo getter = GetGetMethod((PropertyInfo)member);
+						if (getter.GetParameters().Length > 0)
+						{
+							// is this a indexed property?
+							return getter.Invoke(target, args);
+						}
+						// otherwise its a simple property and the slice
+						// should be applied to the return value
+						return GetSlice(getter.Invoke(target, null), "", args);
                     }
                 default:
                     {
@@ -502,7 +522,16 @@ namespace Boo.Lang.Runtime
 	                }
 	            case MemberTypes.Property:
 	                {
-	                    GetSetMethod((PropertyInfo) member).Invoke(target, args);
+						PropertyInfo property = (PropertyInfo) member;
+						MethodInfo setter = property.GetSetMethod(true);
+						if (null != setter && setter.GetParameters().Length > 0)
+						{
+							setter.Invoke(target, args);
+						}
+						else
+						{
+							SetSlice(GetPropertyValue(target, property), "", args);
+						}
 	                    break;
 	                }
 	            default:
@@ -514,6 +543,16 @@ namespace Boo.Lang.Runtime
 	        // last argument is the value
 	        return args[args.Length-1];
 	    }
+		
+		private static object GetPropertyValue(object target, PropertyInfo property)
+		{
+			MethodInfo getter = property.GetGetMethod(true);
+			if (null == getter || getter.GetParameters().Length > 0)
+			{
+				MemberNotSupported(property);
+			}
+			return getter.Invoke(target, new object[0]);
+		}
 
 	    private static object SetArraySlice(object target, object[] args)
 	    {
@@ -680,21 +719,16 @@ namespace Boo.Lang.Runtime
 
 				try
 				{
-					return lhsType.InvokeMember(operatorName,
-										InvokeOperatorBindingFlags,
-										null,
-										null,
-										args);
+					// TODO: first resolve the right method on either
+					// lhs and rhs
+					// and then cache the final information
+					return ResolveAndInvokeMethod(null, lhsType, operatorName, args);
 				}
 				catch (MissingMethodException)
 				{
 					try
 					{
-						return rhsType.InvokeMember(operatorName,
-										InvokeOperatorBindingFlags,
-										null,
-										null,
-										args);
+						return ResolveAndInvokeMethod(null, rhsType, operatorName, args);
 					}
 					catch (MissingMethodException)
 					{
@@ -1938,7 +1972,7 @@ namespace Boo.Lang.Runtime
 			return type.CreateType().GetMethod("Invoke");
 		}
 
-		private static MethodInfo FindImplicitConversionOperator(Type from, Type to)
+		internal static MethodInfo FindImplicitConversionOperator(Type from, Type to)
 		{
 			const BindingFlags ConversionOperatorFlags = BindingFlags.Static | BindingFlags.Public | BindingFlags.FlattenHierarchy;
 			MethodInfo[] methods = from.GetMethods(ConversionOperatorFlags);

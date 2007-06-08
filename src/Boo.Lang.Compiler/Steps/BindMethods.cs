@@ -1,3 +1,5 @@
+using System;
+
 #region license
 // Copyright (c) 2004, Rodrigo B. de Oliveira (rbo@acm.org)
 // All rights reserved.
@@ -26,47 +28,52 @@
 // THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #endregion
 
-namespace Boo.Lang.Compiler.Pipelines
+namespace Boo.Lang.Compiler.Steps
 {
-	using Boo.Lang.Compiler.Steps;
+	using Boo.Lang.Compiler.Ast;
+	using Boo.Lang.Compiler.TypeSystem;
 	
-	public class ResolveExpressions : Parse 
+	public class BindMethods : AbstractVisitorCompilerStep
 	{
-		public ResolveExpressions()
+		public BindMethods()
 		{
-			Add(new InitializeTypeSystemServices());
-			Add(new PreErrorChecking());
-			
-			Add(new MergePartialClasses());
-			
-			Add(new InitializeNameResolutionService());
-			Add(new IntroduceGlobalNamespaces());
-			Add(new TransformCallableDefinitions());
-			Add(new BindTypeDefinitions());			
-			Add(new BindNamespaces());
-			Add(new BindBaseTypes());
-			Add(new BindAndApplyAttributes());
-			
-			Add(new ExpandMacros());
-			Add(new IntroduceModuleClasses());
-			Add(new NormalizeStatementModifiers());
-			Add(new NormalizeTypeAndMemberDefinitions());
-			
-			Add(new BindTypeDefinitions());
-			Add(new BindEnumMembers());
-			Add(new BindBaseTypes());
-			
-			Add(new BindMethods());
-			Add(new ResolveTypeReferences());
-			Add(new BindTypeMembers());
-			
-			Add(new ProcessInheritedAbstractMembers());
-			Add(new CheckMemberNames());
-			
-			Add(new ExpandAstLiterals());
-			Add(new ProcessMethodBodiesWithDuckTyping());
-			
-			Add(new PreProcessExtensionMethods());
+		}
+		
+		override public void OnMethod(Method node)
+		{
+			if (null == node.Entity)
+			{
+				if (node.GenericParameters.Count == 0)
+				{
+					node.Entity = new InternalMethod(TypeSystemServices, node);
+				}
+				else
+				{
+					node.Entity = new InternalGenericMethodDefinition(TypeSystemServices, node);
+				}
+			}
+			Visit(node.ExplicitInfo);
+		}
+		
+		override public void OnExplicitMemberInfo(ExplicitMemberInfo node)
+		{
+			Visit(node.InterfaceType);
+		}
+		
+		override public void OnClassDefinition(ClassDefinition node)
+		{
+			Visit(node.Members);
+		}
+		
+		override public void OnModule(Module node)
+		{
+			Visit(node.Members);
+		}
+		
+		override public void Run()
+		{			
+			NameResolutionService.Reset();
+			Visit(CompileUnit.Modules);
 		}
 	}
 }

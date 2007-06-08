@@ -129,7 +129,10 @@ namespace Boo.Lang.Compiler.TypeSystem
 		{
 			foreach (IType arg in _arguments)
 			{
-				if (arg is IGenericParameter) return false;
+				if (TypeSystemServices.IsOpenGenericType(arg))
+				{
+					return false;
+				}
 			}
 			
 			return true;

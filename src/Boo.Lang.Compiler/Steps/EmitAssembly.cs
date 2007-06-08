@@ -1936,12 +1936,20 @@ namespace Boo.Lang.Compiler.Steps
 		
 		void InvokeRegularMethod(IMethod method, MethodInfo mi, MethodInvocationExpression node)
 		{
+			IType targetType = null;
 			if (!mi.IsStatic)
 			{
+				targetType = GetTargetObject(node).ExpressionType;
 				PushTargetObject(node, mi);
 			}
 			
 			PushArguments(method, node.Arguments);
+
+			// Emit a constrained call if target is a generic parameter
+			if (targetType != null && targetType is IGenericParameter)
+			{
+				_il.Emit(OpCodes.Constrained, GetSystemType(targetType));  
+			}
 			_il.EmitCall(GetCallOpCode(node, method, mi), mi, null);
 			
 			PushType(method.ReturnType);
@@ -1951,11 +1959,19 @@ namespace Boo.Lang.Compiler.Steps
 		{
 			Expression target = GetTargetObject(node);
 			IType targetType = target.ExpressionType;
-			if (targetType.IsValueType)
+			
+			// If target is a generic parameter, its address must be loaded
+			// to allow a constrained method call
+			if (targetType is IGenericParameter)
+			{
+				LoadAddress(target);
+			}
+	
+			else if (targetType.IsValueType)
 			{
 				if (mi.DeclaringType.IsValueType)
 				{
-					LoadAddress(target);
+					LoadAddress(target);					
 				}
 				else
 				{
@@ -3396,7 +3412,8 @@ namespace Boo.Lang.Compiler.Steps
 
 		private void EmitBoxIfNeeded(IType expectedType, IType actualType)
 		{
-			if (actualType.IsValueType && !expectedType.IsValueType)
+			if ((actualType.IsValueType && !expectedType.IsValueType) ||
+				(actualType is IGenericParameter && !(expectedType is IGenericParameter)))
 			{
 				EmitBox(actualType);
 			}
@@ -3718,12 +3735,12 @@ namespace Boo.Lang.Compiler.Steps
 				return MapGenericMethod(mapped.DeclaringType, (MethodInfo)mapped.MethodInfo);
 			}
 			
-			// If method is a mixed generic method, get its mapped MethodInfo
-			MixedGenericMethod generic = entity as MixedGenericMethod;
-			if (null != generic)
+			// If method is a mixed or internal constructed generic method, 
+			// get its mapped MethodInfo
+			if (entity is MixedGenericMethod || entity is InternalGenericMethod)
 			{
-				return MapGenericMethod(generic);
-			}
+				return MapGenericMethod(entity.GenericMethodInfo);
+			}			
 #endif
 			ExternalMethod external = entity as ExternalMethod;
 			if (null != external)
@@ -3777,13 +3794,13 @@ namespace Boo.Lang.Compiler.Steps
 		/// <summary>
 		/// Maps a generic method to its constructed version.
 		/// </summary>
-		private MethodInfo MapGenericMethod(MixedGenericMethod method)
+		private MethodInfo MapGenericMethod(IGenericMethodInfo genericMethodInfo)
 		{
 			Type[] arguments = Array.ConvertAll<IType, Type>(
-				method.GenericArguments,
+				genericMethodInfo.GenericArguments,
 				GetSystemType);
 				
-			return ((MethodInfo)method.MethodInfo).MakeGenericMethod(arguments);
+			return GetMethodInfo(genericMethodInfo.GenericDefinition).MakeGenericMethod(arguments);
 		}
 
 		/// <summary>
@@ -3841,7 +3858,6 @@ namespace Boo.Lang.Compiler.Steps
 			ExternalType external = tag as ExternalType;
 			if (null != external)
 			{
-#if NET_2_0
 				MixedGenericType mixed = tag as MixedGenericType;
 				if (null != mixed)
 				{
@@ -3853,7 +3869,6 @@ namespace Boo.Lang.Compiler.Steps
 					type = GetSystemType(mixed.GenericDefinition).MakeGenericType(arguments);
 				}
 				else
-#endif
 				{
 					type = external.ActualType;
 				}
@@ -3861,40 +3876,27 @@ namespace Boo.Lang.Compiler.Steps
 			else if (tag.IsArray)
 			{
 				IArrayType arrayType = (IArrayType)tag;
-				IType elementType = GetSimpleEntityType(arrayType);
-				if (elementType is IInternalEntity)
+				Type systemType = GetSystemType(arrayType.GetElementType());
+				int rank = arrayType.GetArrayRank();
+				
+				if (rank == 1)
 				{
-					string typeName = GetArrayTypeName(arrayType);
-					type = _moduleBuilder.GetType(typeName, true);
+					type = systemType.MakeArrayType();
 				}
-				else 
-				{					
-					Type systemType = GetSystemType(arrayType.GetElementType());
-					int rank = arrayType.GetArrayRank();
-					
-					if (rank == 1)
-					{
-#if NET_2_0
-						type = systemType.MakeArrayType();
-#else
-						type = Array.CreateInstance(systemType, 0).GetType();
-#endif
-					}
-					else
-					{
-#if NET_2_0
-						type = systemType.MakeArrayType(rank);
-#else
-						type = Array.CreateInstance(systemType, new int[rank]).GetType();
-#endif
-					}
+				else
+				{
+					type = systemType.MakeArrayType(rank);
 				}
 			}
 			else if (Null.Default == tag)
 			{
 				type = Types.Object;
 			}
-			else
+			else if (tag is InternalGenericParameter)
+			{
+				return (Type)GetBuilder(((InternalGenericParameter)tag).Node);
+			}
+			else if (tag is AbstractInternalType)
 			{
 				type = (Type)GetBuilder(((AbstractInternalType)tag).TypeDefinition);
 			}
@@ -3907,75 +3909,6 @@ namespace Boo.Lang.Compiler.Steps
 			_typeCache.Add(tag, type);
 			
 			return type;
-		}
-		
-		IType GetSimpleEntityType(IArrayType tag)
-		{
-			return GetSimpleEntityType(tag.GetElementType());
-		}
-		
-		IType GetSimpleEntityType(IType tag)
-		{
-			if (tag.IsArray)
-			{
-				return GetSimpleEntityType(((IArrayType)tag).GetElementType());
-			}
-			return tag;
-		}
-		
-		string GetArrayTypeName(IType tag)
-		{
-			StringBuilder builder = new StringBuilder();
-			GetArrayTypeName(builder, tag);
-			return builder.ToString();
-		}
-		
-		void GetArrayTypeName(StringBuilder buffer, IType tag)
-		{
-			if (tag.IsArray)
-			{
-				IArrayType array = (IArrayType)tag;
-				GetArrayTypeName(buffer, array.GetElementType());
-				buffer.Append("[");
-				for (int i = 1; i < array.GetArrayRank(); i++)
-				{
-					buffer.Append(",");
-				}
-				buffer.Append("]");
-			}
-			else
-			{
-				AppendFullTypeName(buffer, tag);
-			}
-		}
-		
-		void AppendFullTypeName(StringBuilder buffer, IType type)
-		{
-			AbstractInternalType internalType = (AbstractInternalType)type;
-			AppendFullTypeName(buffer, internalType.TypeDefinition);
-		}
-		
-		void AppendFullTypeName(StringBuilder buffer, TypeDefinition type)
-		{
-			TypeDefinition parent = type.DeclaringType;
-			if (null != parent)
-			{
-				if (NodeType.Module == parent.NodeType)
-				{
-					NamespaceDeclaration ns = parent.EnclosingNamespace;
-					if (null != ns)
-					{
-						buffer.Append(ns.Name);
-						buffer.Append('.');
-					}
-				}
-				else
-				{
-					AppendFullTypeName(buffer, parent);
-					buffer.Append('+'); // nested type
-				}
-			}
-			buffer.Append(type.Name);
 		}
 		
 		TypeAttributes GetNestedTypeAttributes(TypeMember type)
@@ -4302,9 +4235,15 @@ namespace Boo.Lang.Compiler.Steps
 			}
 
 			MethodBuilder builder = typeBuilder.DefineMethod(name,
-			                                                 methodAttributes,
-			                                                 GetSystemType(method.ReturnType),
-			                                                 GetParameterTypes(parameters));
+			                                                 methodAttributes);
+
+			if (method.GenericParameters.Count != 0)
+			{
+				DefineGenericParameters(builder, method.GenericParameters);
+			}
+			
+			builder.SetParameters(GetParameterTypes(parameters));
+			builder.SetReturnType(GetSystemType(method.ReturnType));			
 
 			builder.SetImplementationFlags(GetImplementationFlags(method));
 			
@@ -4320,6 +4259,27 @@ namespace Boo.Lang.Compiler.Steps
 			return builder;
 		}
 
+		void DefineGenericParameters(MethodBuilder builder, GenericParameterDeclarationCollection parameters)
+		{
+			string[] names = new string[parameters.Count];
+			int i = 0;
+			
+			foreach (GenericParameterDeclaration gpd in parameters)
+			{
+				names[i] = gpd.Name;
+				i++;
+			}
+			
+			builder.DefineGenericParameters(names);
+
+			Type[] parameterBuilders = builder.GetGenericArguments();			
+			i = 0;
+			foreach (GenericParameterDeclaration gpd in parameters)
+			{
+				SetBuilder(gpd, parameterBuilders[i++]); 
+			}		
+		}
+		
 		private CustomAttributeBuilder CreateDuckTypedCustomAttribute()
 		{
 			return new CustomAttributeBuilder(DuckTypedAttribute_Constructor, new object[0]);

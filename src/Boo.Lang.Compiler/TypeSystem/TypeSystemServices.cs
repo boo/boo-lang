@@ -1444,10 +1444,29 @@ namespace Boo.Lang.Compiler.TypeSystem
 						}
 					}
 				}
-				
-				
+								
 				type = type.BaseType;
 			}
+		}
+		
+		public static bool IsOpenGenericType(IType type)
+		{
+			if (type is IGenericParameter)
+			{
+				return true;
+			}
+			
+			if (type.GenericTypeInfo != null)
+			{
+				return !type.GenericTypeInfo.FullyConstructed;
+			}
+			
+			if (type.IsByRef || type.IsArray)
+			{
+				return IsOpenGenericType(type.GetElementType());
+			}
+			
+			return false;
 		}
 #endif
 						                                         

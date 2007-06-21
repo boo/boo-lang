@@ -27,7 +27,6 @@ enum TypeMemberModifiers:
 enum MethodImplementationFlags:
 	None = 0
 	Runtime = 1
-	Extension = 2
 
 enum ParameterModifiers:
 	None = 0
@@ -63,12 +62,16 @@ class CallableTypeReference(TypeReference):
 class GenericTypeReference(SimpleTypeReference):
 	GenericArguments as TypeReferenceCollection
 
+class GenericTypeDefinitionReference(SimpleTypeReference):
+	GenericPlaceholders as int
+	
 [collection(TypeReference)]
 class TypeReferenceCollection:
 	pass
 
 class CallableDefinition(TypeMember, INodeWithParameters):
 	Parameters as ParameterDeclarationCollection
+	GenericParameters as GenericParameterDeclarationCollection
 	ReturnType as TypeReference
 	ReturnTypeAttributes as AttributeCollection
 
@@ -171,6 +174,13 @@ class ParameterDeclaration(Node, INodeWithAttributes):
 class ParameterDeclarationCollection:
 	pass
 
+class GenericParameterDeclaration(Node):
+	Name as string
+
+[collection(GenericParameterDeclaration)]
+class GenericParameterDeclarationCollection:
+	pass
+
 class Declaration(Node):
 	Name as string
 	Type as TypeReference
@@ -189,7 +199,7 @@ class AttributeCollection:
 	pass
 
 enum StatementModifierType:
-	Uninitialized
+	None
 	If
 	Unless
 	While
@@ -229,7 +239,6 @@ class TryStatement(Statement):
 	[auto]
 	ProtectedBlock as Block
 	ExceptionHandlers as ExceptionHandlerCollection
-	SuccessBlock as Block
 	EnsureBlock as Block
 	
 class ExceptionHandler(Node):
@@ -285,9 +294,6 @@ class BreakStatement(Statement):
 	pass
 
 class ContinueStatement(Statement):
-	pass
-
-class RetryStatement(Statement):
 	pass
 
 class ReturnStatement(Statement):

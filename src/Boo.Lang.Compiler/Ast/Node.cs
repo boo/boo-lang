@@ -26,11 +26,14 @@
 // THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #endregion
 
+using System.Collections.Generic;
+
 namespace Boo.Lang.Compiler.Ast
 {
 	using System;
-	using System.Collections;
 	using System.Xml.Serialization;
+	
+	public delegate bool NodePredicate(Node node);
 
 	/// <summary>
 	/// Base class for every node in the AST.
@@ -38,6 +41,36 @@ namespace Boo.Lang.Compiler.Ast
 	[Serializable]
 	public abstract class Node : ICloneable
 	{
+		public static bool Matches<T>(T lhs, T rhs) where T : Node
+		{
+			return lhs == null ? rhs == null : lhs.Matches(rhs);
+		}
+		
+		public static bool Matches(Block lhs, Block rhs)
+		{
+			return lhs == null ? rhs == null || !rhs.HasStatements : lhs.Matches(rhs);
+		}
+
+		public static bool AllMatch<T>(IEnumerable<T> lhs, IEnumerable<T> rhs) where T : Node
+		{
+			if (lhs == null) return rhs == null || IsEmpty(rhs);
+			if (rhs == null) return IsEmpty(lhs);
+
+			IEnumerator<T> r = rhs.GetEnumerator();
+			foreach (T item in lhs)
+			{
+				if (!r.MoveNext()) return false;
+				if (!Matches(item, r.Current)) return false;
+			}
+			if (r.MoveNext()) return false;
+			return true;
+		}
+
+		private static bool IsEmpty<T>(IEnumerable<T> e)
+		{
+			return !e.GetEnumerator().MoveNext();
+		}
+
 		protected LexicalInfo _lexicalInfo = LexicalInfo.Empty;
 		
 		protected SourceLocation _endSourceLocation = LexicalInfo.Empty;
@@ -46,7 +79,7 @@ namespace Boo.Lang.Compiler.Ast
 		
 		protected string _documentation;
 		
-		protected System.Collections.Hashtable _annotations = new System.Collections.Hashtable();
+		protected System.Collections.Hashtable _annotations;
 		
 		protected bool _isSynthetic;
 
@@ -67,6 +100,7 @@ namespace Boo.Lang.Compiler.Ast
 		protected void InitializeFrom(Node other)
 		{
 			_lexicalInfo = other.LexicalInfo;
+			_isSynthetic = other.IsSynthetic;
 		}
 		
 		public Node CloneNode()
@@ -110,11 +144,13 @@ namespace Boo.Lang.Compiler.Ast
 		{
 			get
 			{
+				if (_annotations == null) return null;
 				return _annotations[key];
 			}
 			
 			set			
 			{
+				if (_annotations == null) _annotations = new System.Collections.Hashtable();
 				_annotations[key] = value;
 			}
 		}
@@ -126,22 +162,25 @@ namespace Boo.Lang.Compiler.Ast
 		
 		public void Annotate(object key, object value)
 		{
+			if (_annotations == null) _annotations = new System.Collections.Hashtable();
 			_annotations.Add(key, value);
 		}
 		
 		public bool ContainsAnnotation(object key)
 		{
+			if (_annotations == null) return false;
 			return _annotations.ContainsKey(key);
 		}
 		
 		public void RemoveAnnotation(object key)
 		{
+			if (_annotations == null) return;
 			_annotations.Remove(key);
 		}
 		
 		internal virtual void ClearTypeSystemBindings()
 		{
-			_annotations.Clear();
+			_annotations = null;
 		}
 		
 		public Node ParentNode
@@ -217,13 +256,13 @@ namespace Boo.Lang.Compiler.Ast
 		
 		private class ReplaceVisitor : DepthFirstTransformer
 		{
-			Node _pattern;
+			NodePredicate _predicate;
 			Node _template;	
 			int _matches;
 			
-			public ReplaceVisitor(Node pattern, Node template)
+			public ReplaceVisitor(NodePredicate predicate, Node template)
 			{
-				_pattern = pattern;
+				_predicate = predicate;
 				_template = template;
 			}
 			
@@ -237,7 +276,7 @@ namespace Boo.Lang.Compiler.Ast
 	
 			override protected void OnNode(Node node)
 			{
-				if (_pattern.Matches(node))
+				if (_predicate(node))
 				{
 					++_matches;
 					ReplaceCurrentNode(_template.CloneNode());
@@ -253,14 +292,25 @@ namespace Boo.Lang.Compiler.Ast
 		/// Replaces all occurrences of the pattern pattern anywhere in the tree
 		/// with a clone of template.
 		/// </summary>
-		/// <returns>the number of which matched the specified pattern</returns>
+		/// <returns>the number of nodes replaced</returns>
 		public int ReplaceNodes(Node pattern, Node template)
 		{
-			ReplaceVisitor visitor = new ReplaceVisitor(pattern, template);
+			NodePredicate predicate = new NodePredicate(pattern.Matches);
+			return ReplaceNodes(predicate, template);
+		}
+
+		/// <summary>
+		/// Replaces all node for which predicate returns true anywhere in the tree
+		/// with a clone of template.
+		/// </summary>
+		/// <returns>the number of nodes replaced</returns>
+		public int ReplaceNodes(NodePredicate predicate, Node template)
+		{
+			ReplaceVisitor visitor = new ReplaceVisitor(predicate, template);
 			Accept(visitor);
 			return visitor.Matches;
 		}
-
+		
 		internal void InitializeParent(Node parent)
 		{			
 			_parent = parent;
@@ -271,21 +321,14 @@ namespace Boo.Lang.Compiler.Ast
 		public abstract object Clone();
 		
 		public abstract bool Matches(Node other);
-		
-		public static bool Matches(Node lhs, Node rhs)
+
+		protected bool NoMatch(string fieldName)
 		{
-			return lhs == null
-				? rhs == null
-				: lhs.Matches(rhs);
+			//helps debugging Node.Matches logic
+			//Console.Error.WriteLine("No match for '{0}'.", fieldName);
+			return false;
 		}
-		
-		public static bool Matches(NodeCollection lhs, NodeCollection rhs)
-		{
-			return lhs == null
-				? rhs == null
-				: lhs.Matches(rhs);
-		}
-		
+
 		public abstract NodeType NodeType
 		{
 			get;
@@ -303,12 +346,18 @@ namespace Boo.Lang.Compiler.Ast
 			return writer.ToString();
 		}
 		
-		protected void OnReplace(Node oldNode, Node newNode)
+		public Node GetAncestor(NodeType ancestorType)
 		{
-		}
-		
-		protected void OnReplace(NodeCollection oldCollection, NodeCollection newCollection)
-		{
+			Node parent = this.ParentNode;
+			while (null != parent)
+			{
+				if (ancestorType == parent.NodeType)
+				{
+					return parent;
+				}
+				parent = parent.ParentNode;
+			}
+			return null;
 		}
 	}
 

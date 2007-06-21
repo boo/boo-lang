@@ -35,12 +35,11 @@ namespace Boo.Lang.Compiler.TypeSystem
 		IType _array;
 
 		int _rank;
-		
-		public ArrayType(TypeSystemServices tagManager, IType elementType)
+			
+		IType _enumerable;
+
+		public ArrayType(TypeSystemServices tagManager, IType elementType) : this(tagManager, elementType, 1)
 		{
-			_array = tagManager.ArrayType;
-			_elementType = elementType;
-			_rank = 1;
 		}
 
 		public ArrayType(TypeSystemServices tagManager, IType elementType, int rank)
@@ -48,6 +47,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 			_array = tagManager.ArrayType;
 			_elementType = elementType;
 			_rank = rank;
+			_enumerable = tagManager.IEnumerableGenericType;
 		}
 
 		
@@ -181,7 +181,16 @@ namespace Boo.Lang.Compiler.TypeSystem
 		
 		public virtual bool IsSubclassOf(IType other)
 		{
-			return other.IsAssignableFrom(_array);
+			if (other.IsAssignableFrom(_array)) return true;
+			
+			// Arrays also implement generic IEnumerable of their element type 
+			if (other.GenericTypeInfo != null && 
+				other.GenericTypeInfo.GenericDefinition == _enumerable &&
+				other.GenericTypeInfo.GenericArguments[0].IsAssignableFrom(_elementType))
+			{
+				return true;
+			}
+			return false;
 		}
 		
 		public virtual bool IsAssignableFrom(IType other)
@@ -207,6 +216,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 				}
 				return _elementType.IsAssignableFrom(otherEntityType);
 			}
+						
 			return false;
 		}
 		
@@ -241,6 +251,16 @@ namespace Boo.Lang.Compiler.TypeSystem
 		override public string ToString()
 		{
 			return Name;
+		}
+
+		IGenericTypeDefinitionInfo IType.GenericTypeDefinitionInfo
+		{
+			get { return null; }
+		}
+		
+		IGenericTypeInfo IType.GenericTypeInfo
+		{
+			get { return null; }
 		}
 	}
 }

@@ -27,12 +27,10 @@
 #endregion
 
 using System;
-using Boo.Lang.Compiler.Ast.Impl;
 
 namespace Boo.Lang.Compiler.Ast
 {
-	[Serializable]
-	public class ClassDefinition : ClassDefinitionImpl
+	public partial class ClassDefinition
 	{		
 		public ClassDefinition()
 		{
@@ -48,8 +46,8 @@ namespace Boo.Lang.Compiler.Ast
 			{
 				foreach (TypeMember member in _members)
 				{
-					if (NodeType.Constructor == member.NodeType &&
-						!member.IsStatic)
+					if (NodeType.Constructor == member.NodeType
+						&& !member.IsStatic)
 					{
 						return true;
 					}
@@ -65,19 +63,11 @@ namespace Boo.Lang.Compiler.Ast
 			{
 				if (member.NodeType == NodeType.Constructor)
 				{
-					if (current == index)
-					{
-						return (Constructor)member;
-					}
+					if (current == index) return (Constructor)member;
 					++current;
 				}
 			}
 			throw new ArgumentException("index");
-		}
-		
-		override public void Accept(IAstVisitor visitor)
-		{
-			visitor.OnClassDefinition(this);
 		}
 		
 		public void Merge(ClassDefinition node)

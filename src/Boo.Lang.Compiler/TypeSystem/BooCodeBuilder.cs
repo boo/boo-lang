@@ -41,28 +41,18 @@ namespace Boo.Lang.Compiler.TypeSystem
 		
 		public BooCodeBuilder(TypeSystemServices tss)
 		{
-			if (null == tss)
-			{
-				throw new ArgumentNullException("tss");
-			}
-			
+			if (null == tss) throw new ArgumentNullException("tss");
 			_tss = tss;
 		}
 		
 		public TypeSystemServices TypeSystemServices
 		{
-			get
-			{
-				return _tss;
-			}
+			get { return _tss; }
 		}
 		
 		public CompilerContext Context
 		{
-			get
-			{
-				return _tss.Context;
-			}
+			get { return _tss.Context; }
 		}
 
 		public int GetFirstParameterIndex(TypeMember member)
@@ -73,22 +63,39 @@ namespace Boo.Lang.Compiler.TypeSystem
 		public Statement CreateFieldAssignment(Field node, Expression initializer)
 		{
 			InternalField fieldEntity = (InternalField)TypeSystem.TypeSystemServices.GetEntity(node);
-			
-			ExpressionStatement stmt = new ExpressionStatement(initializer.LexicalInfo);
-			Expression context = node.IsStatic
-				? (Expression) CreateReference(node.LexicalInfo, fieldEntity.DeclaringType)
-				: CreateSelfReference(fieldEntity.Type);
-			stmt.Expression = this.CreateAssignment(initializer.LexicalInfo,
-				CreateMemberReference(context, fieldEntity),
-				initializer);
-			return stmt;
+			return CreateFieldAssignment(node.LexicalInfo, fieldEntity, initializer);
 		}
 		
-		public Attribute CreateAttribute(IConstructor constructor, Expression arg)
+		public Statement CreateFieldAssignment(LexicalInfo lexicalInfo, IField fieldEntity, Expression initializer)
+		{
+			return new ExpressionStatement(
+				CreateAssignment(initializer.LexicalInfo,
+					CreateReference(fieldEntity),
+					initializer));
+		}
+		
+		public Attribute CreateAttribute(System.Type type)
+		{
+			return CreateAttribute(_tss.Map(type));
+		}
+		
+		public Attribute CreateAttribute(IType type)
+		{
+			// TODO: check for the existence of a default constructor
+			return CreateAttribute(_tss.GetDefaultConstructor(type));
+		}
+		
+		public Attribute CreateAttribute(IConstructor constructor)
 		{
 			Attribute attribute = new Attribute();
 			attribute.Name = constructor.DeclaringType.FullName;
 			attribute.Entity = constructor;
+			return attribute;
+		}
+		
+		public Attribute CreateAttribute(IConstructor constructor, Expression arg)
+		{
+			Attribute attribute = CreateAttribute(constructor);
 			attribute.Arguments.Add(arg);
 			return attribute;
 		}
@@ -152,16 +159,17 @@ namespace Boo.Lang.Compiler.TypeSystem
 			return CreateTypeofExpression(_tss.Map(type));
 		}
 		
-		public InternalLabel CreateLabelStatement(Node sourceNode, string name)
-		{
-			return new InternalLabel(new LabelStatement(sourceNode.LexicalInfo, name));
-		}
-		
 		public ReferenceExpression CreateLabelReference(LabelStatement label)
 		{
 			ReferenceExpression reference = new ReferenceExpression(label.LexicalInfo, label.Name);
 			reference.Entity = label.Entity;
 			return reference;
+		}
+		
+		public Statement CreateSwitch(LexicalInfo li, Expression offset, IEnumerable labels)
+		{
+			offset.LexicalInfo = li;
+			return CreateSwitch(offset, labels);
 		}
 		
 		public Statement CreateSwitch(Expression offset, IEnumerable labels)
@@ -192,7 +200,9 @@ namespace Boo.Lang.Compiler.TypeSystem
 		
 		public MethodInvocationExpression CreatePropertyGet(Expression target, IProperty property)
 		{
-			return CreateMethodInvocation(target, property.GetGetMethod());
+			return property.IsExtension
+				? CreateMethodInvocation(property.GetGetMethod(), target)
+				: CreateMethodInvocation(target, property.GetGetMethod());
 		}
 		
 		public MethodInvocationExpression CreatePropertySet(Expression target, IProperty property, Expression value)
@@ -203,6 +213,11 @@ namespace Boo.Lang.Compiler.TypeSystem
 		public MethodInvocationExpression CreateMethodInvocation(MethodInfo staticMethod, Expression arg)
 		{
 			return CreateMethodInvocation(_tss.Map(staticMethod), arg);
+		}
+
+		public MethodInvocationExpression CreateMethodInvocation(MethodInfo staticMethod, Expression arg0, Expression arg1)
+		{
+			return CreateMethodInvocation(_tss.Map(staticMethod), arg0, arg1);
 		}
 
 		public MethodInvocationExpression CreateMethodInvocation(LexicalInfo li, Expression target, IMethod tag, Expression arg)
@@ -248,12 +263,11 @@ namespace Boo.Lang.Compiler.TypeSystem
 			return mie;
 		}
 		
-		public MethodInvocationExpression CreateMethodInvocation(IMethod staticMethod)
+		public MethodInvocationExpression CreateMethodInvocation(IMethod method)
 		{
 			MethodInvocationExpression mie = new MethodInvocationExpression();
-			mie.Target = new ReferenceExpression(staticMethod.FullName);
-			mie.Target.Entity = staticMethod;
-			mie.ExpressionType = staticMethod.ReturnType;
+			mie.Target = CreateMemberReference(method);
+			mie.ExpressionType = method.ReturnType;
 			return mie;
 		}
 		
@@ -349,17 +363,9 @@ namespace Boo.Lang.Compiler.TypeSystem
 
         public MemberReferenceExpression CreateMemberReference(IMember member)
 		{
-			IType declaringType = member.DeclaringType;
-			
-			Expression target = null;
-			if (member.IsStatic)
-			{
-				target = CreateReference(declaringType);
-			}
-			else
-			{
-				target = CreateSelfReference(declaringType);
-			}
+        	Expression target = member.IsStatic
+				? (Expression)CreateReference(member.DeclaringType)
+				: (Expression)CreateSelfReference(member.DeclaringType);
 			return CreateMemberReference(target, member);
 		}
 		
@@ -377,7 +383,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 		{
 			MethodInvocationExpression mie = new MethodInvocationExpression(target.LexicalInfo);
 			mie.Target = CreateMemberReference(target, tag);			
-			mie.ExpressionType = tag.ReturnType;			
+			mie.ExpressionType = tag.ReturnType;
 			return mie;			
 		}
 		
@@ -397,6 +403,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 		{
 			ReferenceExpression reference = new ReferenceExpression(type.FullName);
 			reference.Entity = type;
+			reference.IsSynthetic = true;
 			return reference;
 		}
 		
@@ -588,6 +595,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 			Constructor constructor = new Constructor();
 			constructor.Modifiers = modifiers;
 			constructor.Entity = new InternalConstructor(_tss, constructor);
+			constructor.IsSynthetic = true;
 			return constructor;
 		}
 		
@@ -629,14 +637,14 @@ namespace Boo.Lang.Compiler.TypeSystem
 			return mie;
 		}
 		
-		public Statement CreateSuperConstructorInvocation(IType baseType)
+		public ExpressionStatement CreateSuperConstructorInvocation(IType baseType)
 		{			
 			IConstructor defaultConstructor = _tss.GetDefaultConstructor(baseType);
 			Debug.Assert(null != defaultConstructor);
 			return CreateSuperConstructorInvocation(defaultConstructor);
 		}
 		
-		public Statement CreateSuperConstructorInvocation(IConstructor defaultConstructor)
+		public ExpressionStatement CreateSuperConstructorInvocation(IConstructor defaultConstructor)
 		{			
 			MethodInvocationExpression call = new MethodInvocationExpression(new SuperLiteralExpression());			
 			call.Target.Entity = defaultConstructor;
@@ -682,6 +690,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 			method.Modifiers = modifiers;
 			method.ReturnType = returnType;
 			method.Entity = new InternalMethod(_tss, method);
+			method.IsSynthetic = true;
 			return method;
 		}
 		
@@ -691,6 +700,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 			property.Modifiers = TypeMemberModifiers.Public;
 			property.Type = CreateTypeReference(type);
 			property.Entity = new InternalProperty(_tss, property);
+			property.IsSynthetic = true;
 			return property;
 		}
 		
@@ -701,6 +711,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 			field.Name = name;
 			field.Type = CreateTypeReference(type);
 			field.Entity = new InternalField(field);
+			field.IsSynthetic = true;
 			return field;
 		}
 		
@@ -739,9 +750,15 @@ namespace Boo.Lang.Compiler.TypeSystem
 		
 		public Method CreateAbstractMethod(LexicalInfo lexicalInfo, IMethod baseMethod)
 		{
+			return CreateMethodFromPrototype(lexicalInfo, baseMethod, TypeMemberModifiers.Public | TypeMemberModifiers.Abstract);
+		}
+		
+		public Method CreateMethodFromPrototype(LexicalInfo lexicalInfo, IMethod baseMethod, TypeMemberModifiers newModifiers)
+		{
 			Method method = new Method(lexicalInfo);
 			method.Name = baseMethod.Name;
-			method.Modifiers = TypeMemberModifiers.Public | TypeMemberModifiers.Abstract;
+			method.Modifiers = newModifiers;
+			method.IsSynthetic = true;
 			
 			IParameter[] parameters = baseMethod.GetParameters();
 			for (int i=0; i<parameters.Length; ++i)
@@ -827,5 +844,39 @@ namespace Boo.Lang.Compiler.TypeSystem
 				parameter.Entity = new InternalParameter(parameter, i + delta);
 			}
 		}
+
+		public InternalLabel CreateLabel(Node sourceNode, string name)
+		{
+			return new InternalLabel(new LabelStatement(sourceNode.LexicalInfo, name));
+		}
+		
+		
+		public TypeMember CreateStub(IMember member)
+		{
+			IMethod md = (member as IMethod);
+			if (null == md) return null;				
+				
+			Method m = CreateVirtualMethod(md.Name, md.ReturnType);
+			int idx = 0;
+			foreach (IParameter param in md.GetParameters()) {
+				m.Parameters.Add(
+					CreateParameterDeclaration(idx,
+											param.Name,
+											param.Type,
+											param.IsByRef));
+				idx++;
+			}
+			
+			MethodInvocationExpression x = new MethodInvocationExpression();
+			x.Target = new MemberReferenceExpression(
+								new ReferenceExpression("System"),
+								"NotImplementedException");
+			RaiseStatement rs = new RaiseStatement(x);
+			rs.LexicalInfo = LexicalInfo.Empty;			
+			m.Body.Statements.Insert(0, rs);
+			
+			return m;
+		}
+		
 	}
 }

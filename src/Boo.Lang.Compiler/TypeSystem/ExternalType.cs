@@ -48,26 +48,25 @@ namespace Boo.Lang.Compiler.TypeSystem
 		string _primitiveName;
 		
 		string _fullName;
+
+		private string _name;
 		
-		internal ExternalType(TypeSystemServices manager, Type type)
+		internal ExternalType(TypeSystemServices tss, Type type)
 		{
 			if (null == type)
 			{
 				throw new ArgumentException("type");
 			}
-			_typeSystemServices = manager;
+			_typeSystemServices = tss;
 			_type = type;
 		}
 		
-		public string FullName
+		public virtual string FullName
 		{
 			get
 			{
-				if (null == _fullName)
-				{
-					_fullName = BuildFullName();
-				}
-				return _fullName;
+                if (null != _fullName) return _fullName;
+                return _fullName = BuildFullName();
 			}
 		}
 		
@@ -84,12 +83,23 @@ namespace Boo.Lang.Compiler.TypeSystem
 			}
 		}
 		
-		public string Name
+		public virtual string Name
 		{
 			get
 			{
-				return _type.Name;
+				if (_name == null) _name = TypeName(_type);
+				return _name;
 			}
+		}
+
+		private static string TypeName(Type type)
+		{
+
+			if (!type.IsGenericTypeDefinition) return type.Name;
+			string name = type.Name;
+			int index = name.LastIndexOf('`');
+			if (index < 0) return name;
+			return name.Substring(0, index);
 		}
 		
 		public EntityType EntityType
@@ -135,7 +145,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 			}
 		}
 		
-		public IType GetElementType()
+		public virtual IType GetElementType()
 		{
 			return _typeSystemServices.Map(_type.GetElementType());
 		}
@@ -188,7 +198,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 			}
 		}
 		
-		public IType BaseType
+		public virtual IType BaseType
 		{
 			get
 			{
@@ -200,7 +210,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 			}
 		}
 		
-		public IEntity GetDefaultMember()
+		public virtual IEntity GetDefaultMember()
 		{
 			return _typeSystemServices.Map(_type.GetDefaultMembers());
 		}
@@ -244,7 +254,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 			return _type.IsAssignableFrom(external._type);
 		}
 		
-		public IConstructor[] GetConstructors()
+		public virtual IConstructor[] GetConstructors()
 		{
 			if (null == _constructors)
 			{
@@ -259,7 +269,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 			return _constructors;
 		}
 		
-		public IType[] GetInterfaces()
+		public virtual IType[] GetInterfaces()
 		{
 			if (null == _interfaces)
 			{
@@ -273,7 +283,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 			return _interfaces;
 		}
 		
-		public IEntity[] GetMembers()
+		public virtual IEntity[] GetMembers()
 		{
 			if (null == _members)
 			{
@@ -316,7 +326,9 @@ namespace Boo.Lang.Compiler.TypeSystem
 			bool found = false;
 			foreach (IEntity member in GetMembers())
 			{
-				if (member.Name == name && NameResolutionService.IsFlagSet(flags, member.EntityType))
+				if (!NameResolutionService.IsFlagSet(flags, member.EntityType)) continue;
+
+				if (member.Name == name)
 				{
 					targetList.AddUnique(member);
 					found = true;
@@ -398,11 +410,59 @@ namespace Boo.Lang.Compiler.TypeSystem
 			return 1;
 		}
 		
-		string BuildFullName()
+		protected virtual string BuildFullName()
 		{
 			if (_type.IsByRef) return "ref " + this.GetElementType().ToString();
-			if (_type.DeclaringType != null) return this.DeclaringType.ToString() + "." + _type.Name;
+			if (_type.DeclaringType != null) return this.DeclaringType.ToString() + "." + _type.Name;		
+			
+			// HACK: Some constructed generic types report a FullName of null
+			if (_type.FullName == null) 
+			{
+				string[] argumentNames = Array.ConvertAll<Type, string>(
+					_type.GetGenericArguments(),
+					delegate(Type t) { return t.FullName; });
+				
+				return string.Format(
+					"{0}[{1}]",
+					_type.GetGenericTypeDefinition().FullName,
+					string.Join(",", argumentNames));
+				
+			}
 			return _type.FullName;
 		}
+		
+		ExternalGenericTypeDefinitionInfo _genericTypeDefinitionInfo = null;		
+		public virtual IGenericTypeDefinitionInfo GenericTypeDefinitionInfo
+		{
+			get
+			{
+				if (ActualType.IsGenericTypeDefinition)
+				{
+					if (_genericTypeDefinitionInfo == null)
+					{
+						_genericTypeDefinitionInfo = new ExternalGenericTypeDefinitionInfo(_typeSystemServices, this);
+					}
+					return _genericTypeDefinitionInfo;
+				}
+				return null;
+			}
+		}
+
+		ExternalGenericTypeInfo _genericTypeInfo = null;
+		public virtual IGenericTypeInfo GenericTypeInfo
+		{
+			get
+			{
+				if (ActualType.IsGenericType)
+				{
+					if (_genericTypeInfo == null)
+					{
+						_genericTypeInfo = new ExternalGenericTypeInfo(_typeSystemServices, this);
+					}
+					return _genericTypeInfo;
+				}
+				return null;
+			}
+		}	
 	}
 }

@@ -28,6 +28,7 @@
 
 namespace Boo.NAnt
 
+import System
 import System.Diagnostics
 import System.IO
 import NAnt.Core
@@ -71,7 +72,14 @@ class PrepareScriptStep(AbstractCompilerStep):
 		
 		module.Members.Clear()
 		module.Members.Add(script)		
-	
+		
+def WithWorkingDir(dir as string, block as callable()):
+	_saved = Environment.CurrentDirectory
+	Environment.CurrentDirectory = dir
+	try:
+		block()
+	ensure:	
+		Environment.CurrentDirectory = _saved
 
 [TaskName("boo")]
 class BooTask(AbstractBooTask):
@@ -100,13 +108,13 @@ class BooTask(AbstractBooTask):
 		result = RunCompiler(compiler)		
 
 		print("script successfully compiled.")
-		
 		try:
 			scriptType = result.GeneratedAssembly.GetType("__Script__", true)
 			script as AbstractScript = scriptType()
 			script.Project = Project
 			script.Task = self
-			script.Run()
+			WithWorkingDir(Project.BaseDirectory) do:
+				script.Run()
 		except x:
 			raise BuildException(x.Message, Location, x)
 			

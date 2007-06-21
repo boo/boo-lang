@@ -27,7 +27,6 @@
 #endregion
 
 using System;
-using Boo.Lang.Compiler.Ast.Impl;
 
 namespace Boo.Lang.Compiler.Ast
 {
@@ -35,8 +34,7 @@ namespace Boo.Lang.Compiler.Ast
 	[System.Xml.Serialization.XmlInclude(typeof(ClassDefinition))]
 	[System.Xml.Serialization.XmlInclude(typeof(InterfaceDefinition))]
 	[System.Xml.Serialization.XmlInclude(typeof(EnumDefinition))]
-	[Serializable]
-	public abstract class TypeDefinition : TypeDefinitionImpl
+	public abstract partial class TypeDefinition
 	{		
 		protected TypeDefinition()
 		{
@@ -82,10 +80,7 @@ namespace Boo.Lang.Compiler.Ast
 		{
 			foreach (TypeMember member in _members)
 			{
-				if (memberType == member.NodeType)
-				{
-					return true;
-				}
+				if (memberType == member.NodeType) return true;
 			}
 			return false;
 		}

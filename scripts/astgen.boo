@@ -45,8 +45,12 @@ class Model:
 			return _module.Members
 		
 	def GetConcreteAstNodes():
-		for member as TypeDefinition in _module.Members:
+		for member as TypeDefinition in Members:
 			yield member if IsConcreteAstNode(member)
+			
+	def GetEnums():
+		for member as TypeDefinition in Members:
+			yield member if IsEnum(member)
 	
 	def IsConcreteAstNode(member as TypeMember):
 		return not (IsCollection(member) or IsEnum(member) or IsAbstract(member))
@@ -75,13 +79,16 @@ class Model:
 		for item as TypeDefinition in GetTypeHierarchy(node):
 			fields.Extend(item.Members)
 		return array(Field, fields)
+		
+	def IsVisitableField(field as Field):
+		type = ResolveFieldType(field)
+		return type is not null and not IsEnum(type)
 
 	def GetVisitableFields(item as ClassDefinition):	
 		fields = []
 		for item as TypeDefinition in GetTypeHierarchy(item):	
 			for field as Field in item.Members:
-				type = ResolveFieldType(field)
-				fields.Add(field) if type and not IsEnum(type)
+				fields.Add(field) if IsVisitableField(field)
 		return array(Field, fields)
 		
 	def IsExpression(node as ClassDefinition):
@@ -199,14 +206,18 @@ def applyTemplate(node as TypeDefinition,
 		template.Execute()
 	
 def applyModelTemplate(model as Model, templateName as string, overwriteExistingFile as bool):
-	applyTemplate(null, loadTemplate(model, templateName), "${templateName}", overwriteExistingFile)
+	applyModelTemplate(model, templateName, "${templateName}", overwriteExistingFile)
+	
+def applyModelTemplate(model as Model, templateName as string, targetFile as string, overwriteExistingFile as bool):
+	applyTemplate(null, loadTemplate(model, templateName), targetFile, overwriteExistingFile)
 
 start = date.Now
 
 model = Model(parse("ast.model.boo"))
 applyModelTemplate(model, "IAstVisitor.cs", true)
-applyModelTemplate(model, "DepthFirstVisitor.cs", true)
-applyModelTemplate(model, "DepthFirstTransformer.cs", true)
+applyModelTemplate(model, "DepthFirstVisitor.cs", "Impl/DepthFirstVisitor.cs", true)
+applyModelTemplate(model, "DepthFirstTransformer.cs", "Impl/DepthFirstTransformer.cs", true)
+applyModelTemplate(model, "CodeSerializer.cs", "Impl/CodeSerializer.cs", true)
 applyModelTemplate(model, "NodeType.cs", true)
 
 enumTemplate = loadTemplate(model, "Enum.cs")

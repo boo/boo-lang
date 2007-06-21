@@ -33,7 +33,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 	public class ExternalParameter : IParameter
 	{
 		TypeSystemServices _typeSystemServices;
-		ParameterInfo _parameter;
+		protected ParameterInfo _parameter;
 		
 		public ExternalParameter(TypeSystemServices service, ParameterInfo parameter)
 		{
@@ -65,7 +65,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 			}
 		}
 		
-		public IType Type
+		public virtual IType Type
 		{
 			get
 			{

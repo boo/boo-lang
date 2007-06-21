@@ -27,14 +27,12 @@
 #endregion
 
 using System;
-using Boo.Lang.Compiler.Ast.Impl;
 
 namespace Boo.Lang.Compiler.Ast
 {	
 	[System.Xml.Serialization.XmlInclude(typeof(Constructor))]
 	[System.Xml.Serialization.XmlInclude(typeof(Destructor))]
-	[Serializable]
-	public class Method : MethodImpl
+	public partial class Method
 	{	
 		public Method()
 		{			
@@ -59,16 +57,6 @@ namespace Boo.Lang.Compiler.Ast
 			}
 		}
 		
-		public bool IsExtension
-		{
-			get
-			{
-				return
-					MethodImplementationFlags.Extension ==
-						(_implementationFlags & MethodImplementationFlags.Extension);
-			}
-		}
-		
 		override public TypeDefinition DeclaringType
 		{
 			get
@@ -83,11 +71,6 @@ namespace Boo.Lang.Compiler.Ast
 				}
 				return (TypeDefinition)ParentNode;
 			}
-		}
-		
-		override public void Accept(IAstVisitor visitor)
-		{
-			visitor.OnMethod(this);
 		}
 	}
 }

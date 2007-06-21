@@ -26,17 +26,38 @@
 // THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #endregion
 
+using System;
+using System.Reflection;
+
 namespace Boo.Lang.Compiler.TypeSystem
 {	
+    class CachedMethod
+    {
+        public readonly IMethod Value;
+
+        public CachedMethod(IMethod value)
+        {
+            Value = value;
+        }
+    }
+
 	public class ExternalProperty : IProperty
 	{
-		TypeSystemServices _typeSystemServices;
+		protected TypeSystemServices _typeSystemServices;
 		
-		System.Reflection.PropertyInfo _property;
+		private System.Reflection.PropertyInfo _property;
 		
-		IParameter[] _parameters;
+		private IParameter[] _parameters;
 
-		int _isDuckTyped = -1;
+		private int _isDuckTyped = -1;
+		
+		private int _isExtension = -1;
+
+	    private System.Reflection.MethodInfo _accessor = null;
+
+	    private CachedMethod _getter = null;
+
+	    private CachedMethod _setter = null;
 		
 		public ExternalProperty(TypeSystemServices tagManager, System.Reflection.PropertyInfo property)
 		{
@@ -44,7 +65,21 @@ namespace Boo.Lang.Compiler.TypeSystem
 			_property = property;
 		}
 		
-		public IType DeclaringType
+		public bool IsExtension
+		{
+			get
+			{
+				if (-1 == _isExtension)
+				{
+					_isExtension = IsStatic && MetadataUtil.IsAttributeDefined(_property,  Types.ExtensionAttribute)
+						? 1
+						: 0;
+				}
+				return 1 == _isExtension;
+			}
+		}
+		
+		public virtual IType DeclaringType
 		{
 			get
 			{
@@ -78,12 +113,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 		{
 			get
 			{
-				System.Reflection.MethodInfo setter = _property.GetSetMethod(true);
-				if (null != setter)
-				{
-					return setter.IsPublic;
-				}
-				return false;
+			    return GetAccessor().IsPublic;
 			}
 		}
 		
@@ -91,12 +121,8 @@ namespace Boo.Lang.Compiler.TypeSystem
 		{
 			get
 			{
-				System.Reflection.MethodInfo setter = _property.GetSetMethod(true);
-				if (null != setter)
-				{
-					return setter.IsFamily || setter.IsFamilyOrAssembly;
-				}
-				return false;
+			    System.Reflection.MethodInfo accessor = GetAccessor();
+                return accessor.IsFamily || accessor.IsFamilyOrAssembly;
 			}
 		}
 		
@@ -104,12 +130,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 		{
 			get
 			{
-				System.Reflection.MethodInfo setter = _property.GetSetMethod(true);
-				if (null != setter)
-				{
-					return setter.IsAssembly;
-				}
-				return false;
+			    return GetAccessor().IsAssembly;
 			}
 		}
 		
@@ -117,12 +138,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 		{
 			get
 			{
-				System.Reflection.MethodInfo setter = _property.GetSetMethod(true);
-				if (null != setter)
-				{
-					return setter.IsPrivate;
-				}
-				return false;
+			    return GetAccessor().IsPrivate;
 			}
 		}
 		
@@ -138,7 +154,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 		{
 			get
 			{
-				return _property.DeclaringType.FullName + "." + _property.Name;
+				return DeclaringType.FullName + "." + Name;
 			}
 		}
 		
@@ -150,7 +166,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 			}
 		}
 		
-		public IType Type
+		public virtual IType Type
 		{
 			get
 			{
@@ -174,48 +190,81 @@ namespace Boo.Lang.Compiler.TypeSystem
 			}
 		}
 		
-		public IParameter[] GetParameters()
+		public virtual IParameter[] GetParameters()
 		{
-			if (null == _parameters)
-			{
-				_parameters = _typeSystemServices.Map(_property.GetIndexParameters());
-			}
-			return _parameters;
+            if (null != _parameters) return _parameters;
+
+            return _parameters = _typeSystemServices.Map(_property.GetIndexParameters());
 		}
 		
-		public IMethod GetGetMethod()
+		public virtual IMethod GetGetMethod()
 		{
-			System.Reflection.MethodInfo getter = _property.GetGetMethod(true);
-			if (null != getter)
-			{
-				return _typeSystemServices.Map(getter);
-			}
-			return null;
+            if (null != _getter) return _getter.Value;
+		    return (_getter = new CachedMethod(FindGetMethod())).Value;
 		}
-		
-		public IMethod GetSetMethod()
+
+	    private IMethod FindGetMethod()
+	    {
+	        System.Reflection.MethodInfo getter = _property.GetGetMethod(true);
+            if (null == getter)
+            {
+                PropertyInfo baseProperty = FindBaseProperty();
+                if (null == baseProperty) return null;
+
+                getter = baseProperty.GetGetMethod(true);
+                if (null == getter) return null;
+            }
+	        return _typeSystemServices.Map(getter);
+	    }
+
+	    private PropertyInfo FindBaseProperty()
+	    {
+	        return _property.DeclaringType.BaseType.GetProperty(
+                                                        _property.Name,
+                                                        _property.PropertyType,
+                                                        GetParameterTypes(_property.GetIndexParameters()));
+	    }
+
+	    private static Type[] GetParameterTypes(ParameterInfo[] parameters)
+	    {
+	        Type[] types = new Type[parameters.Length];
+            for (int i=0; i<parameters.Length; ++i)
+            {
+                types[i] = parameters[i].ParameterType;
+            }
+	        return types;
+	    }
+
+        public virtual IMethod GetSetMethod()
 		{
-			System.Reflection.MethodInfo setter = _property.GetSetMethod(true);
-			if (null != setter)
-			{
-				return _typeSystemServices.Map(setter);
-			}
-			return null;
+            if (null != _setter) return _setter.Value;
+            return (_setter = new CachedMethod(FindSetMethod())).Value;
 		}
-		
-		override public string ToString()
+
+	    private IMethod FindSetMethod()
+	    {
+	        System.Reflection.MethodInfo setter = _property.GetSetMethod(true);
+	        if (null == setter) return null;
+	        return _typeSystemServices.Map(setter);
+	    }
+
+	    override public string ToString()
 		{
 			return _property.ToString();
 		}
 		
-		System.Reflection.MethodInfo GetAccessor()
+		private System.Reflection.MethodInfo GetAccessor()
 		{
-			System.Reflection.MethodInfo mi = _property.GetGetMethod(true);
-			if (null != mi)
-			{
-				return mi;
-			}
-			return _property.GetSetMethod(true);
+            if (null != _accessor) return _accessor;
+
+            return _accessor = FindAccessor();
 		}
+
+	    private System.Reflection.MethodInfo FindAccessor()
+	    {
+	        System.Reflection.MethodInfo getter = _property.GetGetMethod(true);
+	        if (null != getter) return getter;
+	        return _property.GetSetMethod(true);
+	    }
 	}
 }

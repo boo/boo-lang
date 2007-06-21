@@ -19,22 +19,21 @@
     <AssemblyOriginatorKeyFile>..\boo.snk</AssemblyOriginatorKeyFile>
     <DelaySign>False</DelaySign>
     <AssemblyOriginatorKeyMode>File</AssemblyOriginatorKeyMode>
+    <DebugSymbols>false</DebugSymbols>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <NoStdLib>false</NoStdLib>
     <WarningLevel>4</WarningLevel>
-    <DebugSymbols>false</DebugSymbols>
     <Optimize>false</Optimize>
     <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
     <CheckForOverflowUnderflow>false</CheckForOverflowUnderflow>
-    <DefineConstants>DEBUG;TRACE;IGNOREKEYFILE</DefineConstants>
+    <DefineConstants>TRACE;DEBUG;IGNOREKEYFILE;NET_2_0</DefineConstants>
     <OutputPath>..\..\ide-build</OutputPath>
     <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
     <NoStdLib>false</NoStdLib>
     <WarningLevel>4</WarningLevel>
-    <DebugSymbols>false</DebugSymbols>
     <Optimize>true</Optimize>
     <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
     <CheckForOverflowUnderflow>false</CheckForOverflowUnderflow>
@@ -59,6 +58,14 @@
     <Compile Include="AbstractCompilerComponent.cs" />
     <Compile Include="AssemblyCollection.cs" />
     <Compile Include="AssemblyInfo.cs" />
+    <Compile Include="Ast\GenericParameterDeclaration.cs" />
+    <Compile Include="Ast\GenericParameterDeclarationCollection.cs" />
+    <Compile Include="Ast\GenericTypeDefinitionReference.cs" />
+    <Compile Include="Ast\Impl\DepthFirstTransformer.cs" />
+    <Compile Include="Ast\Impl\DepthFirstVisitor.cs" />
+    <Compile Include="Ast\Impl\GenericParameterDeclarationCollectionImpl.cs" />
+    <Compile Include="Ast\Impl\GenericParameterDeclarationImpl.cs" />
+    <Compile Include="Ast\Impl\GenericTypeDefinitionReferenceImpl.cs" />
     <Compile Include="BooCompiler.cs" />
     <Compile Include="CompilerContext.cs" />
     <Compile Include="CompilerError.cs" />
@@ -165,7 +172,6 @@
     <Compile Include="Ast\RaiseStatement.cs" />
     <Compile Include="Ast\ReferenceExpression.cs" />
     <Compile Include="Ast\RELiteralExpression.cs" />
-    <Compile Include="Ast\RetryStatement.cs" />
     <Compile Include="Ast\ReturnStatement.cs" />
     <Compile Include="Ast\SelfLiteralExpression.cs" />
     <Compile Include="Ast\SimpleTypeReference.cs" />
@@ -268,7 +274,6 @@
     <Compile Include="Ast\Impl\RaiseStatementImpl.cs" />
     <Compile Include="Ast\Impl\ReferenceExpressionImpl.cs" />
     <Compile Include="Ast\Impl\RELiteralExpressionImpl.cs" />
-    <Compile Include="Ast\Impl\RetryStatementImpl.cs" />
     <Compile Include="Ast\Impl\ReturnStatementImpl.cs" />
     <Compile Include="Ast\Impl\SelfLiteralExpressionImpl.cs" />
     <Compile Include="Ast\Impl\SimpleTypeReferenceImpl.cs" />
@@ -341,11 +346,14 @@
     <Compile Include="Steps\BindAndApplyAttributes.cs" />
     <Compile Include="Steps\BindBaseTypes.cs" />
     <Compile Include="Steps\BindEnumMembers.cs" />
+    <Compile Include="Steps\BindMethods.cs" />
     <Compile Include="Steps\BindNamespaces.cs" />
     <Compile Include="Steps\BindTypeDefinitions.cs" />
     <Compile Include="Steps\BindTypeMembers.cs" />
+    <Compile Include="Steps\BranchChecking.cs" />
     <Compile Include="Steps\CheckMemberNames.cs" />
     <Compile Include="Steps\CheckMembersProtectionLevel.cs" />
+    <Compile Include="Steps\ContextAnnotations.cs" />
     <Compile Include="Steps\DumpReferences.cs" />
     <Compile Include="Steps\EmitAssembly.cs" />
     <Compile Include="Steps\ExpandAstLiterals.cs" />
@@ -354,6 +362,9 @@
     <Compile Include="Steps\ExpandProperties.cs" />
     <Compile Include="Steps\ExpandVarArgsMethodInvocations.cs" />
     <Compile Include="Steps\ForeignReferenceCollector.cs" />
+    <Compile Include="Steps\GeneratorExpressionProcessor.cs" />
+    <Compile Include="Steps\GeneratorMethodProcessor.cs" />
+    <Compile Include="Steps\GotoOnTopLevelContinue.cs" />
     <Compile Include="Steps\ImplementICallableOnCallableDefinitions.cs" />
     <Compile Include="Steps\InitializeNameResolutionService.cs" />
     <Compile Include="Steps\InitializeTypeSystemServices.cs" />
@@ -384,14 +395,17 @@
     <Compile Include="Steps\ResolveTypeReferences.cs" />
     <Compile Include="Steps\RunAssembly.cs" />
     <Compile Include="Steps\SaveAssembly.cs" />
+    <Compile Include="Steps\SelfEntity.cs" />
     <Compile Include="Steps\SerializeToXml.cs" />
     <Compile Include="Steps\StricterErrorChecking.cs" />
     <Compile Include="Steps\TransformCallableDefinitions.cs" />
     <Compile Include="Steps\UnfoldConstants.cs" />
+    <Compile Include="TypeSystem\AbstractExternalGenericDefinitionInfo.cs" />
     <Compile Include="TypeSystem\AbstractInternalType.cs" />
     <Compile Include="TypeSystem\AbstractLocalEntity.cs" />
     <Compile Include="TypeSystem\Ambiguous.cs" />
     <Compile Include="TypeSystem\AnonymousCallableType.cs" />
+    <Compile Include="TypeSystem\ArrayEqualityComparer.cs" />
     <Compile Include="TypeSystem\ArrayType.cs" />
     <Compile Include="TypeSystem\AssemblyReference.cs" />
     <Compile Include="TypeSystem\BooClassBuilder.cs" />
@@ -407,10 +421,17 @@
     <Compile Include="TypeSystem\ExternalConstructor.cs" />
     <Compile Include="TypeSystem\ExternalEvent.cs" />
     <Compile Include="TypeSystem\ExternalField.cs" />
+    <Compile Include="TypeSystem\ExternalGenericMethodDefinitionInfo.cs" />
+    <Compile Include="TypeSystem\ExternalGenericMethodInfo.cs" />
+    <Compile Include="TypeSystem\ExternalGenericParameter.cs" />
+    <Compile Include="TypeSystem\ExternalGenericType.cs" />
+    <Compile Include="TypeSystem\ExternalGenericTypeDefinition.cs" />
+    <Compile Include="TypeSystem\ExternalGenericTypeDefinitionInfo.cs" />
     <Compile Include="TypeSystem\ExternalMethod.cs" />
     <Compile Include="TypeSystem\ExternalParameter.cs" />
     <Compile Include="TypeSystem\ExternalProperty.cs" />
     <Compile Include="TypeSystem\ExternalType.cs" />
+    <Compile Include="TypeSystem\GenericTypeMapper.cs" />
     <Compile Include="TypeSystem\IEntity.cs" />
     <Compile Include="TypeSystem\INameSpace.cs" />
     <Compile Include="TypeSystem\InternalCallableType.cs" />
@@ -420,13 +441,18 @@
     <Compile Include="TypeSystem\InternalEnumMember.cs" />
     <Compile Include="TypeSystem\InternalEvent.cs" />
     <Compile Include="TypeSystem\InternalField.cs" />
+    <Compile Include="TypeSystem\InternalGenericMethod.cs" />
+    <Compile Include="TypeSystem\InternalGenericMethodDefinition.cs" />
+    <Compile Include="TypeSystem\InternalGenericParameter.cs" />
     <Compile Include="TypeSystem\InternalInterface.cs" />
     <Compile Include="TypeSystem\InternalLabel.cs" />
     <Compile Include="TypeSystem\InternalLocal.cs" />
     <Compile Include="TypeSystem\InternalMethod.cs" />
     <Compile Include="TypeSystem\InternalParameter.cs" />
     <Compile Include="TypeSystem\InternalProperty.cs" />
+    <Compile Include="TypeSystem\MappedParameter.cs" />
     <Compile Include="TypeSystem\MetadataUtil.cs" />
+    <Compile Include="TypeSystem\MixedGenericMethod.cs" />
     <Compile Include="TypeSystem\ModuleEntity.cs" />
     <Compile Include="TypeSystem\NameResolutionService.cs" />
     <Compile Include="TypeSystem\Namespace.cs" />
@@ -439,6 +465,8 @@
     <Compile Include="Util\TaskList.cs" />
     <Compile Include="Steps\CheckIdentifiers.cs" />
     <Compile Include="Steps\OptimizeIterationStatements.cs" />
+    <Compile Include="TypeSystem\ExternalGenericTypeInfo.cs" />
+    <Compile Include="TypeSystem\MixedGenericType.cs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Boo.Lang\Boo.Lang.csproj">

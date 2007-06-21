@@ -43,6 +43,13 @@ class BooCommandLine(AbstractCommandLine):
 	[getter(Arguments)]
 	_args = []
 	
+	[getter(References)]
+	_references = []
+	
+	[Option("boo.BooCommandLine.reference", ShortForm: "r", MaxOccurs: int.MaxValue)]
+	def OnReference([required] reference as string):
+		_references.Add(reference)
+	
 	[Argument("boo.BooCommandLine.argument")]
 	def OnArgument([required] value as string):
 		_args.Add(value)
@@ -64,6 +71,14 @@ class AnotherCommandLine(AbstractCommandLine):
 	def constructor(argv as (string)):
 		Parse(argv)
 		
+class JiraCommandLine(AbstractCommandLine):
+	
+	[Option("jira.login", ShortForm: "l", LongForm: "jira-login", MinOccurs: 1, MaxOccurs: 1)]
+	public JiraLogin as string
+	
+	def constructor(argv as (string)):
+		Parse(argv)
+		
 [TestFixture]
 class AbstractCommandLineTestFixture:
 
@@ -76,7 +91,9 @@ class AbstractCommandLineTestFixture:
 			"bar.boo",
 			"-res:res1",
 			"-res:res2,id2",
-			"-debug"
+			"-debug",
+			"-r:Foo.dll",
+			"-r:Bar.dll",
 		)
 		
 		cmdLine = BooCommandLine(argv)
@@ -85,14 +102,17 @@ class AbstractCommandLineTestFixture:
 		Assert.AreEqual("bin/foo.exe", cmdLine.Output)
 		Assert.AreEqual(["foo.boo", "bar.boo"], cmdLine.Arguments)
 		Assert.AreEqual(["res1", "res2,id2"], cmdLine.Resources)
+		Assert.AreEqual(["Foo.dll", "Bar.dll"], cmdLine.References)
 		assert cmdLine.Debug
 		
 	[Test]
 	def TestBooleanParse():
-		argv = ("-debug-",)
-		cmdLine = BooCommandLine(argv)
 		
-		assert not cmdLine.Debug
+		argv = ("-debug-",)
+		assert not BooCommandLine(argv).Debug
+		
+		argv = ("-debug+",)
+		assert BooCommandLine(argv).Debug
 		
 	[Test]
 	def TestArgumentToListField():
@@ -101,3 +121,9 @@ class AbstractCommandLineTestFixture:
 		cmdLine = AnotherCommandLine(argv)
 		
 		Assert.AreEqual(["arg1", "arg2"], cmdLine.Arguments)
+		
+	[Test]
+	def TestOptionWithDashes():
+		argv = ("-jira-login:foo",)
+		cmdLine = JiraCommandLine(argv)
+		Assert.AreEqual("foo", cmdLine.JiraLogin)

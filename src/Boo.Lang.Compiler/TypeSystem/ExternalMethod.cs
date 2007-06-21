@@ -48,13 +48,17 @@ namespace Boo.Lang.Compiler.TypeSystem
 		int _isExtension = -1;
 		
 		int _isPInvoke = -1;
+
+		private string _name = null;
+
+		private string _fullName = null;
 		
 		internal ExternalMethod(TypeSystemServices manager, MethodBase mi)
 		{
 			_typeSystemServices = manager;
 			_mi = mi;
 		}
-
+		
 		public bool IsExtension
 		{
 			get
@@ -98,7 +102,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 			}
 		}
 		
-		public IType DeclaringType
+		public virtual IType DeclaringType
 		{
 			get
 			{
@@ -170,19 +174,21 @@ namespace Boo.Lang.Compiler.TypeSystem
 			}
 		}
 		
-		public string Name
+		public virtual string Name
 		{
 			get
 			{
-				return _mi.Name;
+				if (_name != null) return _name;
+				return _name = _mi.Name;
 			}
 		}
 		
-		public string FullName
+		public virtual string FullName
 		{
 			get
 			{
-				return this.DeclaringType + "." + _mi.Name;
+				if (_fullName != null) return _fullName;
+				return _fullName = (DeclaringType + "." + _mi.Name);
 			}
 		}
 
@@ -223,11 +229,9 @@ namespace Boo.Lang.Compiler.TypeSystem
 		{
 			get
 			{
-				if (null == _type)
-				{
-					_type = _typeSystemServices.GetCallableType(this);
-				}
-				return _type;
+				if (null != _type) return _type;
+
+                return _type = _typeSystemServices.GetCallableType(this);
 			}
 		}
 		
@@ -239,13 +243,10 @@ namespace Boo.Lang.Compiler.TypeSystem
 			}
 		}
 		
-		public IParameter[] GetParameters()
+		public virtual IParameter[] GetParameters()
 		{
-			if (null == _parameters)
-			{
-				_parameters = _typeSystemServices.Map(_mi.GetParameters());
-			}
-			return _parameters;
+            if (null != _parameters) return _parameters;
+            return _parameters = _typeSystemServices.Map(_mi.GetParameters());
 		}
 		
 		public virtual IType ReturnType
@@ -263,19 +264,13 @@ namespace Boo.Lang.Compiler.TypeSystem
 		
 		public MethodBase MethodInfo
 		{
-			get
-			{
-				return _mi;
-			}
+			get { return _mi; }
 		}
 		
 		override public bool Equals(object other)
 		{
 			ExternalMethod rhs = other as ExternalMethod;
-			if (null == rhs)
-			{
-				return false;
-			}
+			if (null == rhs) return false;
 			return _mi.MethodHandle.Value == rhs._mi.MethodHandle.Value;
 		}
 		
@@ -287,6 +282,41 @@ namespace Boo.Lang.Compiler.TypeSystem
 		override public string ToString()
 		{
 			return _typeSystemServices.GetSignature(this);
+		}
+		
+		ExternalGenericMethodDefinitionInfo _genericMethodDefinitionInfo = null;		
+		public IGenericMethodDefinitionInfo GenericMethodDefinitionInfo
+		{
+			get
+			{
+				if (MethodInfo.IsGenericMethodDefinition)
+				{
+					if (_genericMethodDefinitionInfo == null)
+					{
+						_genericMethodDefinitionInfo = 
+							new ExternalGenericMethodDefinitionInfo(_typeSystemServices, this);
+					}
+					return _genericMethodDefinitionInfo;
+				}
+				return null;
+			}
+		}
+
+		ExternalGenericMethodInfo _genericMethodInfo = null;
+		public virtual IGenericMethodInfo GenericMethodInfo
+		{
+			get
+			{
+				if (MethodInfo.IsGenericMethod)
+				{
+					if (_genericMethodInfo == null)
+					{
+						_genericMethodInfo = new ExternalGenericMethodInfo(_typeSystemServices, this);
+					}
+					return _genericMethodInfo;
+				}
+				return null;
+			}
 		}
 	}
 }

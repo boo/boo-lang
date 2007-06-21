@@ -26,6 +26,8 @@
 // THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #endregion
 
+using Boo.Lang.Compiler.TypeSystem;
+
 namespace Boo.Lang.Compiler
 {
 	using System;
@@ -315,12 +317,18 @@ namespace Boo.Lang.Compiler
 		{
 			return new CompilerError("BCE0054", node.LexicalInfo);
 		}
-		
+
 		public static CompilerError InternalError(Node node, Exception error)
 		{
-			return new CompilerError("BCE0055", node.LexicalInfo, error, error.Message);
+			string message = error != null ? error.Message : string.Empty;
+			return InternalError(node, message, error);
 		}
-		
+
+		public static CompilerError InternalError(Node node, string message, Exception cause)
+		{
+			return new CompilerError("BCE0055", node.LexicalInfo, cause, message);
+		}
+
 		public static CompilerError FileNotFound(string fname)
 		{
 			return new CompilerError("BCE0056", new LexicalInfo(fname), fname);
@@ -724,6 +732,42 @@ namespace Boo.Lang.Compiler
 		public static CompilerError ColonInsteadOfEquals(Node node)
 		{
 			return new CompilerError("BCE0136", node.LexicalInfo);
+		}
+		
+		public static CompilerError PropertyIsWriteOnly(Node node, string propertyName)
+		{
+			return new CompilerError("BCE0137", node.LexicalInfo, propertyName);
+		}
+
+		public static CompilerError NotAGenericDefinition(Node node, string name)
+		{
+			return new CompilerError("BCE0138", node.LexicalInfo, name);
+		}
+
+		public static CompilerError GenericDefinitionArgumentCount(Node node, string name, int expectedCount)
+		{
+			return new CompilerError("BCE0139", node.LexicalInfo, name, expectedCount);
+		}
+				
+		public static CompilerError YieldTypeDoesNotMatchReturnType(Node node, string yieldType, string returnType)
+		{
+			return new CompilerError("BCE0140", node.LexicalInfo, yieldType, returnType);
+		}
+		
+		public static CompilerError DuplicateParameterName(Node node, string parameter, string method)
+		{
+			return new CompilerError("BCE0141", node.LexicalInfo, parameter, method);
+		}
+		
+		public static CompilerError ValueTypeParameterCannotUseDefaultAttribute(Node node, string parameter)
+		{
+			string method = (null != node as Method) ? (node as Method).Name : (node as Property).Name;  
+			return new CompilerError("BCE0142", node.LexicalInfo, parameter, method);
+		}
+		
+		public static CompilerError CantReturnFromEnsure(Node node)
+		{
+			return new CompilerError("BCE0143", node.LexicalInfo);
 		}
 		
 		public static string ToStringList(System.Collections.IEnumerable names)

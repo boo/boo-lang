@@ -85,6 +85,11 @@ namespace Boo.Lang.Compiler.TypeSystem
 		}
 	}
 	
+	public interface IExtensionEnabled : IEntityWithParameters
+	{
+		bool IsExtension { get; }
+	}
+	
 	public interface IEvent : IMember
 	{		
 		IMethod GetAddMethod();
@@ -120,7 +125,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 		}
 	}
 	
-	public interface IProperty : IAccessibleMember, IEntityWithParameters
+	public interface IProperty : IAccessibleMember, IEntityWithParameters, IExtensionEnabled
 	{	
 		IMethod GetGetMethod();
 		
@@ -187,8 +192,46 @@ namespace Boo.Lang.Compiler.TypeSystem
 		bool IsSubclassOf(IType other);
 		
 		bool IsAssignableFrom(IType other);
+		
+		IGenericTypeDefinitionInfo GenericTypeDefinitionInfo { get; }
+		
+		IGenericTypeInfo GenericTypeInfo { get; }
 	}
 	
+	public interface IGenericTypeDefinitionInfo
+	{
+		IGenericParameter[] GenericParameters { get; }
+		IType MakeGenericType(params IType[] arguments);
+	}
+
+	public interface IGenericTypeInfo
+	{
+		IType[] GenericArguments { get; }
+		IType GenericDefinition { get; }
+		bool FullyConstructed { get; }
+	}
+	
+	public interface IGenericMethodDefinitionInfo
+	{
+		IGenericParameter[] GenericParameters { get; }
+		IMethod MakeGenericMethod(params IType[] arguments);
+	}
+	
+	public interface IGenericMethodInfo
+	{
+		IType[] GenericArguments { get; }
+		IMethod GenericDefinition { get; }
+		bool FullyConstructed { get; }
+	}
+	
+	public interface IGenericParameter: IType
+	{
+		IType DeclaringType { get; }
+		IMethod DeclaringMethod { get; } 
+		int GenericParameterPosition { get; }
+		// TODO: Constraints { get; }
+	}	
+
 	public interface ICallableType : IType
 	{
 		CallableSignature GetSignature();
@@ -272,7 +315,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 		}
 	}
 	
-	public interface IMethod : IMethodBase
+	public interface IMethod : IMethodBase, IExtensionEnabled
 	{	
 		IType ReturnType
 		{
@@ -294,12 +337,17 @@ namespace Boo.Lang.Compiler.TypeSystem
 			get;
 		}
 
-		bool IsExtension
+		bool IsPInvoke
 		{
 			get;
 		}
 		
-		bool IsPInvoke
+		IGenericMethodInfo GenericMethodInfo
+		{
+			get; 
+		}
+		
+		IGenericMethodDefinitionInfo GenericMethodDefinitionInfo
 		{
 			get;
 		}

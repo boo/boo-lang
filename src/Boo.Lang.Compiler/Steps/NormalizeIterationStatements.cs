@@ -48,10 +48,6 @@ namespace Boo.Lang.Compiler.Steps
 
 		Method _current;
 		
-		public NormalizeIterationStatements()
-		{
-		}
-		
 		override public void Run()
 		{
 			Visit(CompileUnit);
@@ -102,6 +98,7 @@ namespace Boo.Lang.Compiler.Steps
 			{
 				body.Add(
 					CodeBuilder.CreateAssignment(
+						node.LexicalInfo,
 						CodeBuilder.CreateReference(iterator),
 						node.Iterator));
 			}
@@ -110,6 +107,7 @@ namespace Boo.Lang.Compiler.Steps
 				// ___iterator = <node.Iterator>.GetEnumerator()
 				body.Add(
 					CodeBuilder.CreateAssignment(
+						node.LexicalInfo,
 						CodeBuilder.CreateReference(iterator),
 						CodeBuilder.CreateMethodInvocation(
 							node.Iterator,
@@ -131,6 +129,7 @@ namespace Boo.Lang.Compiler.Steps
 				//	item = __iterator.Current
 				ws.Block.Add(
 					CodeBuilder.CreateAssignment(
+						node.LexicalInfo,
 						CodeBuilder.CreateReference((InternalLocal)declarations[0].Entity),
 						current));
 			}

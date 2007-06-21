@@ -1,5 +1,5 @@
-#region license
-// Copyright (c) 2004, Rodrigo B. de Oliveira (rbo@acm.org)
+﻿#region license
+// Copyright (c) 2004, 2007 Rodrigo B. de Oliveira (rbo@acm.org)
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without modification,
@@ -32,105 +32,255 @@ using System.Collections;
 using System.IO;
 using System.Reflection.Emit;
 using System.Text;
-using System.Text.RegularExpressions;
 
 namespace Boo.Lang.Runtime
 {
 	public class RuntimeServices
 	{
-		static readonly Type RuntimeServicesType = typeof(RuntimeServices);
-		
-		const BindingFlags DefaultBindingFlags = BindingFlags.Public |
-												BindingFlags.NonPublic |
-												BindingFlags.OptionalParamBinding |
-												BindingFlags.Static |
-												BindingFlags.FlattenHierarchy |
-												BindingFlags.Instance;
-
-		const BindingFlags InvokeBindingFlags = DefaultBindingFlags |
-												BindingFlags.InvokeMethod;
-
-		const BindingFlags InvokeOperatorBindingFlags = BindingFlags.Public |
-												BindingFlags.Static |
-												BindingFlags.InvokeMethod |
-												BindingFlags.FlattenHierarchy;
-
-		const BindingFlags SetPropertyBindingFlags = DefaultBindingFlags |
-												BindingFlags.SetProperty |
-												BindingFlags.SetField;
-
-		const BindingFlags GetPropertyBindingFlags = DefaultBindingFlags |
-												BindingFlags.GetProperty |
-												BindingFlags.GetField;
-
-
-		public static object Invoke(object target, string name, object[] args)
+		public enum TargetInvocationExceptionAction
 		{
-			IQuackFu duck = target as IQuackFu;
-			if (null != duck)
+			Rethrow,
+			ThrowInner,
+			PassThrough
+		}
+		
+		public class TargetInvocationExceptionThrownEventArgs
+		{
+			TargetInvocationException _exception;
+			TargetInvocationExceptionAction _action;
+			
+			public TargetInvocationExceptionThrownEventArgs(
+				TargetInvocationException exception,
+				TargetInvocationExceptionAction action)
 			{
-				return duck.QuackInvoke(name, args);
+				_exception = exception;
+				_action = action;
 			}
-
-			try
+			
+			public TargetInvocationException Exception
 			{
-				Type type = target as Type;
-				if (null == type)
-				{
-					return target.GetType().InvokeMember(name,
-														InvokeBindingFlags,
-														null,
-														target,
-														args);
-				}
-				else
-				{	// static method
-					return type.InvokeMember(name,
-														InvokeBindingFlags,
-														null,
-														null,
-														args);
-				}
+				get { return _exception; }
 			}
-			catch (TargetInvocationException x)
+			
+			public TargetInvocationExceptionAction Action
 			{
-				throw x.InnerException;
+				get { return _action; }
+				set { _action = value; }
 			}
 		}
 		
-		public static object SetProperty(object target, string name, object value)
+		public delegate void TargetInvocationExceptionThrownEvent(object sender, TargetInvocationExceptionThrownEventArgs args);
+		
+		public static event TargetInvocationExceptionThrownEvent TargetInvocationExceptionThrown;
+		
+		public static TargetInvocationExceptionAction DefaultTargetInvocationExceptionAction
+		{
+			get { return _defaultTargetInvocationExceptionAction; }
+			set { _defaultTargetInvocationExceptionAction = value; }
+		}
+		
+		private static TargetInvocationExceptionAction _defaultTargetInvocationExceptionAction = TargetInvocationExceptionAction.ThrowInner;
+		
+		private static readonly Type RuntimeServicesType = typeof(RuntimeServices);
+
+		internal const BindingFlags InstanceMemberFlags = BindingFlags.Public |
+		                                                 BindingFlags.NonPublic |
+		                                                 BindingFlags.Instance;
+		
+		internal const BindingFlags DefaultBindingFlags = InstanceMemberFlags |
+												BindingFlags.OptionalParamBinding |
+												BindingFlags.Static |
+												BindingFlags.FlattenHierarchy;
+
+		private const BindingFlags InvokeBindingFlags = DefaultBindingFlags |
+												BindingFlags.InvokeMethod;
+
+		private const BindingFlags StaticMemberBindingFlags = BindingFlags.Public |
+												BindingFlags.Static |
+												BindingFlags.FlattenHierarchy;
+
+		private const BindingFlags InvokeOperatorBindingFlags = StaticMemberBindingFlags |
+												BindingFlags.InvokeMethod;
+
+		private const BindingFlags SetPropertyBindingFlags = DefaultBindingFlags |
+												BindingFlags.SetProperty |
+												BindingFlags.SetField;
+
+		private const BindingFlags GetPropertyBindingFlags = DefaultBindingFlags |
+												BindingFlags.GetProperty |
+												BindingFlags.GetField;
+
+		private const BindingFlags InvokeExtensionBindingFlags = InvokeOperatorBindingFlags;
+		
+		private const BindingFlags GetPropertyExtensionBindingFlags = StaticMemberBindingFlags |
+		                                                      BindingFlags.GetProperty |
+		                                                      BindingFlags.GetField;
+		
+		
+		private static List _extensions = new List();
+		
+		public static void RegisterExtensions(System.Type extensionContainer)
+		{
+			if (null == extensionContainer) throw new ArgumentNullException("extensionContainer");
+			lock (_extensions.SyncRoot)
+			{
+				_extensions.AddUnique(extensionContainer);
+			}
+		}
+		
+		public static void UnRegisterExtensions(System.Type extensionContainer)
+		{
+			if (null == extensionContainer) throw new ArgumentNullException("extensionContainer");
+			lock (_extensions.SyncRoot)
+			{
+				_extensions.Remove(extensionContainer);
+			}
+		}
+		
+		internal static bool HasRegisteredExtensions
+		{
+			get { return _extensions.Count > 0; }
+		}
+		
+		internal static Type[] RegisteredExtensions
+		{
+			get
+			{
+				lock (_extensions.SyncRoot)
+				{
+					return (Type[]) _extensions.ToArray(typeof(Type));
+				}
+			}
+		}
+		
+		static bool PassThroughExceptions
+		{
+			get { return _defaultTargetInvocationExceptionAction == TargetInvocationExceptionAction.PassThrough; }
+		}
+		                                                      
+		public static object Invoke(object target, string name, object[] args)
 		{
 			IQuackFu duck = target as IQuackFu;
-			if (null != duck)
+			if (null != duck) return duck.QuackInvoke(name, args);
+			
+			if (PassThroughExceptions) return DoInvoke(target, name, args);
+
+			try
 			{
-				return duck.QuackSet(name, value);
+				return DoInvoke(target, name, args);
+			}
+			catch (TargetInvocationException x)
+			{	
+				OnTargetInvocationExceptionThrown(x);
+				throw;
+			}
+		}
+		
+		private static object InvokeMethod(object target, string name, object[] args)
+		{
+			Type targetType = target.GetType();
+			if (targetType.IsCOMObject)
+			{
+				// COM methods cant be seen through reflection
+				// so maybe the proper way to support parameter conversions
+				// is indeed by creating a specific Binder object
+				// which knows the boo conversion rules
+				return targetType.InvokeMember(name, InvokeBindingFlags, null, target, args);
+			}
+			return ResolveAndInvokeMethod(target, targetType, name, args);
+		}
+
+		private static object ResolveAndInvokeMethod(object target, Type targetType, string name, object[] args)
+		{
+			MethodResolver resolver = new MethodResolver(target, targetType, name, args);
+			return resolver.InvokeResolvedMethod();
+		}
+
+		private static object DoInvoke(object target, string name, object[] args)
+		{
+			Type type = target as Type;
+			if (null != type)
+			{	
+				// static method
+				return ResolveAndInvokeMethod(null, type, name, args);
+			}
+			
+			if (!HasRegisteredExtensions)
+			{
+				return InvokeMethod(target, name, args);
 			}
 			
 			try
 			{
-				Type type = target as Type;
-				if (null == type)
+				return InvokeMethod(target, name, args);
+			}
+			catch (System.MissingMemberException)
+			{
+				object[] extensionArgs = GetExtensionArgs(target, args);
+				foreach (Type extension in RegisteredExtensions)
 				{
-					target.GetType().InvokeMember(name,
-												  SetPropertyBindingFlags,
-												  null,
-												  target,
-												  new object[] { value });
+					try
+					{
+						return extension.InvokeMember(name,
+											   InvokeExtensionBindingFlags,
+											   null,
+											   null,
+											   extensionArgs);
+					}
+					catch (System.MissingMemberException)
+					{
+					}
 				}
-				else
-				{	// static member
-					type.InvokeMember(name,
-									  SetPropertyBindingFlags,
-									  null,
-									  null,
-									  new object[] { value });
-				}
-				return value;
+				throw;
+			}
+		}
+
+		private static object[] GetExtensionArgs(object target, object[] args)
+		{
+			object[] extensionArgs = new object[args.Length + 1];
+			extensionArgs[0] = target;
+			Array.Copy(args, 0, extensionArgs, 1, args.Length);
+			return extensionArgs;
+		}
+
+		public static object SetProperty(object target, string name, object value)
+		{
+			IQuackFu duck = target as IQuackFu;
+			if (null != duck) return duck.QuackSet(name, null, value);
+			
+			if (PassThroughExceptions) return DoSetProperty(target, name, value);
+			
+			try
+			{
+				return DoSetProperty(target, name, value);
 			}
 			catch (TargetInvocationException x)
 			{
-				throw x.InnerException;
+				OnTargetInvocationExceptionThrown(x);
+				throw;
 			}
+		}
+		
+		private static object DoSetProperty(object target, string name, object value)
+		{
+			Type type = target as Type;
+			if (null == type)
+			{
+				target.GetType().InvokeMember(name,
+											  SetPropertyBindingFlags,
+											  null,
+											  target,
+											  new object[] { value });
+			}
+			else
+			{	// static member
+				type.InvokeMember(name,
+								  SetPropertyBindingFlags,
+								  null,
+								  null,
+								  new object[] { value });
+			}
+			return value;
 		}
 
 		public struct ValueTypeChange
@@ -167,15 +317,27 @@ namespace Boo.Lang.Runtime
 		public static object GetProperty(object target, string name)
 		{
 			IQuackFu duck = target as IQuackFu;
-			if (null != duck)
-			{
-				return duck.QuackGet(name);
-			}
+			if (null != duck) return duck.QuackGet(name, null);
+			
+			if (PassThroughExceptions) return DoGetProperty(target, name);
 			
 			try
 			{
-				Type type = target as Type;
-				if (null == type)
+				return DoGetProperty(target, name);
+			}
+			catch (TargetInvocationException x)
+			{
+				OnTargetInvocationExceptionThrown(x);
+				throw;
+			}
+		}
+		
+		private static object DoGetProperty(object target, string name)
+		{
+			Type type = target as Type;
+			if (null == type)
+			{
+				try
 				{
 					return target.GetType().InvokeMember(name,
 														 GetPropertyBindingFlags,
@@ -183,16 +345,55 @@ namespace Boo.Lang.Runtime
 														 target,
 														 null);
 				}
-				else
-				{	// static member
-					return type.InvokeMember(name,
-											 GetPropertyBindingFlags,
-											 null,
-											 null,
-											 null);
+				catch (System.MissingMemberException)
+				{
+					object[] extensionArgs = new object[] { target };
+					foreach (Type extension in RegisteredExtensions)
+					{
+						try
+						{
+							
+							return extension.InvokeMember(name,
+												   GetPropertyExtensionBindingFlags,
+												   null,
+												   null,
+												   extensionArgs);
+						}
+						catch (System.MissingMemberException)
+						{	
+						}
+					}
+					throw;
 				}
 			}
-			catch (TargetInvocationException x)
+			else
+			{	// static member
+				return type.InvokeMember(name,
+										 GetPropertyBindingFlags,
+										 null,
+										 null,
+										 null);
+			}
+		}
+		
+		public static object DuckImplicitCast(object value, Type toType)
+		{
+			if (value == null) return null;
+			MethodInfo method = FindImplicitConversionOperator(value.GetType(), toType);
+			if (null == method) return value;
+			return method.Invoke(null, new object[] {value});
+		}
+		
+		private static void OnTargetInvocationExceptionThrown(TargetInvocationException x)
+		{
+			TargetInvocationExceptionAction action = _defaultTargetInvocationExceptionAction;
+			if (null != TargetInvocationExceptionThrown)
+			{
+				TargetInvocationExceptionThrownEventArgs args = new TargetInvocationExceptionThrownEventArgs(x, action);
+				TargetInvocationExceptionThrown(null, args);
+				action = args.Action;
+			}
+			if (TargetInvocationExceptionAction.ThrowInner == action)
 			{
 				throw x.InnerException;
 			}
@@ -200,30 +401,211 @@ namespace Boo.Lang.Runtime
 		
 		public static object GetSlice(object target, string name, object[] args)
 		{
+            IQuackFu duck = target as IQuackFu;
+            if (null != duck) return duck.QuackGet(name, args);
+
 			Type type = target.GetType();
 			if ("" == name)
 			{	
-				if (args.Length == 1 && target is System.Array)
+				if (IsGetArraySlice(target, args))
 				{
-					IList list = (IList)target;
-					return list[NormalizeIndex(list.Count, (int)args[0])];
+				    return GetArraySlice(target, args);
+				}
+				name = GetDefaultMemberName(type);
+			}
+
+			try
+			{
+				MemberInfo member = SelectSliceMember(GetMember(type, name), ref args, SetOrGet.Get);
+			    return GetSlice(target, member, args);
+			}
+			catch (TargetInvocationException x)
+			{
+				OnTargetInvocationExceptionThrown(x);
+				throw;
+			}
+		}
+
+        private static object GetSlice(object target, MemberInfo member, object[] args)
+        {
+            switch (member.MemberType)
+            {
+                case MemberTypes.Field:
+                    {
+                        FieldInfo field = (FieldInfo)member;
+                        return GetSlice(field.GetValue(target), "", args);
+                    }
+                case MemberTypes.Method:
+                    {
+                        MethodInfo method = (MethodInfo)member;
+                        return method.Invoke(target, args);
+                    }
+                case MemberTypes.Property:
+                    {
+						MethodInfo getter = GetGetMethod((PropertyInfo)member);
+						if (getter.GetParameters().Length > 0)
+						{
+							// is this a indexed property?
+							return getter.Invoke(target, args);
+						}
+						// otherwise its a simple property and the slice
+						// should be applied to the return value
+						return GetSlice(getter.Invoke(target, null), "", args);
+                    }
+                default:
+                    {
+                        MemberNotSupported(member);
+                        return null; // this line is never reached
+                    }
+            }
+        }
+
+	    private static object GetArraySlice(object target, object[] args)
+	    {
+	        IList list = (IList)target;
+	        return list[NormalizeIndex(list.Count, (int)args[0])];
+	    }
+
+	    private static bool IsGetArraySlice(object target, object[] args)
+	    {
+	        return args.Length == 1 && target is System.Array;
+	    }
+
+	    private static MethodInfo GetGetMethod(PropertyInfo property)
+		{
+			MethodInfo method = property.GetGetMethod(true);
+			if (null == method) MemberNotSupported(property);
+			return method;
+		}
+
+		public static object SetSlice(object target, string name, object[] args)
+		{
+            IQuackFu duck = target as IQuackFu;
+            if (null != duck) return duck.QuackSet(name, (object[])GetRange2(args, 0, args.Length-1), args[args.Length-1]);
+
+			Type type = target.GetType();
+			if ("" == name)
+			{
+				if (IsSetArraySlice(target, args))
+				{
+				    return SetArraySlice(target, args);
 				}
 				name = GetDefaultMemberName(type);
 			}
 			try
 			{
-				return type.InvokeMember(name,
-								  GetPropertyBindingFlags,
-								  null,
-								  target,
-								  args);
+				MemberInfo member = SelectSliceMember(GetMember(type, name), ref args, SetOrGet.Set);
+			    return SetSlice(target, member, args);
 			}
 			catch (TargetInvocationException x)
 			{
-				throw x.InnerException;
+				OnTargetInvocationExceptionThrown(x);
+				throw;
 			}
 		}
+
+	    private static object SetSlice(object target, MemberInfo member, object[] args)
+	    {
+	        switch (member.MemberType)
+	        {
+	            case MemberTypes.Field:
+	                {
+	                    FieldInfo field = (FieldInfo) member;
+	                    SetSlice(field.GetValue(target), "", args);
+	                    break;
+	                }
+	            case MemberTypes.Method:
+	                {
+	                    MethodInfo method = (MethodInfo) member;
+	                    method.Invoke(target, args);
+	                    break;
+	                }
+	            case MemberTypes.Property:
+	                {
+						PropertyInfo property = (PropertyInfo) member;
+						MethodInfo setter = property.GetSetMethod(true);
+						if (null != setter && setter.GetParameters().Length > 0)
+						{
+							setter.Invoke(target, args);
+						}
+						else
+						{
+							SetSlice(GetPropertyValue(target, property), "", args);
+						}
+	                    break;
+	                }
+	            default:
+	                {
+	                    MemberNotSupported(member);
+	                    break;
+	                }
+	        }
+	        // last argument is the value
+	        return args[args.Length-1];
+	    }
 		
+		private static object GetPropertyValue(object target, PropertyInfo property)
+		{
+			MethodInfo getter = property.GetGetMethod(true);
+			if (null == getter || getter.GetParameters().Length > 0)
+			{
+				MemberNotSupported(property);
+			}
+			return getter.Invoke(target, new object[0]);
+		}
+
+	    private static object SetArraySlice(object target, object[] args)
+	    {
+	        IList list = (IList)target;
+	        list[NormalizeIndex(list.Count, (int)args[0])] = args[1];
+	        return args[1];
+	    }
+
+	    private static bool IsSetArraySlice(object target, object[] args)
+	    {
+	        return args.Length == 2 && target is System.Array;
+	    }
+
+	    private static MemberInfo[] GetMember(Type type, string name)
+		{
+			MemberInfo[] found = type.GetMember(name, DefaultBindingFlags);
+			if (null == found || 0 == found.Length)
+			{
+				throw new System.MissingMemberException(type.FullName, name);
+			}
+			return found;
+		}
+
+		private static void MemberNotSupported(MemberInfo member)
+		{
+			throw new ArgumentException(string.Format("Member not supported: {0}", member));
+		}
+
+		enum SetOrGet { Set, Get };
+		
+		private static MemberInfo SelectSliceMember(MemberInfo[] found, ref object[] args, SetOrGet sliceKind)
+		{
+			if (1 == found.Length) return found[0];
+			MethodBase[] candidates = new MethodBase[found.Length];
+			for (int i = 0; i < found.Length; ++i)
+			{
+				MemberInfo member = found[i];
+				PropertyInfo property = member as PropertyInfo;
+				if (null == property) MemberNotSupported(member);
+				MethodInfo method = sliceKind == SetOrGet.Get ? GetGetMethod(property) : GetSetMethod(property);
+				candidates[i] = method;
+			}
+			object state = null;
+			return Type.DefaultBinder.BindToMethod(DefaultBindingFlags | BindingFlags.OptionalParamBinding, candidates, ref args, null, null, null, out state);
+		}
+
+		private static MethodInfo GetSetMethod(PropertyInfo property)
+		{
+			MethodInfo method = property.GetSetMethod(true);
+			if (null == method) MemberNotSupported(property);
+			return method;
+		}
+
 		private static String GetDefaultMemberName(Type type)
 		{
 			DefaultMemberAttribute attribute = (DefaultMemberAttribute)Attribute.GetCustomAttribute(type, typeof(DefaultMemberAttribute));
@@ -337,21 +719,16 @@ namespace Boo.Lang.Runtime
 
 				try
 				{
-					return lhsType.InvokeMember(operatorName,
-										InvokeOperatorBindingFlags,
-										null,
-										null,
-										args);
+					// TODO: first resolve the right method on either
+					// lhs and rhs
+					// and then cache the final information
+					return ResolveAndInvokeMethod(null, lhsType, operatorName, args);
 				}
 				catch (MissingMethodException)
 				{
 					try
 					{
-						return rhsType.InvokeMember(operatorName,
-										InvokeOperatorBindingFlags,
-										null,
-										null,
-										args);
+						return ResolveAndInvokeMethod(null, rhsType, operatorName, args);
 					}
 					catch (MissingMethodException)
 					{
@@ -678,25 +1055,16 @@ namespace Boo.Lang.Runtime
 
 		public static IEnumerable GetEnumerable(object enumerable)
 		{
-			if (null == enumerable)
-			{
-				Error("CantEnumerateNull");
-			}
+			if (null == enumerable) Error("CantEnumerateNull");
 
 			IEnumerable iterator = enumerable as IEnumerable;
-			if (null == iterator)
-			{
-				TextReader reader = enumerable as TextReader;
-				if (null != reader)
-				{
-					iterator = new TextReaderEnumerator(reader);
-				}
-				else
-				{
-					Error("ArgumentNotEnumerable");
-				}
-			}
-			return iterator;
+			if (null != iterator) return iterator;
+
+			TextReader reader = enumerable as TextReader;
+			if (null != reader) return TextReaderEnumerator.lines(reader);
+			
+			Error("ArgumentNotEnumerable");
+			return null;
 		}
 
 		#region global operators
@@ -793,20 +1161,22 @@ namespace Boo.Lang.Runtime
 			return rhs.IndexOf(lhs) > -1;
 		}
 
-		public static bool op_Match(string input, Regex pattern)
+#if !NO_SYSTEM_DLL
+		public static bool op_Match(string input, System.Text.RegularExpressions.Regex pattern)
 		{
 			return pattern.IsMatch(input);
 		}
 
 		public static bool op_Match(string input, string pattern)
 		{
-			return Regex.IsMatch(input, pattern);
+            return System.Text.RegularExpressions.Regex.IsMatch(input, pattern);
 		}
 
 		public static bool op_NotMatch(string input, string pattern)
 		{
 			return !op_Match(input, pattern);
 		}
+#endif
 
 		public static string op_Modulus(string lhs, IEnumerable rhs)
  		{
@@ -1593,7 +1963,7 @@ namespace Boo.Lang.Runtime
 			return type.CreateType().GetMethod("Invoke");
 		}
 
-		private static MethodInfo FindImplicitConversionOperator(Type from, Type to)
+		internal static MethodInfo FindImplicitConversionOperator(Type from, Type to)
 		{
 			const BindingFlags ConversionOperatorFlags = BindingFlags.Static | BindingFlags.Public | BindingFlags.FlattenHierarchy;
 			MethodInfo[] methods = from.GetMethods(ConversionOperatorFlags);

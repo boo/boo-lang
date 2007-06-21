@@ -32,11 +32,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 	using Boo.Lang.Compiler.Ast;
 
 	public class InternalMethod : IInternalEntity, IMethod, INamespace
-	{
-		public static readonly ReferenceExpression[] EmptyReferenceExpressionArray = new ReferenceExpression[0];
-		
-		public static readonly InternalLabel[] EmptyInternalLabelArray = new InternalLabel[0];
-		
+	{	
 		protected TypeSystemServices _typeSystemServices;
 		
 		protected Method _method;
@@ -52,10 +48,6 @@ namespace Boo.Lang.Compiler.TypeSystem
 		protected ExpressionCollection _returnExpressions;
 
 		protected List _yieldStatements;
-		
-		protected List _labelReferences;
-		
-		protected List _labels;
 				
 		internal InternalMethod(TypeSystemServices typeSystemServices, Method method)
 		{
@@ -81,7 +73,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 		{
 			get
 			{
-				return _method.IsExtension;
+				return IsAttributeDefined(Types.ExtensionAttribute);
 			}
 		}
 
@@ -97,20 +89,14 @@ namespace Boo.Lang.Compiler.TypeSystem
 		{
 			get
 			{
-				IType dllimporttype = _typeSystemServices.Map(Types.DllImportAttribute);
-				foreach (Boo.Lang.Compiler.Ast.Attribute att in _method.Attributes)
-				{
-					IConstructor constructor = TypeSystemServices.GetEntity(att) as IConstructor;
-					if (null != constructor)
-					{
-						if (constructor.DeclaringType == dllimporttype)
-						{
-							return true;
-						}
-					}
-				}
-				return false;
+				return IsAttributeDefined(Types.DllImportAttribute);
 			}
+		}
+		
+		bool IsAttributeDefined(System.Type attributeType)
+		{
+			IType entity = _typeSystemServices.Map(attributeType);
+			return MetadataUtil.IsAttributeDefined(_method, entity);
 		}
 		
 		public IType DeclaringType
@@ -207,7 +193,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 			}
 		}
 		
-		public string FullName
+		public virtual string FullName
 		{
 			get
 			{
@@ -320,24 +306,32 @@ namespace Boo.Lang.Compiler.TypeSystem
 				ExpressionCollection expressions = new ExpressionCollection();
 				foreach (YieldStatement stmt in _yieldStatements)
 				{
-					if (null != stmt.Expression)
-					{
-						expressions.Add(stmt.Expression);
-					}
+					if (null != stmt.Expression) expressions.Add(stmt.Expression);
 				}
 				return expressions;
 			}
 		}
 		
-		public ReferenceExpression[] LabelReferences
+		
+		class LabelCollector : DepthFirstVisitor
 		{
-			get
+			public static readonly InternalLabel[] EmptyInternalLabelArray = new InternalLabel[0];
+
+			protected List _labels;
+		
+			public override void OnLabelStatement(LabelStatement node)
 			{
-				if (null == _labelReferences)
+				if (null == _labels) _labels = new List();
+				_labels.Add(node.Entity);
+			}
+			
+			public InternalLabel[] Labels
+			{
+				get
 				{
-					return EmptyReferenceExpressionArray;
+					if (null == _labels) return EmptyInternalLabelArray;
+					return (InternalLabel[])_labels.ToArray(new InternalLabel[_labels.Count]);
 				}
-				return (ReferenceExpression[])_labelReferences.ToArray(typeof(ReferenceExpression));
 			}
 		}
 		
@@ -345,83 +339,30 @@ namespace Boo.Lang.Compiler.TypeSystem
 		{
 			get
 			{
-				if (null == _labels)
-				{
-					return EmptyInternalLabelArray;
-				}
-				return (InternalLabel[])_labels.ToArray(typeof(InternalLabel));
+				LabelCollector collector = new LabelCollector();
+				_method.Accept(collector);
+				return collector.Labels;
 			}
 		}
 		
 		public void AddYieldStatement(YieldStatement stmt)
 		{
-			if (null == _yieldStatements)
-			{
-				_yieldStatements = new List();
-			}
+			if (null == _yieldStatements) _yieldStatements = new List();
 			_yieldStatements.Add(stmt);
 		}
 		
 		public void AddReturnExpression(Expression expression)
 		{
-			if (null == _returnExpressions)
-			{
-				_returnExpressions = new ExpressionCollection();
-			}
+			if (null == _returnExpressions) _returnExpressions = new ExpressionCollection();
 			_returnExpressions.Add(expression);
 		}
-		
-		public void AddLabelReference(ReferenceExpression node)
-		{
-			if (null == _labelReferences)
-			{
-				_labelReferences = new List();
-			}
-			_labelReferences.Add(node);
-		}
-		
-		public void AddLabel(InternalLabel node)
-		{
-			if (null == node)
-			{
-				throw new ArgumentNullException("node");
-			}
-			
-			if (null == _labels)
-			{
-				_labels = new List();
-			}
-			_labels.Add(node);
-		}
-		
-		public InternalLabel ResolveLabel(string name)
-		{
-			if (null != _labels)
-			{
-				foreach (InternalLabel label in _labels)
-				{
-					if (name == label.Name)
-					{
-						return label;
-					}
-				}
-			}
-			return null;
-		}
-		
+
 		public Local ResolveLocal(string name)
 		{
 			foreach (Local local in _method.Locals)
 			{
-				if (local.PrivateScope)
-				{
-					continue;
-				}
-				
-				if (name == local.Name)
-				{
-					return local;
-				}
+				if (local.PrivateScope) continue;
+				if (name == local.Name) return local;
 			}
 			return null;
 		}
@@ -430,15 +371,12 @@ namespace Boo.Lang.Compiler.TypeSystem
 		{
 			foreach (ParameterDeclaration parameter in _method.Parameters)
 			{
-				if (name == parameter.Name)
-				{
-					return parameter;
-				}
+				if (name == parameter.Name) return parameter;
 			}
 			return null;
 		}
 		
-		public bool Resolve(List targetList, string name, EntityType flags)
+		public virtual bool Resolve(List targetList, string name, EntityType flags)
 		{
 			if (NameResolutionService.IsFlagSet(flags, EntityType.Local))
 			{
@@ -471,6 +409,16 @@ namespace Boo.Lang.Compiler.TypeSystem
 		override public string ToString()
 		{
 			return _typeSystemServices.GetSignature(this);
+		}
+		
+		public virtual IGenericMethodInfo GenericMethodInfo
+		{
+			get { return null; }
+		}
+
+		public virtual IGenericMethodDefinitionInfo GenericMethodDefinitionInfo
+		{
+			get { return null; }
 		}
 	}
 }

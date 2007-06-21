@@ -34,7 +34,15 @@ namespace Boo.Lang.Compiler.Steps
 	
 	public class IntroduceModuleClasses : AbstractVisitorCompilerStep
 	{
+		public const string ModuleAttributeName = "System.Runtime.CompilerServices.CompilerGlobalScopeAttribute";
+		
 		public const string EntryPointMethodName = "Main";
+		
+		public static bool IsModuleClass(TypeMember member)
+		{
+			return NodeType.ClassDefinition == member.NodeType &&
+					member.Attributes.Contains(ModuleAttributeName);
+		}
 		
 		protected IType _booModuleAttributeType;
 		
@@ -56,7 +64,7 @@ namespace Boo.Lang.Compiler.Steps
 		override public void Initialize(CompilerContext context)
 		{
 			base.Initialize(context);
-			_booModuleAttributeType = TypeSystemServices.Map(typeof(Boo.Lang.ModuleAttribute));
+			_booModuleAttributeType = TypeSystemServices.Map(typeof(System.Runtime.CompilerServices.CompilerGlobalScopeAttribute));
 		}
 		
 		override public void Run()
@@ -77,6 +85,7 @@ namespace Boo.Lang.Compiler.Steps
 			if (null == moduleClass)
 			{
 				moduleClass = new ClassDefinition();
+				moduleClass.IsSynthetic = true;
 				hasModuleClass = false;
 			}
 			
@@ -104,6 +113,7 @@ namespace Boo.Lang.Compiler.Steps
 			if (node.Globals.Statements.Count > 0)
 			{
 				Method method = new Method(node.Globals.LexicalInfo);
+				method.IsSynthetic = true;
 				method.Parameters.Add(new ParameterDeclaration("argv", new ArrayTypeReference(new SimpleTypeReference("string"))));
 				method.ReturnType = CodeBuilder.CreateTypeReference(TypeSystemServices.VoidType);
 				method.Body = node.Globals;
@@ -144,8 +154,7 @@ namespace Boo.Lang.Compiler.Steps
 			
 			foreach (TypeMember member in node.Members)
 			{
-				if (NodeType.ClassDefinition == member.NodeType &&
-					member.Attributes.Contains("Boo.Lang.ModuleAttribute"))
+				if (IsModuleClass(member))
 				{
 					if (null == found)
 					{
@@ -162,7 +171,7 @@ namespace Boo.Lang.Compiler.Steps
 		
 		Boo.Lang.Compiler.Ast.Attribute CreateBooModuleAttribute()
 		{
-			Boo.Lang.Compiler.Ast.Attribute attribute = new Boo.Lang.Compiler.Ast.Attribute("Boo.Lang.ModuleAttribute");
+			Boo.Lang.Compiler.Ast.Attribute attribute = new Boo.Lang.Compiler.Ast.Attribute(ModuleAttributeName);
 			attribute.Entity = _booModuleAttributeType;
 			return attribute;
 		}

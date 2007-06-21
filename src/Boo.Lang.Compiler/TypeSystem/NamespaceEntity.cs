@@ -133,10 +133,10 @@ namespace Boo.Lang.Compiler.TypeSystem
 		
 		internal bool Resolve(List targetList, string name, Assembly assembly, EntityType flags)
 		{
-			NamespaceEntity tag = (NamespaceEntity)_childrenNamespaces[name];
-			if (null != tag)
+			NamespaceEntity entity = (NamespaceEntity)_childrenNamespaces[name];
+			if (null != entity)
 			{
-				targetList.Add(new AssemblyQualifiedNamespaceEntity(assembly, tag));
+				targetList.Add(new AssemblyQualifiedNamespaceEntity(assembly, entity));
 				return true;
 			}
 			
@@ -145,15 +145,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 			bool found = false;
 			if (null != types)
 			{
-				foreach (Type type in types)
-				{
-					if (name == type.Name)
-					{
-						targetList.Add(_typeSystemServices.Map(type));
-						found = true;
-						break;
-					}
-				}
+				found = ResolveType(targetList, name, types);
 				
 				foreach (ExternalType external in _externalModules)
 				{
@@ -204,19 +196,35 @@ namespace Boo.Lang.Compiler.TypeSystem
 		bool ResolveExternalType(List targetList, string name)
 		{			
 			foreach (List types in _assemblies.Values)
-			{				
-				foreach (Type type in types)
-				{
-					if (name == type.Name)
-					{
-						targetList.Add(_typeSystemServices.Map(type));
-						return true;
-					}
-				}
+			{
+				if (ResolveType(targetList, name, types)) return true;
 			}
 			return false;
 		}
-		
+
+		private bool ResolveType(List targetList, string name, IEnumerable types)
+		{
+			bool found = false;
+			foreach (Type type in types)
+			{
+				if (name == TypeName(type))
+				{
+					targetList.Add(_typeSystemServices.Map(type));
+					found = true;
+					// Can't return right away, since we can have several types
+					// with the same name but different number of generic arguments. 
+				}
+			}
+			return found;
+		}
+
+		private static string TypeName(Type type)
+		{
+			if (!type.IsGenericTypeDefinition) return type.Name;
+			string name = type.Name;
+			return name.Substring(0, name.LastIndexOf('`'));
+		}
+
 		bool ResolveExternalModules(List targetList, string name, EntityType flags)
 		{
 			bool found = false;

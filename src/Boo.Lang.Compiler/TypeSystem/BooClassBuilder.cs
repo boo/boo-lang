@@ -52,6 +52,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 			_cd = new ClassDefinition();
 			_cd.Name = name;
 			_cd.Entity = new InternalClass(_codeBuilder.TypeSystemServices, _cd);
+			_cd.IsSynthetic = true;
 		}
 		
 		public BooCodeBuilder CodeBuilder
@@ -117,6 +118,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 		public BooMethodBuilder AddConstructor()
 		{
 			Constructor constructor = new Constructor();
+			constructor.IsSynthetic = true;
 			constructor.Modifiers = TypeMemberModifiers.Public;
 			constructor.Entity = new InternalConstructor(_codeBuilder.TypeSystemServices, constructor);
 			_cd.Members.Add(constructor);
@@ -156,8 +158,25 @@ namespace Boo.Lang.Compiler.TypeSystem
 		
 		public Field AddField(string name, IType type)
 		{
-			Field field = _codeBuilder.CreateField(name, type);			
+			Field field = _codeBuilder.CreateField(name, type);
 			_cd.Members.Add(field);
+			return field;
+		}
+
+		public Field AddPublicField(string name, IType type)
+		{
+			return AddField(name, type, TypeMemberModifiers.Public);
+		}
+
+		public Field AddInternalField(string name, IType type)
+		{
+			return AddField(name, type, TypeMemberModifiers.Internal);
+		}
+
+		public Field AddField(string name, IType type, TypeMemberModifiers modifiers)
+		{
+			Field field = AddField(name, type);
+			field.Modifiers = modifiers;
 			return field;
 		}
 	}

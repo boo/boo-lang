@@ -65,6 +65,7 @@ public class BoocTask(CompilerBase):
 	def constructor():
 		SupportsKeyFile = true
 		SupportsKeyContainer = true
+		SupportsPackageReferences = true
 	
 	[FrameworkConfigurable("exename")]
 	[TaskAttribute('exename')]
@@ -189,11 +190,15 @@ public class BoocTask(CompilerBase):
 		writer.WriteLine("-{0}", name)
 		
 	protected override def WriteOption(writer as TextWriter, name as string, value as string):
-		if value.IndexOf(" ") > 0 and (not value.StartsWith("\"")
-						or not value.EndsWith("\"")):
+		if name == "resource": name = "embedres"
+		
+		if " " in value and not IsQuoted(value):
 			writer.WriteLine("-{0}:\"{1}\"", name, value)
 		else:
 			writer.WriteLine("-{0}:{1}", name, value)
+			
+	def IsQuoted(value as string):
+		return value.StartsWith("\"") and value.EndsWith("\"")
 	
 	public Extension as string:
 		get:

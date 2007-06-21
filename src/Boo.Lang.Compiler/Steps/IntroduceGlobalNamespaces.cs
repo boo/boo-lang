@@ -30,27 +30,20 @@ namespace Boo.Lang.Compiler.Steps
 {
 	using Boo.Lang.Compiler.TypeSystem;
 	
-	public class IntroduceGlobalNamespaces : AbstractVisitorCompilerStep
+	public class IntroduceGlobalNamespaces : AbstractCompilerStep
 	{
-		public IntroduceGlobalNamespaces()
-		{
-		}
-		
 		override public void Run()
 		{
-			NameResolutionService.Reset();
-			
-			INamespace[] globals = new INamespace[2];
-			globals[0] = SafeGetNamespace((INamespace)NameResolutionService.ResolveQualifiedName("Boo.Lang"));
-			globals[1] = TypeSystemServices.BuiltinsType;
-			
+			NameResolutionService.Reset();			
 			NameResolutionService.GlobalNamespace = new NamespaceDelegator(
 										NameResolutionService.GlobalNamespace,
-										globals);
+										SafeGetNamespace("Boo.Lang"),
+										TypeSystemServices.BuiltinsType);
 		}
 		
-		private INamespace SafeGetNamespace(INamespace ns)
+		protected INamespace SafeGetNamespace(string qname)
 		{
+			INamespace ns = (INamespace)NameResolutionService.ResolveQualifiedName(qname);
 			return null == ns ? NullNamespace.Default : ns;
 		}
 	}

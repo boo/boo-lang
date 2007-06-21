@@ -18,7 +18,11 @@
 	
 	<target name="compile" depends="init">	
 	
-		<boo src="generate_regression.boo" />
+		<boo src="generate_regression.boo">
+			<references basedir="build">
+				<include name="Boo.Lang.Useful.dll" />
+			</references>
+		</boo>
 		
 		<booc 
 			target="library"
@@ -47,15 +51,6 @@
 			
 			<sources>
 				<include name="BooCompiler.Tests/**/*.cs" />
-				<include name="build/RegressionTestFixture.cs" />
-				<include name="build/CompilerErrorsTestFixture.cs" />
-				<include name="build/CompilerWarningsTestFixture.cs" />
-				<include name="build/IntegrationTestFixture.cs" />
-				<include name="build/StdlibTestFixture.cs" />
-				<include name="build/AttributesTestFixture.cs" />
-				<include name="build/SemanticsTestFixture.cs" />
-				<include name="build/MacrosTestFixture.cs" />
-				<include name="build/DuckyTestFixture.cs" />
 			</sources>
 			
 			<references basedir="build">
@@ -154,6 +149,7 @@
 			<sources>
 				<include name="Boo.Lang.Parser.Tests/**/*.cs" />
 				<include name="build/ParserRoundtripTestFixture.cs" />
+				<include name="build/WSAParserRoundtripTestFixture.cs" />
 			</sources>
 			
 			<references basedir="build">

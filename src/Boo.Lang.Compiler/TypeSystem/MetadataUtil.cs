@@ -29,6 +29,7 @@
 
 using System;
 using System.Reflection;
+using Boo.Lang.Compiler.Ast;
 
 namespace Boo.Lang.Compiler.TypeSystem
 {
@@ -39,16 +40,29 @@ namespace Boo.Lang.Compiler.TypeSystem
 		private MetadataUtil()
 		{
 		}
+		
+		public static bool IsAttributeDefined(TypeMember member, IType attributeType)
+		{
+			foreach (Boo.Lang.Compiler.Ast.Attribute attr in member.Attributes)
+			{
+				IEntity entity = TypeSystemServices.GetEntity(attr);
+				if (entity == attributeType) return true; // pre bound attribute
+				IConstructor constructor = entity as IConstructor;
+				if (null == constructor) continue;				
+				if (constructor.DeclaringType == attributeType) return true;
+			}
+			return false;
+		}
 
 		public static bool IsAttributeDefined(MemberInfo member, Type attributeType)
 		{
-			return Attribute.IsDefined(member, attributeType);
+			return System.Attribute.IsDefined(member, attributeType);
 #if CHECK_ATTRIBUTES_BY_NAME
 			// check attribute by name to account for different 
 			// loaded modules (and thus different type identities)
 			string attributeName = attributeType.FullName;
-			Attribute[] attributes = Attribute.GetCustomAttributes(member);
-			foreach (Attribute a in attributes)
+			System.Attribute[] attributes = System.Attribute.GetCustomAttributes(member);
+			foreach (System.Attribute a in attributes)
 			{
 				if (a.GetType().FullName == attributeName) return true;
 			}

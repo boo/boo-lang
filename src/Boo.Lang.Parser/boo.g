@@ -73,7 +73,6 @@ tokens
 	ENUM="enum";
 	EVENT="event";
 	EXCEPT="except";
-	FAILURE="failure";
 	FINAL="final";	
 	FROM="from";	
 	FOR="for";
@@ -103,12 +102,10 @@ tokens
 	RAISE="raise";
 	REF="ref";
 	RETURN="return";
-	RETRY="retry";
 	SET="set";	
 	SELF="self";
 	SUPER="super";
 	STATIC="static";
-	SUCCESS="success";
 	STRUCT="struct";
 	TRY="try";
 	TRANSIENT="transient";
@@ -753,6 +750,7 @@ method [TypeMemberCollection container]
 		TypeReference it = null;
 		ExplicitMemberInfo emi = null;
 		ParameterDeclarationCollection parameters = null;
+		GenericParameterDeclarationCollection genericParameters = null;
 		Block body = null;
 		StatementCollection statements = null;
 	}: 
@@ -780,20 +778,25 @@ method [TypeMemberCollection container]
 		m.Modifiers = _modifiers;
 		AddAttributes(m.Attributes);
 		parameters = m.Parameters;
+		genericParameters = m.GenericParameters;
 		body = m.Body;
 		statements = body.Statements;
 	}
-	LPAREN	
 	(
-		(SELF)=>extension_method_parameter_declaration_list[m]
-		| parameter_declaration_list[parameters]
-	)
-	RPAREN
-			(AS rt=type_reference { m.ReturnType = rt; })?
-			attributes { AddAttributes(m.ReturnTypeAttributes); }
-			begin_block_with_doc[m, body]
-				block[statements]
-			end[body]
+		(
+			LBRACK OF generic_parameter_declaration_list[genericParameters] RBRACK
+		)
+		|
+		(
+			OF generic_parameter_declaration[genericParameters]
+		)
+	)?
+	LPAREN parameter_declaration_list[parameters] RPAREN
+	(AS rt=type_reference { m.ReturnType = rt; })?
+	attributes { AddAttributes(m.ReturnTypeAttributes); }
+	begin_block_with_doc[m, body]
+		block[statements]
+	end[body]
 	{ 
 		container.Add(m);
 	}
@@ -971,24 +974,6 @@ parameter_modifier returns [ParameterModifiers pm]
 		REF { pm = ParameterModifiers.Ref; }
 	)
 ;
-	
-protected
-extension_method_parameter_declaration_list[Method m]
-{
-	TypeReference tr = null;
-	ParameterDeclarationCollection parameters = m.Parameters;
-}: 
-	id:SELF (AS tr=type_reference)?
-	{
-		ParameterDeclaration pd = new ParameterDeclaration(ToLexicalInfo(id));
-		pd.Name = id.getText();
-		pd.Type = tr;
-		parameters.Add(pd);
-		
-		m.ImplementationFlags |= MethodImplementationFlags.Extension;
-	}
-	(COMMA parameter_declaration_list[parameters])?
-;
 
 protected
 parameter_declaration_list[ParameterDeclarationCollection c]
@@ -1032,7 +1017,7 @@ parameter_declaration[ParameterDeclarationCollection c]
 		c.Add(pd);
 	} 
 	;
-	
+
 protected	
 callable_parameter_declaration_list[ParameterDeclarationCollection c]:
 	(callable_parameter_declaration[c]
@@ -1056,6 +1041,24 @@ callable_parameter_declaration[ParameterDeclarationCollection c]
 		pd.Modifiers = pm;
 		c.Add(pd);
 	} 
+	;
+
+protected
+generic_parameter_declaration_list[GenericParameterDeclarationCollection c]:
+	generic_parameter_declaration[c]
+	(
+		COMMA generic_parameter_declaration[c]
+	)*
+	;
+
+protected 
+generic_parameter_declaration[GenericParameterDeclarationCollection c]:
+	id:ID 
+	{
+		GenericParameterDeclaration gpd = new GenericParameterDeclaration(ToLexicalInfo(id));
+		gpd.Name = id.getText();
+		c.Add(gpd);
+	}
 	;
 	
 protected
@@ -1113,6 +1116,7 @@ type_reference returns [TypeReference tr]
 		tr = null;
 		IToken id = null;
 		TypeReferenceCollection arguments = null;
+		GenericTypeDefinitionReference gtdr = null;
 	}: 
 	tr=array_type_reference
 	|
@@ -1122,14 +1126,45 @@ type_reference returns [TypeReference tr]
 		id=type_name
 		(
 			(
-				LBRACK OF
+				LBRACK OF 
+				(
+					(
+						MULTIPLY
+						{
+							gtdr = new GenericTypeDefinitionReference(ToLexicalInfo(id));
+							gtdr.Name = id.getText();
+							gtdr.GenericPlaceholders = 1;
+							tr = gtdr;										
+						}
+						( 
+							COMMA MULTIPLY
+							{
+								gtdr.GenericPlaceholders++;
+							}
+						)*
+						RBRACK
+					)
+					|
+					(
+						{
+							GenericTypeReference gtr = new GenericTypeReference(ToLexicalInfo(id), id.getText());
+							arguments = gtr.GenericArguments;
+							tr = gtr;
+						}
+						type_reference_list[arguments]
+						RBRACK
+					)
+				)
+			)
+			|
+			(
+				OF MULTIPLY
 				{
-					GenericTypeReference gtr = new GenericTypeReference(ToLexicalInfo(id), id.getText());
-					arguments = gtr.GenericArguments;
-					tr = gtr;
+					gtdr = new GenericTypeDefinitionReference(ToLexicalInfo(id));
+					gtdr.Name = id.getText();
+					gtdr.GenericPlaceholders = 1;
+					tr = gtdr;
 				}
-				type_reference_list[arguments]
-				RBRACK
 			)
 			|
 			(
@@ -1293,7 +1328,6 @@ stmt [StatementCollection container]
 				s=break_stmt |
 				s=continue_stmt |				
 				s=raise_stmt |
-				s=retry_stmt |
 				s=expression_stmt				
 			)
 			(			
@@ -1330,7 +1364,6 @@ simple_stmt [StatementCollection container]
 				s=break_stmt |
 				s=continue_stmt |				
 				s=raise_stmt |
-				s=retry_stmt |
 				s=expression_stmt				
 			)
 		)
@@ -1350,7 +1383,7 @@ stmt_modifier returns [StatementModifier m]
 		m = null;
 		Expression e = null;
 		IToken t = null;
-		StatementModifierType type = StatementModifierType.Uninitialized;
+		StatementModifierType type = StatementModifierType.None;
 	}:
 	(
 		i:IF { t = i; type = StatementModifierType.If; } |
@@ -1469,14 +1502,6 @@ callable_expression returns [Expression e]
 	
 	
 protected
-retry_stmt returns [RetryStatement rs]
-	{
-		rs = null;
-	}:
-	t:RETRY { rs = new RetryStatement(ToLexicalInfo(t)); }
-	;
-	
-protected
 try_stmt returns [TryStatement s]
 	{
 		s = null;		
@@ -1488,11 +1513,6 @@ try_stmt returns [TryStatement s]
 	(
 		exception_handler[s]
 	)*
-	(
-		stoken:SUCCESS { sblock = new Block(ToLexicalInfo(stoken)); }
-			compound_stmt[sblock]
-		{ s.SuccessBlock = sblock; }
-	)?
 	(
 		etoken:ENSURE { eblock = new Block(ToLexicalInfo(etoken)); }
 			compound_stmt[eblock]

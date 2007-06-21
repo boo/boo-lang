@@ -66,8 +66,6 @@ namespace Boo.Lang.Compiler.Steps
 		static ConstructorInfo DebuggableAttribute_Constructor = typeof(DebuggableAttribute).GetConstructor(new Type[] { Types.Bool, Types.Bool });
 
 		static ConstructorInfo DuckTypedAttribute_Constructor = Types.DuckTypedAttribute.GetConstructor(new Type[0]);
-
-		static ConstructorInfo ExtensionAttribute_Constructor = Types.ExtensionAttribute.GetConstructor(new Type[0]);
 		
 		static ConstructorInfo ParamArrayAttribute_Constructor = Types.ParamArrayAttribute.GetConstructor(new Type[0]);
 		
@@ -168,8 +166,8 @@ namespace Boo.Lang.Compiler.Steps
 			if (0 != _types.Count)
 			{
 				throw new ApplicationException(
-						string.Format("{0}: {1} items still on the stack.", message, _types.Count)
-						);
+					string.Format("{0}: {1} items still on the stack.", message, _types.Count)
+				);
 			}
 		}
 		
@@ -381,7 +379,7 @@ namespace Boo.Lang.Compiler.Steps
 			{
 				ResolveEventHandler resolveHandler = new ResolveEventHandler(OnTypeResolve);
 				AppDomain current = Thread.GetDomain();
-			
+				
 				try
 				{
 					current.TypeResolve += resolveHandler;
@@ -400,7 +398,7 @@ namespace Boo.Lang.Compiler.Steps
 					CreateType(type);
 				}
 			}
-		
+			
 			void CreateType(TypeMember type)
 			{
 				if (!_created.ContainsKey(type))
@@ -422,15 +420,30 @@ namespace Boo.Lang.Compiler.Steps
 					{
 						foreach (TypeReference baseTypeRef in typedef.BaseTypes)
 						{
-							AbstractInternalType tag = _emitter.GetType(baseTypeRef) as AbstractInternalType;
+							IType baseType = _emitter.GetType(baseTypeRef);
+							
+							AbstractInternalType tag = baseType as AbstractInternalType;
 							if (null != tag)
 							{
 								CreateType(tag.TypeDefinition);
 							}
+
+							// If base type is generic, create any internal parameters it might have
+							if (baseType.GenericTypeInfo != null)
+							{
+								foreach (IType argument in baseType.GenericTypeInfo.GenericArguments)
+								{
+									tag = argument as AbstractInternalType;
+									if (null != tag)
+									{
+										CreateType(tag.TypeDefinition);
+									}
+								}
+							}
 						}
 					}
 					
-					((AbstractInternalType)type.Entity).GeneratedType = _emitter.GetTypeBuilder(type).CreateType();
+					_emitter.GetTypeBuilder(type).CreateType();
 					
 					Trace("type '{0}' successfully created", type);
 					
@@ -442,7 +455,7 @@ namespace Boo.Lang.Compiler.Steps
 			{
 				NodeType parent = type.ParentNode.NodeType;
 				return (NodeType.ClassDefinition == parent) ||
-						(NodeType.InterfaceDefinition == parent);
+					(NodeType.InterfaceDefinition == parent);
 			}
 			
 			Assembly OnTypeResolve(object sender, ResolveEventArgs args)
@@ -493,16 +506,16 @@ namespace Boo.Lang.Compiler.Steps
 				{
 					case NodeType.InterfaceDefinition:
 					case NodeType.ClassDefinition:
-					{
-						types.Add(member);
-						CollectTypes(types, ((TypeDefinition)member).Members);
-						break;
-					}
+						{
+							types.Add(member);
+							CollectTypes(types, ((TypeDefinition)member).Members);
+							break;
+						}
 					case NodeType.EnumDefinition:
-					{
-						types.Add(member);
-						break;
-					}
+						{
+							types.Add(member);
+							break;
+						}
 				}
 			}
 		}
@@ -542,16 +555,16 @@ namespace Boo.Lang.Compiler.Steps
 			TypeBuilder builder = GetTypeBuilder(node);
 			
 			builder.DefineField("value__", baseType,
-					FieldAttributes.Public |
-					FieldAttributes.SpecialName |
-					FieldAttributes.RTSpecialName);
+			                    FieldAttributes.Public |
+			                    FieldAttributes.SpecialName |
+			                    FieldAttributes.RTSpecialName);
 			
 			foreach (EnumMember member in node.Members)
 			{
 				FieldBuilder field = builder.DefineField(member.Name, builder,
-									FieldAttributes.Public |
-									FieldAttributes.Static |
-									FieldAttributes.Literal);
+				                                         FieldAttributes.Public |
+				                                         FieldAttributes.Static |
+				                                         FieldAttributes.Literal);
 				field.SetConstant((int)member.Initializer.Value);
 				SetBuilder(member, field);
 			}
@@ -560,7 +573,7 @@ namespace Boo.Lang.Compiler.Steps
 		override public void OnArrayTypeReference(ArrayTypeReference node)
 		{
 		}
-
+		
 		override public void OnClassDefinition(ClassDefinition node)
 		{
 			EmitTypeDefinition(node);
@@ -598,7 +611,7 @@ namespace Boo.Lang.Compiler.Steps
 		
 		override public void OnMethod(Method method)
 		{
-			if (method.IsRuntime) return;			
+			if (method.IsRuntime) return;
 			if (IsPInvoke(method)) return;
 			
 			MethodBuilder methodBuilder = GetMethodBuilder(method);
@@ -630,7 +643,7 @@ namespace Boo.Lang.Compiler.Steps
 		void BeginMethodBody(IType returnType)
 		{
 			_returnType = returnType;
-			_returnLabel = _il.DefineLabel();			
+			_returnLabel = _il.DefineLabel();
 			if (TypeSystemServices.VoidType != _returnType)
 			{
 				_returnValueLocal = _il.DeclareLocal(GetSystemType(_returnType));
@@ -639,7 +652,7 @@ namespace Boo.Lang.Compiler.Steps
 		
 		void EndMethodBody()
 		{
-			_il.MarkLabel(_returnLabel);			
+			_il.MarkLabel(_returnLabel);
 			if (null != _returnValueLocal)
 			{
 				_il.Emit(OpCodes.Ldloc, _returnValueLocal);
@@ -655,28 +668,18 @@ namespace Boo.Lang.Compiler.Steps
 
 		override public void OnBlock(Block block)
 		{
-			bool current = _checked;
-			object objChecked = block["checked"];
-			
-			if (objChecked is bool)
-			{
-				_checked = (bool)objChecked;
-			}
+			bool currentChecked = _checked;
+			_checked = AstAnnotations.IsChecked(block, Parameters.Checked);
 			
 			bool currentArrayIndexing = _rawArrayIndexing;
-			object objRawArrayIndexing = block["rawarrayindexing"];
-			
-			if (objRawArrayIndexing is bool)
-			{
-				_rawArrayIndexing = (bool)objRawArrayIndexing;
-			}
+			_rawArrayIndexing = AstAnnotations.IsRawIndexing(block);
 
 			Visit(block.Statements);
 
-			_checked = current;
 			_rawArrayIndexing = currentArrayIndexing;
+			_checked = currentChecked;
 		}
-		
+
 		void DefineLabels(Method method)
 		{
 			foreach (InternalLabel label in ((InternalMethod)method.Entity).Labels)
@@ -711,7 +714,6 @@ namespace Boo.Lang.Compiler.Steps
 		override public void OnReturnStatement(ReturnStatement node)
 		{
 			EmitDebugInfo(node);
-			
 			OpCode retOpCode = _tryBlock > 0 ? OpCodes.Leave : OpCodes.Br;
 			
 			if (null != node.Expression)
@@ -735,27 +737,16 @@ namespace Boo.Lang.Compiler.Steps
 				Visit(node.Exception); PopType();
 				_il.Emit(OpCodes.Throw);
 			}
-			EmitNopDebugInfo(node);
-		}
-
-		private void EmitNopDebugInfo(Statement node)
-		{
-			// HACK: workaround - mono reports the position of
-			// raise as being the position of the next instruction
-			// after it
-			if (EmitDebugInfo(node))
-			{
-				_il.Emit(OpCodes.Nop);
-			}
 		}
 
 		override public void OnTryStatement(TryStatement node)
 		{
 			++_tryBlock;
-			
 			_il.BeginExceptionBlock();
 			Visit(node.ProtectedBlock);
 			Visit(node.ExceptionHandlers);
+			--_tryBlock;
+			
 			if (null != node.EnsureBlock)
 			{
 				_il.BeginFinallyBlock();
@@ -763,7 +754,7 @@ namespace Boo.Lang.Compiler.Steps
 			}
 			_il.EndExceptionBlock();
 			
-			--_tryBlock;
+			
 		}
 		
 		override public void OnExceptionHandler(ExceptionHandler node)
@@ -791,8 +782,6 @@ namespace Boo.Lang.Compiler.Steps
 			// the stack sane
 			DiscardValueOnStack();
 			AssertStackIsEmpty("stack must be empty after a statement!");
-
-			EmitNopDebugInfo(node);
 		}
 		
 		void DiscardValueOnStack()
@@ -805,22 +794,37 @@ namespace Boo.Lang.Compiler.Steps
 		
 		override public void OnUnlessStatement(UnlessStatement node)
 		{
-			EmitDebugInfo(node);
-			
 			Label endLabel = _il.DefineLabel();
+			EmitDebugInfo(node);
 			EmitBranchTrue(node.Condition, endLabel);
 			node.Block.Accept(this);
 			_il.MarkLabel(endLabel);
+		}
+		
+		void OnSwitch(MethodInvocationExpression node)
+		{
+			ExpressionCollection args = node.Arguments;
+			Visit(args[0]);
+			EmitCastIfNeeded(TypeSystemServices.IntType, PopType());
+			
+			Label[] labels = new Label[args.Count-1];
+			for (int i=0; i<labels.Length; ++i)
+			{
+				labels[i] = ((InternalLabel)args[i+1].Entity).Label;
+			}
+			_il.Emit(OpCodes.Switch, labels);
+			
+			PushVoid();
 		}
 		
 		override public void OnGotoStatement(GotoStatement node)
 		{
 			EmitDebugInfo(node);
 			
-			InternalLabel label = (InternalLabel)node.Label.Entity;
-			int gotoDepth = ContextAnnotations.GetTryBlockDepth(node);
-			int targetDepth = ContextAnnotations.GetTryBlockDepth(label.LabelStatement);
-	
+			InternalLabel label = (InternalLabel)GetEntity(node.Label);
+			int gotoDepth = AstAnnotations.GetTryBlockDepth(node);
+			int targetDepth = AstAnnotations.GetTryBlockDepth(label.LabelStatement);
+			
 			if (targetDepth == gotoDepth)
 			{
 				_il.Emit(OpCodes.Br, label.Label);
@@ -833,6 +837,7 @@ namespace Boo.Lang.Compiler.Steps
 		
 		override public void OnLabelStatement(LabelStatement node)
 		{
+			EmitDebugInfo(node);
 			_il.MarkLabel(((InternalLabel)node.Entity).Label);
 		}
 		
@@ -861,11 +866,11 @@ namespace Boo.Lang.Compiler.Steps
 		
 		override public void OnIfStatement(IfStatement node)
 		{
-			EmitDebugInfo(node);
-			
 			Label endLabel = _il.DefineLabel();
 			
+			EmitDebugInfo(node);
 			EmitBranchFalse(node.Condition, endLabel);
+			
 			node.TrueBlock.Accept(this);
 			if (null != node.FalseBlock)
 			{
@@ -897,95 +902,95 @@ namespace Boo.Lang.Compiler.Steps
 			switch (expression.Operator)
 			{
 				case BinaryOperatorType.TypeTest:
-				{
-					EmitTypeTest(expression);
-					_il.Emit(OpCodes.Brtrue, label);
-					break;
-				}
-				
+					{
+						EmitTypeTest(expression);
+						_il.Emit(OpCodes.Brtrue, label);
+						break;
+					}
+					
 				case BinaryOperatorType.Or:
-				{
-					EmitBranchTrue(expression.Left, label);
-					EmitBranchTrue(expression.Right, label);
-					break;
-				}
-				
+					{
+						EmitBranchTrue(expression.Left, label);
+						EmitBranchTrue(expression.Right, label);
+						break;
+					}
+					
 				case BinaryOperatorType.And:
-				{
-					Label skipRhs = _il.DefineLabel();
-					EmitBranchFalse(expression.Left, skipRhs);
-					EmitBranchTrue(expression.Right, label);
-					_il.MarkLabel(skipRhs);
-					break;
-				}
-				
+					{
+						Label skipRhs = _il.DefineLabel();
+						EmitBranchFalse(expression.Left, skipRhs);
+						EmitBranchTrue(expression.Right, label);
+						_il.MarkLabel(skipRhs);
+						break;
+					}
+					
 				case BinaryOperatorType.Equality:
-				{
-					LoadCmpOperands(expression);
-					_il.Emit(OpCodes.Beq, label);
-					break;
-				}
-				
+					{
+						LoadCmpOperands(expression);
+						_il.Emit(OpCodes.Beq, label);
+						break;
+					}
+					
 				case BinaryOperatorType.ReferenceEquality:
-				{					
-					Visit(expression.Left); PopType();
-					Visit(expression.Right); PopType();
-					_il.Emit(OpCodes.Beq, label);
-					break;
-				}
-				
+					{
+						Visit(expression.Left); PopType();
+						Visit(expression.Right); PopType();
+						_il.Emit(OpCodes.Beq, label);
+						break;
+					}
+					
 				case BinaryOperatorType.ReferenceInequality:
-				{
-					if (IsNull(expression.Left))
 					{
-						EmitRawBranchTrue(expression.Right, label);
+						if (IsNull(expression.Left))
+						{
+							EmitRawBranchTrue(expression.Right, label);
+							break;
+						}
+						if (IsNull(expression.Right))
+						{
+							EmitRawBranchTrue(expression.Left, label);
+							break;
+						}
+						Visit(expression.Left); PopType();
+						Visit(expression.Right); PopType();
+						_il.Emit(OpCodes.Ceq);
+						_il.Emit(OpCodes.Brfalse, label);
 						break;
 					}
-					if (IsNull(expression.Right))
-					{
-						EmitRawBranchTrue(expression.Left, label);
-						break;
-					}
-					Visit(expression.Left); PopType();
-					Visit(expression.Right); PopType();
-					_il.Emit(OpCodes.Ceq);
-					_il.Emit(OpCodes.Brfalse, label);
-					break;
-				}
-				
+					
 				case BinaryOperatorType.GreaterThan:
-				{
-					LoadCmpOperands(expression);
-					_il.Emit(OpCodes.Bgt, label);
-					break;
-				}
-				
+					{
+						LoadCmpOperands(expression);
+						_il.Emit(OpCodes.Bgt, label);
+						break;
+					}
+					
 				case BinaryOperatorType.GreaterThanOrEqual:
-				{
-					LoadCmpOperands(expression);
-					_il.Emit(OpCodes.Bge, label);
-					break;
-				}
-				
+					{
+						LoadCmpOperands(expression);
+						_il.Emit(OpCodes.Bge, label);
+						break;
+					}
+					
 				case BinaryOperatorType.LessThan:
-				{
-					LoadCmpOperands(expression);
-					_il.Emit(OpCodes.Blt, label);
-					break;
-				}
-				
+					{
+						LoadCmpOperands(expression);
+						_il.Emit(OpCodes.Blt, label);
+						break;
+					}
+					
 				case BinaryOperatorType.LessThanOrEqual:
-				{
-					LoadCmpOperands(expression);
-					_il.Emit(OpCodes.Ble, label);
-					break;
-				}
-				
+					{
+						LoadCmpOperands(expression);
+						_il.Emit(OpCodes.Ble, label);
+						break;
+					}
+					
 				default:
-				{
-					DefaultBranchTrue(expression, label);
-					break;
-				}
+					{
+						DefaultBranchTrue(expression, label);
+						break;
+					}
 			}
 		}
 		
@@ -1000,22 +1005,22 @@ namespace Boo.Lang.Compiler.Steps
 			switch (expression.NodeType)
 			{
 				case NodeType.BinaryExpression:
-				{
-					EmitBranchTrue((BinaryExpression)expression, label);
-					break;
-				}
-				
+					{
+						EmitBranchTrue((BinaryExpression)expression, label);
+						break;
+					}
+					
 				case NodeType.UnaryExpression:
-				{
-					EmitBranchTrue((UnaryExpression)expression, label);
-					break;
-				}
-				
+					{
+						EmitBranchTrue((UnaryExpression)expression, label);
+						break;
+					}
+					
 				default:
-				{
-					DefaultBranchTrue(expression, label);
-					break;
-				}
+					{
+						DefaultBranchTrue(expression, label);
+						break;
+					}
 			}
 		}
 		
@@ -1045,67 +1050,67 @@ namespace Boo.Lang.Compiler.Steps
 			switch (expression.Operator)
 			{
 				case BinaryOperatorType.TypeTest:
-				{
-					EmitTypeTest(expression);
-					_il.Emit(OpCodes.Brfalse, label);
-					break;
-				}
-				
+					{
+						EmitTypeTest(expression);
+						_il.Emit(OpCodes.Brfalse, label);
+						break;
+					}
+					
 				case BinaryOperatorType.Or:
-				{
-					Label end = _il.DefineLabel();
-					EmitBranchTrue(expression.Left, end);
-					EmitBranchFalse(expression.Right, label);
-					_il.MarkLabel(end);
-					break;
-				}
-				
-				case BinaryOperatorType.And:
-				{
-					EmitBranchFalse(expression.Left, label);
-					EmitBranchFalse(expression.Right, label);
-					break;
-				}
-
-				case BinaryOperatorType.Equality:
-				{
-					if (CanOptimizeAwayZeroOrFalseComparison(expression.Left, expression.Right))
 					{
-						EmitBranchTrue(expression.Right, label);
-					}
-					else if (CanOptimizeAwayZeroOrFalseComparison(expression.Right, expression.Left))
-					{
-						EmitBranchTrue(expression.Left, label);
-					}
-					else
-					{
-						DefaultBranchFalse(expression, label);
-					}
-					break;
-				}
-
-				case BinaryOperatorType.Inequality:
-				{
-					if (CanOptimizeAwayZeroOrFalseComparison(expression.Left, expression.Right))
-					{
+						Label end = _il.DefineLabel();
+						EmitBranchTrue(expression.Left, end);
 						EmitBranchFalse(expression.Right, label);
+						_il.MarkLabel(end);
+						break;
 					}
-					else if (CanOptimizeAwayZeroOrFalseComparison(expression.Right, expression.Left))
+					
+				case BinaryOperatorType.And:
 					{
 						EmitBranchFalse(expression.Left, label);
+						EmitBranchFalse(expression.Right, label);
+						break;
 					}
-					else
+
+				case BinaryOperatorType.Equality:
+					{
+						if (CanOptimizeAwayZeroOrFalseComparison(expression.Left, expression.Right))
+						{
+							EmitBranchTrue(expression.Right, label);
+						}
+						else if (CanOptimizeAwayZeroOrFalseComparison(expression.Right, expression.Left))
+						{
+							EmitBranchTrue(expression.Left, label);
+						}
+						else
+						{
+							DefaultBranchFalse(expression, label);
+						}
+						break;
+					}
+
+				case BinaryOperatorType.Inequality:
+					{
+						if (CanOptimizeAwayZeroOrFalseComparison(expression.Left, expression.Right))
+						{
+							EmitBranchFalse(expression.Right, label);
+						}
+						else if (CanOptimizeAwayZeroOrFalseComparison(expression.Right, expression.Left))
+						{
+							EmitBranchFalse(expression.Left, label);
+						}
+						else
+						{
+							DefaultBranchFalse(expression, label);
+						}
+						break;
+					}
+					
+				default:
 					{
 						DefaultBranchFalse(expression, label);
+						break;
 					}
-					break;
-				}
-				
-				default:
-				{
-					DefaultBranchFalse(expression, label);
-					break;
-				}
 			}
 		}
 
@@ -1119,7 +1124,7 @@ namespace Boo.Lang.Compiler.Steps
 			return (IsZero(expression) || IsFalse(expression));
 		}
 
-	    private bool IsFalse(Expression expression)
+		private bool IsFalse(Expression expression)
 		{
 			return NodeType.BoolLiteralExpression == expression.NodeType
 				&& (false == ((BoolLiteralExpression)expression).Value);
@@ -1136,22 +1141,22 @@ namespace Boo.Lang.Compiler.Steps
 			switch (expression.NodeType)
 			{
 				case NodeType.UnaryExpression:
-				{
-					EmitBranchFalse((UnaryExpression)expression, label);
-					break;
-				}
-				
+					{
+						EmitBranchFalse((UnaryExpression)expression, label);
+						break;
+					}
+					
 				case NodeType.BinaryExpression:
-				{
-					EmitBranchFalse((BinaryExpression)expression, label);
-					break;
-				}
-				
+					{
+						EmitBranchFalse((BinaryExpression)expression, label);
+						break;
+					}
+					
 				default:
-				{
-					DefaultBranchFalse(expression, label);
-					break;
-				}
+					{
+						DefaultBranchFalse(expression, label);
+						break;
+					}
 			}
 		}
 		
@@ -1160,16 +1165,16 @@ namespace Boo.Lang.Compiler.Steps
 			switch (expression.Operator)
 			{
 				case UnaryOperatorType.LogicalNot:
-				{
-					EmitBranchTrue(expression.Operand, label);
-					break;
-				}
-				
+					{
+						EmitBranchTrue(expression.Operand, label);
+						break;
+					}
+					
 				default:
-				{
-					DefaultBranchFalse(expression, label);
-					break;
-				}
+					{
+						DefaultBranchFalse(expression, label);
+						break;
+					}
 			}
 		}
 		
@@ -1224,14 +1229,11 @@ namespace Boo.Lang.Compiler.Steps
 		
 		override public void OnWhileStatement(WhileStatement node)
 		{
-			EmitDebugInfo(node);
-			
 			Label endLabel = _il.DefineLabel();
 			Label bodyLabel = _il.DefineLabel();
 			Label conditionLabel = _il.DefineLabel();
 			
 			_il.Emit(OpCodes.Br, conditionLabel);
-			
 			_il.MarkLabel(bodyLabel);
 			
 			EnterLoop(endLabel, conditionLabel);
@@ -1239,6 +1241,7 @@ namespace Boo.Lang.Compiler.Steps
 			LeaveLoop();
 			
 			_il.MarkLabel(conditionLabel);
+			EmitDebugInfo(node);
 			EmitBranchTrue(node.Condition, bodyLabel);
 			_il.MarkLabel(endLabel);
 		}
@@ -1268,28 +1271,28 @@ namespace Boo.Lang.Compiler.Steps
 			switch (node.Operator)
 			{
 				case UnaryOperatorType.LogicalNot:
-				{
-					EmitLogicalNot(node);
-					break;
-				}
-				
+					{
+						EmitLogicalNot(node);
+						break;
+					}
+					
 				case UnaryOperatorType.UnaryNegation:
-				{
-					EmitUnaryNegation(node);
-					break;
-				}
+					{
+						EmitUnaryNegation(node);
+						break;
+					}
 
 				case UnaryOperatorType.OnesComplement:
-				{
-					EmitOnesComplement(node);
-					break;
-				}
-				
+					{
+						EmitOnesComplement(node);
+						break;
+					}
+					
 				default:
-				{
-					NotImplemented(node, "unary operator not supported");
-					break;
-				}
+					{
+						NotImplemented(node, "unary operator not supported");
+						break;
+					}
 			}
 		}
 
@@ -1302,7 +1305,7 @@ namespace Boo.Lang.Compiler.Steps
 		private void EmitLogicalNot(UnaryExpression node)
 		{
 			Expression operand = node.Operand;
-			operand.Accept(this); 
+			operand.Accept(this);
 			IType typeOnStack = PopType();
 			if (IsBoolOrInt(typeOnStack) || EmitToBoolIfNeeded(operand))
 			{
@@ -1352,7 +1355,7 @@ namespace Boo.Lang.Compiler.Steps
 			OpCode opcode = GetStoreEntityOpCode(elementType);
 			
 			Slice index = slice.Indices[0];
-			EmitNormalizedArrayIndex(index.Begin);
+			EmitNormalizedArrayIndex(slice, index.Begin);
 			
 			bool stobj = IsStobj(opcode);
 			if (stobj)
@@ -1419,50 +1422,50 @@ namespace Boo.Lang.Compiler.Steps
 			switch (tag.EntityType)
 			{
 				case EntityType.Local:
-				{
-					SetLocal(node, (InternalLocal)tag, leaveValueOnStack);
-					break;
-				}
-				
-				case EntityType.Parameter:
-				{
-					InternalParameter param = (InternalParameter)tag;
-					if (param.Parameter.IsByRef)
 					{
-						SetByRefParam(param, node.Right, leaveValueOnStack);
+						SetLocal(node, (InternalLocal)tag, leaveValueOnStack);
 						break;
 					}
 					
-					Visit(node.Right);
-					EmitCastIfNeeded(param.Type, PopType());
-					
-					if (leaveValueOnStack)
+				case EntityType.Parameter:
 					{
-						_il.Emit(OpCodes.Dup);
-						PushType(param.Type);
+						InternalParameter param = (InternalParameter)tag;
+						if (param.Parameter.IsByRef)
+						{
+							SetByRefParam(param, node.Right, leaveValueOnStack);
+							break;
+						}
+						
+						Visit(node.Right);
+						EmitCastIfNeeded(param.Type, PopType());
+						
+						if (leaveValueOnStack)
+						{
+							_il.Emit(OpCodes.Dup);
+							PushType(param.Type);
+						}
+						_il.Emit(OpCodes.Starg, param.Index);
+						break;
 					}
-					_il.Emit(OpCodes.Starg, param.Index);
-					break;
-				}
-				
+					
 				case EntityType.Field:
-				{
-					IField field = (IField)tag;
-					SetField(node, field, node.Left, node.Right, leaveValueOnStack);
-					break;
-				}
-				
+					{
+						IField field = (IField)tag;
+						SetField(node, field, node.Left, node.Right, leaveValueOnStack);
+						break;
+					}
+					
 				case EntityType.Property:
-				{
-					SetProperty(node, (IProperty)tag, node.Left, node.Right, leaveValueOnStack);
-					break;
-				}
+					{
+						SetProperty(node, (IProperty)tag, node.Left, node.Right, leaveValueOnStack);
+						break;
+					}
 					
 				default:
-				{
-					NotImplemented(node, tag.ToString());
-					break;
-				}
+					{
+						NotImplemented(node, tag.ToString());
+						break;
+					}
 			}
 			if (!leaveValueOnStack)
 			{
@@ -1471,7 +1474,7 @@ namespace Boo.Lang.Compiler.Steps
 		}
 
 		private void SetByRefParam(InternalParameter param, Expression right, bool leaveValueOnStack)
-		{	
+		{
 			LocalBuilder temp = null;
 			IType tempType = null;
 			if (leaveValueOnStack)
@@ -1492,7 +1495,7 @@ namespace Boo.Lang.Compiler.Steps
 			}
 			
 			EmitCastIfNeeded(param.Type, PopType());
-					
+			
 			OpCode storecode = GetStoreRefParamCode(param.Type);
 			if (IsStobj(storecode)) //passing struct/decimal byref
 			{
@@ -1603,7 +1606,7 @@ namespace Boo.Lang.Compiler.Steps
 			_il.EmitCall(OpCodes.Call, Math_Pow, null);
 			PushType(TypeSystemServices.DoubleType);
 		}
-		                        
+		
 		void OnArithmeticOperator(BinaryExpression node)
 		{
 			IType type = node.ExpressionType;
@@ -1617,7 +1620,7 @@ namespace Boo.Lang.Compiler.Steps
 		{
 			IType type = GetExpressionType(expression);
 			if (TypeSystemServices.ObjectType == type ||
-				TypeSystemServices.DuckType == type)
+			    TypeSystemServices.DuckType == type)
 			{
 				_il.EmitCall(OpCodes.Call, RuntimeServices_ToBool_Object, null);
 				return true;
@@ -1626,7 +1629,7 @@ namespace Boo.Lang.Compiler.Steps
 			{
 				_il.EmitCall(OpCodes.Call, RuntimeServices_ToBool_Decimal, null);
 				return true;
-			}			
+			}
 			return false;
 		}
 		
@@ -1692,7 +1695,7 @@ namespace Boo.Lang.Compiler.Steps
 		{
 			switch (node.Operator)
 			{
-				// BOO-705
+					// BOO-705
 				case BinaryOperatorType.ShiftLeft:
 				case BinaryOperatorType.ShiftRight:
 					return TypeSystemServices.IntType;
@@ -1715,33 +1718,33 @@ namespace Boo.Lang.Compiler.Steps
 			switch (node.Operator)
 			{
 				case BinaryOperatorType.BitwiseOr:
-				{
-					_il.Emit(OpCodes.Or);
-					break;
-				}
-				
+					{
+						_il.Emit(OpCodes.Or);
+						break;
+					}
+					
 				case BinaryOperatorType.BitwiseAnd:
-				{
-					_il.Emit(OpCodes.And);
-					break;
-				}
+					{
+						_il.Emit(OpCodes.And);
+						break;
+					}
 					
 				case BinaryOperatorType.ExclusiveOr:
-				{
-					_il.Emit(OpCodes.Xor);
-					break;
-				}
+					{
+						_il.Emit(OpCodes.Xor);
+						break;
+					}
 
 				case BinaryOperatorType.ShiftLeft:
-				{
-					_il.Emit(OpCodes.Shl);
-					break;
-				}
+					{
+						_il.Emit(OpCodes.Shl);
+						break;
+					}
 				case BinaryOperatorType.ShiftRight:
-				{
-					_il.Emit(OpCodes.Shr);
-					break;
-				}
+					{
+						_il.Emit(OpCodes.Shr);
+						break;
+					}
 			}
 			
 			PushType(type);
@@ -1756,104 +1759,104 @@ namespace Boo.Lang.Compiler.Steps
 				case BinaryOperatorType.ExclusiveOr:
 				case BinaryOperatorType.BitwiseAnd:
 				case BinaryOperatorType.BitwiseOr:
-				{
-					EmitBitwiseOperator(node);
-					break;
-				}
-				
+					{
+						EmitBitwiseOperator(node);
+						break;
+					}
+					
 				case BinaryOperatorType.Or:
-				{
-					EmitOr(node);
-					break;
-				}
-				
+					{
+						EmitOr(node);
+						break;
+					}
+					
 				case BinaryOperatorType.And:
-				{
-					EmitAnd(node);
-					break;
-				}
-				
+					{
+						EmitAnd(node);
+						break;
+					}
+					
 				case BinaryOperatorType.Addition:
 				case BinaryOperatorType.Subtraction:
 				case BinaryOperatorType.Multiply:
 				case BinaryOperatorType.Division:
 				case BinaryOperatorType.Modulus:
-				{
-					OnArithmeticOperator(node);
-					break;
-				}
-				
+					{
+						OnArithmeticOperator(node);
+						break;
+					}
+					
 				case BinaryOperatorType.Exponentiation:
-				{
-					OnExponentiation(node);
-					break;
-				}
-				
+					{
+						OnExponentiation(node);
+						break;
+					}
+					
 				case BinaryOperatorType.Assign:
-				{
-					OnAssignment(node);
-					break;
-				}
-				
+					{
+						OnAssignment(node);
+						break;
+					}
+					
 				case BinaryOperatorType.Equality:
-				{
-					OnEquality(node);
-					break;
-				}
-				
+					{
+						OnEquality(node);
+						break;
+					}
+					
 				case BinaryOperatorType.Inequality:
-				{
-					OnInequality(node);
-					break;
-				}
-				
+					{
+						OnInequality(node);
+						break;
+					}
+					
 				case BinaryOperatorType.GreaterThan:
-				{
-					OnGreaterThan(node);
-					break;
-				}
-				
+					{
+						OnGreaterThan(node);
+						break;
+					}
+					
 				case BinaryOperatorType.LessThan:
-				{
-					OnLessThan(node);
-					break;
-				}
-				
+					{
+						OnLessThan(node);
+						break;
+					}
+					
 				case BinaryOperatorType.GreaterThanOrEqual:
-				{
-					OnGreaterThanOrEqual(node);
-					break;
-				}
-				
+					{
+						OnGreaterThanOrEqual(node);
+						break;
+					}
+					
 				case BinaryOperatorType.LessThanOrEqual:
-				{
-					OnLessThanOrEqual(node);
-					break;
-				}
-				
+					{
+						OnLessThanOrEqual(node);
+						break;
+					}
+					
 				case BinaryOperatorType.ReferenceInequality:
-				{
-					OnReferenceComparison(node);
-					break;
-				}
-				
+					{
+						OnReferenceComparison(node);
+						break;
+					}
+					
 				case BinaryOperatorType.ReferenceEquality:
-				{
-					OnReferenceComparison(node);
-					break;
-				}
-				
+					{
+						OnReferenceComparison(node);
+						break;
+					}
+					
 				case BinaryOperatorType.TypeTest:
-				{
-					OnTypeTest(node);
-					break;
-				}
-				
+					{
+						OnTypeTest(node);
+						break;
+					}
+					
 				default:
-				{
-					OperatorNotImplemented(node);
-					break;
-				}
+					{
+						OperatorNotImplemented(node);
+						break;
+					}
 			}
 		}
 		
@@ -1931,12 +1934,20 @@ namespace Boo.Lang.Compiler.Steps
 		
 		void InvokeRegularMethod(IMethod method, MethodInfo mi, MethodInvocationExpression node)
 		{
+			IType targetType = null;
 			if (!mi.IsStatic)
 			{
+				targetType = GetTargetObject(node).ExpressionType;
 				PushTargetObject(node, mi);
 			}
 			
 			PushArguments(method, node.Arguments);
+
+			// Emit a constrained call if target is a generic parameter
+			if (targetType != null && targetType is IGenericParameter)
+			{
+				_il.Emit(OpCodes.Constrained, GetSystemType(targetType));  
+			}
 			_il.EmitCall(GetCallOpCode(node, method, mi), mi, null);
 			
 			PushType(method.ReturnType);
@@ -1946,11 +1957,19 @@ namespace Boo.Lang.Compiler.Steps
 		{
 			Expression target = GetTargetObject(node);
 			IType targetType = target.ExpressionType;
-			if (targetType.IsValueType)
+			
+			// If target is a generic parameter, its address must be loaded
+			// to allow a constrained method call
+			if (targetType is IGenericParameter)
+			{
+				LoadAddress(target);
+			}
+	
+			else if (targetType.IsValueType)
 			{
 				if (mi.DeclaringType.IsValueType)
 				{
-					LoadAddress(target);
+					LoadAddress(target);					
 				}
 				else
 				{
@@ -1959,7 +1978,7 @@ namespace Boo.Lang.Compiler.Steps
 				}
 			}
 			else
-			{	
+			{
 				// pushes target reference
 				Visit(node.Target);
 				PopType();
@@ -1968,7 +1987,15 @@ namespace Boo.Lang.Compiler.Steps
 
 		private static Expression GetTargetObject(MethodInvocationExpression node)
 		{
-			return ((MemberReferenceExpression)node.Target).Target;
+			MemberReferenceExpression memberRef = node.Target as MemberReferenceExpression;
+			
+			// Target might be a generic reference expression rather than a member reference expression
+			if (memberRef == null) 
+			{
+				memberRef = ((GenericReferenceExpression)node.Target).Target as MemberReferenceExpression;
+			}
+			
+			return memberRef.Target;
 		}
 
 		private OpCode GetCallOpCode(MethodInvocationExpression node, IMethod method, MethodInfo mi)
@@ -2009,22 +2036,6 @@ namespace Boo.Lang.Compiler.Steps
 			PushType(TypeSystemServices.TypeType);
 		}
 		
-		void OnSwitch(MethodInvocationExpression node)
-		{
-			ExpressionCollection args = node.Arguments;
-			Visit(args[0]);
-			EmitCastIfNeeded(TypeSystemServices.IntType, PopType());
-			
-			Label[] labels = new Label[args.Count-1];
-			for (int i=0; i<labels.Length; ++i)
-			{
-				labels[i] = ((InternalLabel)args[i+1].Entity).Label;
-			}
-			_il.Emit(OpCodes.Switch, labels);
-			
-			PushVoid();
-		}
-		
 		void OnEval(MethodInvocationExpression node)
 		{
 			int allButLast = node.Arguments.Count-1;
@@ -2058,34 +2069,34 @@ namespace Boo.Lang.Compiler.Steps
 			switch (function.FunctionType)
 			{
 				case BuiltinFunctionType.Switch:
-				{
-					OnSwitch(node);
-					break;
-				}
-				
+					{
+						OnSwitch(node);
+						break;
+					}
+					
 				case BuiltinFunctionType.AddressOf:
-				{
-					OnAddressOf(node);
-					break;
-				}
-				
+					{
+						OnAddressOf(node);
+						break;
+					}
+					
 				case BuiltinFunctionType.Eval:
-				{
-					OnEval(node);
-					break;
-				}
+					{
+						OnEval(node);
+						break;
+					}
 
 				case BuiltinFunctionType.InitValueType:
-				{
-					OnInitValueType(node);
-					break;
-				}
-				
+					{
+						OnInitValueType(node);
+						break;
+					}
+					
 				default:
-				{
-					NotImplemented(node, "BuiltinFunction: " + function.FunctionType);
-					break;
-				}
+					{
+						NotImplemented(node, "BuiltinFunction: " + function.FunctionType);
+						break;
+					}
 			}
 		}
 
@@ -2130,56 +2141,56 @@ namespace Boo.Lang.Compiler.Steps
 			switch (tag.EntityType)
 			{
 				case EntityType.BuiltinFunction:
-				{
-					OnBuiltinFunction((BuiltinFunction)tag, node);
-					break;
-				}
-				
+					{
+						OnBuiltinFunction((BuiltinFunction)tag, node);
+						break;
+					}
+					
 				case EntityType.Method:
-				{
-					IMethod methodInfo = (IMethod)tag;
-					
-					if (node.Target.NodeType == NodeType.SuperLiteralExpression)
 					{
-						InvokeSuperMethod(methodInfo, node);
-					}
-					else
-					{
-						InvokeMethod(methodInfo, node);
-					}
-					
-					break;
-				}
-				
-				case EntityType.Constructor:
-				{
-					IConstructor constructorInfo = (IConstructor)tag;
-					ConstructorInfo ci = GetConstructorInfo(constructorInfo);
-					
-					if (NodeType.SuperLiteralExpression == node.Target.NodeType || node.Target.NodeType == NodeType.SelfLiteralExpression)
-					{
-						// super constructor call
-						_il.Emit(OpCodes.Ldarg_0);
-						PushArguments(constructorInfo, node.Arguments);
-						_il.Emit(OpCodes.Call, ci);
-						PushVoid();
-					}
-					else
-					{
-						PushArguments(constructorInfo, node.Arguments);
-						_il.Emit(OpCodes.Newobj, ci);
+						IMethod methodInfo = (IMethod)tag;
 						
-						// constructor invocation resulting type is
-						PushType(constructorInfo.DeclaringType);
+						if (node.Target.NodeType == NodeType.SuperLiteralExpression)
+						{
+							InvokeSuperMethod(methodInfo, node);
+						}
+						else
+						{
+							InvokeMethod(methodInfo, node);
+						}
+						
+						break;
 					}
-					break;
-				}
-				
+					
+				case EntityType.Constructor:
+					{
+						IConstructor constructorInfo = (IConstructor)tag;
+						ConstructorInfo ci = GetConstructorInfo(constructorInfo);
+						
+						if (NodeType.SuperLiteralExpression == node.Target.NodeType || node.Target.NodeType == NodeType.SelfLiteralExpression)
+						{
+							// super constructor call
+							_il.Emit(OpCodes.Ldarg_0);
+							PushArguments(constructorInfo, node.Arguments);
+							_il.Emit(OpCodes.Call, ci);
+							PushVoid();
+						}
+						else
+						{
+							PushArguments(constructorInfo, node.Arguments);
+							_il.Emit(OpCodes.Newobj, ci);
+							
+							// constructor invocation resulting type is
+							PushType(constructorInfo.DeclaringType);
+						}
+						break;
+					}
+					
 				default:
-				{
-					NotImplemented(node, tag.ToString());
-					break;
-				}
+					{
+						NotImplemented(node, tag.ToString());
+						break;
+					}
 			}
 		}
 		
@@ -2201,23 +2212,24 @@ namespace Boo.Lang.Compiler.Steps
 			{
 				switch (node.Value)
 				{
-					case 0L:
-					{
-						_il.Emit(OpCodes.Ldc_I4_0);
-						break;
-					}
-					
-					case 1L:
-					{
-						_il.Emit(OpCodes.Ldc_I4_1);
-						break;
-					}
-					
+					case -1L: _il.Emit(OpCodes.Ldc_I4_M1); break;
+										
+					case 0L: _il.Emit(OpCodes.Ldc_I4_0); break;					
+					case 1L: _il.Emit(OpCodes.Ldc_I4_1); break;
+										
+					case 2L: _il.Emit(OpCodes.Ldc_I4_2); break;
+					case 3L: _il.Emit(OpCodes.Ldc_I4_3); break;
+					case 4L: _il.Emit(OpCodes.Ldc_I4_4); break;
+					case 5L: _il.Emit(OpCodes.Ldc_I4_5); break;
+					case 6L: _il.Emit(OpCodes.Ldc_I4_6); break;
+					case 7L: _il.Emit(OpCodes.Ldc_I4_7); break;
+					case 8L: _il.Emit(OpCodes.Ldc_I4_8); break;					
+
 					default:
-					{
-						_il.Emit(OpCodes.Ldc_I4, (int)node.Value);
-						break;
-					}
+						{
+							_il.Emit(OpCodes.Ldc_I4, (int)node.Value);
+							break;
+						}
 				}
 				PushType(TypeSystemServices.IntType);
 			}
@@ -2306,7 +2318,14 @@ namespace Boo.Lang.Compiler.Steps
 		
 		override public void OnStringLiteralExpression(StringLiteralExpression node)
 		{
-			_il.Emit(OpCodes.Ldstr, node.Value);
+			if (0 != node.Value.Length)
+			{ 
+				_il.Emit(OpCodes.Ldstr, node.Value);
+			}
+			else /* force use of CLR-friendly string.Empty */
+			{
+				_il.Emit(OpCodes.Ldsfld, typeof(string).GetField("Empty"));
+			}
 			PushType(TypeSystemServices.StringType);
 		}
 		
@@ -2326,7 +2345,7 @@ namespace Boo.Lang.Compiler.Steps
 			Visit(node.Target);
 			
 			IArrayType type = (IArrayType)PopType();
-			EmitNormalizedArrayIndex(node.Indices[0].Begin);
+			EmitNormalizedArrayIndex(node, node.Indices[0].Begin);
 			
 			IType elementType = type.GetElementType();
 			OpCode opcode = GetLoadEntityOpCode(elementType);
@@ -2336,6 +2355,10 @@ namespace Boo.Lang.Compiler.Steps
 				_il.Emit(opcode, systemType);
 				_il.Emit(OpCodes.Ldobj, systemType);
 			}
+			else if (OpCodes.Ldelem.Value == opcode.Value)
+			{
+				_il.Emit(opcode, GetSystemType(elementType));
+			}
 			else
 			{
 				_il.Emit(opcode);
@@ -2343,10 +2366,12 @@ namespace Boo.Lang.Compiler.Steps
 			PushType(elementType);
 		}
 		
-		void EmitNormalizedArrayIndex(Expression index)
+		void EmitNormalizedArrayIndex(SlicingExpression sourceNode, Expression index)
 		{
 			bool isNegative = false;
-			if (CanBeNegative(index, ref isNegative) && (!_rawArrayIndexing))
+			if (CanBeNegative(index, ref isNegative)
+			    && !_rawArrayIndexing
+			    && !AstAnnotations.IsRawIndexing(sourceNode))
 			{
 				if (isNegative)
 				{
@@ -2391,17 +2416,44 @@ namespace Boo.Lang.Compiler.Steps
 		override public void OnExpressionInterpolationExpression(ExpressionInterpolationExpression node)
 		{
 			Type stringBuilderType = typeof(StringBuilder);
-			ConstructorInfo constructor =  stringBuilderType.GetConstructor(new Type[0]);
+			ConstructorInfo constructor = stringBuilderType.GetConstructor(new Type[0]);
+			ConstructorInfo constructorString = stringBuilderType.GetConstructor(new Type[] { typeof(string) });
 			MethodInfo appendObject = stringBuilderType.GetMethod("Append", new Type[] { typeof(object) });
 			MethodInfo appendString = stringBuilderType.GetMethod("Append", new Type[] { typeof(string) });
-			
-			_il.Emit(OpCodes.Newobj, constructor);
+			Expression arg0 = node.Expressions[0];
+			IType argType = arg0.ExpressionType;
+
+			/* if arg0 is a string, let's call StringBuilder constructor
+			 * directly with the string */
+			if ( ( typeof(StringLiteralExpression) == arg0.GetType()
+				   && ((StringLiteralExpression) arg0).Value.Length > 0 )
+				|| ( typeof(StringLiteralExpression) != arg0.GetType()
+					 && TypeSystemServices.StringType == argType ) )
+			{
+				Visit(arg0);
+				PopType();
+				_il.Emit(OpCodes.Newobj, constructorString);
+			}
+			else
+			{
+				_il.Emit(OpCodes.Newobj, constructor);
+				arg0 = null; /* arg0 is not a string so we want it to be appended below */
+			}
 			
 			foreach (Expression arg in node.Expressions)
 			{
+				/* we do not need to append literal string.Empty
+				 * or arg0 if it has been handled by ctor */
+				if ( ( typeof(StringLiteralExpression) == arg.GetType() 
+					   && ((StringLiteralExpression) arg).Value.Length == 0 )
+					|| arg == arg0 )
+				{
+					continue;
+				}
+
 				Visit(arg);
 				
-				IType argType = PopType();
+				argType = PopType();
 				if (TypeSystemServices.StringType == argType)
 				{
 					_il.EmitCall(OpCodes.Call, appendString, null);
@@ -2491,99 +2543,114 @@ namespace Boo.Lang.Compiler.Steps
 				switch (type)
 				{
 					case TypeCode.Byte:
-					{
-						_il.Emit(OpCodes.Ldc_I4, (int)(byte)value);
-						_il.Emit(OpCodes.Conv_U1);
-						break;
-					}
-					
+						{
+							_il.Emit(OpCodes.Ldc_I4, (int)(byte)value);
+							_il.Emit(OpCodes.Conv_U1);
+							break;
+						}
+						
 					case TypeCode.SByte:
-					{
-						_il.Emit(OpCodes.Ldc_I4, (int)(sbyte)value);
-						_il.Emit(OpCodes.Conv_I1);
-						break;
-					}
-					
+						{
+							_il.Emit(OpCodes.Ldc_I4, (int)(sbyte)value);
+							_il.Emit(OpCodes.Conv_I1);
+							break;
+						}
+						
 					case TypeCode.Char:
-					{
-						_il.Emit(OpCodes.Ldc_I4, (int)(char)value);
-						break;
-					}
-					
+						{
+							_il.Emit(OpCodes.Ldc_I4, (int)(char)value);
+							break;
+						}
+						
 					case TypeCode.Int16:
-					{
-						_il.Emit(OpCodes.Ldc_I4, (int)(short)value);
-						break;
-					}
+						{
+							_il.Emit(OpCodes.Ldc_I4, (int)(short)value);
+							break;
+						}
 
 					case TypeCode.UInt16:
-					{
-						_il.Emit(OpCodes.Ldc_I4, (int)(ushort)value);
-						break;
-					}
-					
+						{
+							_il.Emit(OpCodes.Ldc_I4, (int)(ushort)value);
+							break;
+						}
+						
 					case TypeCode.Int32:
-					{
-						_il.Emit(OpCodes.Ldc_I4, (int)value);
-						break;
-					}
-					
+						{
+							_il.Emit(OpCodes.Ldc_I4, (int)value);
+							break;
+						}
+						
 					case TypeCode.UInt32:
-					{
-						uint uValue = (uint)value;
-						if (uValue > int.MaxValue)
 						{
-							_il.Emit(OpCodes.Ldc_I8, (long)uValue);
+							uint uValue = (uint)value;
+							_il.Emit(OpCodes.Ldc_I4, unchecked((int)uValue));
+							_il.Emit(OpCodes.Conv_U4);
+							break;
 						}
-						else
-						{
-							_il.Emit(OpCodes.Ldc_I4, (int)uValue);
-						}
-						_il.Emit(OpCodes.Conv_U4);
-						break;
-					}
-					
+						
 					case TypeCode.Int64:
-					{
-						_il.Emit(OpCodes.Ldc_I8, (long)value);
-						break;
-					}
-					
-					case TypeCode.UInt64:
-					{
-						ulong uValue = (ulong)value;
-						checked
 						{
-							_il.Emit(OpCodes.Ldc_I8, (long)uValue);
+							_il.Emit(OpCodes.Ldc_I8, (long)value);
+							break;
 						}
-						_il.Emit(OpCodes.Conv_U8);
-						break;
-					}
-					
+						
+					case TypeCode.UInt64:
+						{
+							ulong uValue = (ulong)value;
+							_il.Emit(OpCodes.Ldc_I8, unchecked((long)uValue));
+							_il.Emit(OpCodes.Conv_U8);
+							break;
+						}
+						
 					case TypeCode.Single:
-					{
-						_il.Emit(OpCodes.Ldc_R4, (float)value);
-						break;
-					}
-					
+						{
+							_il.Emit(OpCodes.Ldc_R4, (float)value);
+							break;
+						}
+						
 					case TypeCode.Double:
-					{
-						_il.Emit(OpCodes.Ldc_R8, (double)value);
-						break;
-					}
-					
+						{
+							_il.Emit(OpCodes.Ldc_R8, (double)value);
+							break;
+						}
+						
 					case TypeCode.String:
+						{
+							_il.Emit(OpCodes.Ldstr, (string)value);
+							break;
+						}
+						
+					default:
+						{
+							NotImplemented(node, "Literal: " + type.ToString());
+							break;
+						}
+				}
+			}
+		}
+		
+		override public void OnGenericReferenceExpression(GenericReferenceExpression node)
+		{
+			IEntity tag = TypeSystem.TypeSystemServices.GetEntity(node);
+			switch (tag.EntityType)
+			{
+				case EntityType.Type:
 					{
-						_il.Emit(OpCodes.Ldstr, (string)value);
+						EmitGetTypeFromHandle(GetSystemType(node));
 						break;
 					}
 					
-					default:
+				case EntityType.Method:
 					{
-						NotImplemented(node, "Literal: " + type.ToString());
+						node.Target.Accept(this);
 						break;
 					}
-				}
+					
+				default:
+					{
+						NotImplemented(node, tag.ToString());
+						break;
+					}
 			}
 		}
 		
@@ -2593,28 +2660,28 @@ namespace Boo.Lang.Compiler.Steps
 			switch (tag.EntityType)
 			{
 				case EntityType.Method:
-				{
-					node.Target.Accept(this);
-					break;
-				}
-				
+					{
+						node.Target.Accept(this);
+						break;
+					}
+					
 				case EntityType.Field:
-				{
-					EmitLoadField(node.Target, (IField)tag);
-					break;
-				}
-				
+					{
+						EmitLoadField(node.Target, (IField)tag);
+						break;
+					}
+					
 				case EntityType.Type:
-				{
-					EmitGetTypeFromHandle(GetSystemType(node));
-					break;
-				}
-				
+					{
+						EmitGetTypeFromHandle(GetSystemType(node));
+						break;
+					}
+					
 				default:
-				{
-					NotImplemented(node, tag.ToString());
-					break;
-				}
+					{
+						NotImplemented(node, tag.ToString());
+						break;
+					}
 			}
 		}
 		
@@ -2635,35 +2702,35 @@ namespace Boo.Lang.Compiler.Steps
 				switch (tag.EntityType)
 				{
 					case EntityType.Local:
-					{
-						_il.Emit(OpCodes.Ldloca, ((InternalLocal)tag).LocalBuilder);
-						return;
-					}
-				
-					case EntityType.Parameter:
-					{
-						InternalParameter param = (InternalParameter)tag;
-						if (param.Parameter.IsByRef)
 						{
-							LoadParam(param);
-						}
-						else
-						{
-							_il.Emit(OpCodes.Ldarga, param.Index);
-						}
-						return;
-					}
-					
-					case EntityType.Field:
-					{
-						IField field = (IField)tag;
-						if (!field.IsLiteral)
-						{
-							EmitLoadFieldAddress(expression, field);
+							_il.Emit(OpCodes.Ldloca, ((InternalLocal)tag).LocalBuilder);
 							return;
 						}
-						break;
-					}
+						
+					case EntityType.Parameter:
+						{
+							InternalParameter param = (InternalParameter)tag;
+							if (param.Parameter.IsByRef)
+							{
+								LoadParam(param);
+							}
+							else
+							{
+								_il.Emit(OpCodes.Ldarga, param.Index);
+							}
+							return;
+						}
+						
+					case EntityType.Field:
+						{
+							IField field = (IField)tag;
+							if (!field.IsLiteral)
+							{
+								EmitLoadFieldAddress(expression, field);
+								return;
+							}
+							break;
+						}
 				}
 			}
 			
@@ -2672,7 +2739,7 @@ namespace Boo.Lang.Compiler.Steps
 				SlicingExpression slicing = (SlicingExpression)expression;
 				Visit(slicing.Target);
 				IArrayType arrayType = (IArrayType)PopType();
-				EmitNormalizedArrayIndex(slicing.Indices[0].Begin);
+				EmitNormalizedArrayIndex(slicing, slicing.Indices[0].Begin);
 				_il.Emit(OpCodes.Ldelema, GetSystemType(arrayType.GetElementType()));
 			}
 			else
@@ -2728,47 +2795,47 @@ namespace Boo.Lang.Compiler.Steps
 			switch (info.EntityType)
 			{
 				case EntityType.Local:
-				{
-					InternalLocal local = (InternalLocal)info;
-					LocalBuilder builder = local.LocalBuilder;
-					_il.Emit(OpCodes.Ldloc, builder);
-					PushType(local.Type);
-					break;
-				}
-				
-				case EntityType.Parameter:
-				{
-					InternalParameter param = (InternalParameter)info;
-					LoadParam(param);
-					
-					if (param.Parameter.IsByRef)
 					{
-						OpCode code = GetLoadRefParamCode(param.Type);
-						if (code.Value == OpCodes.Ldobj.Value)
-						{
-							_il.Emit(code, GetSystemType(param.Type));
-						}
-						else {
-							_il.Emit(code);
-						}
+						InternalLocal local = (InternalLocal)info;
+						LocalBuilder builder = local.LocalBuilder;
+						_il.Emit(OpCodes.Ldloc, builder);
+						PushType(local.Type);
+						break;
 					}
-					PushType(param.Type);
-					break;
-				}
-				
+					
+				case EntityType.Parameter:
+					{
+						InternalParameter param = (InternalParameter)info;
+						LoadParam(param);
+						
+						if (param.Parameter.IsByRef)
+						{
+							OpCode code = GetLoadRefParamCode(param.Type);
+							if (code.Value == OpCodes.Ldobj.Value)
+							{
+								_il.Emit(code, GetSystemType(param.Type));
+							}
+							else {
+								_il.Emit(code);
+							}
+						}
+						PushType(param.Type);
+						break;
+					}
+					
 				case EntityType.Array:
 				case EntityType.Type:
-				{
-					EmitGetTypeFromHandle(GetSystemType(node));
-					break;
-				}
-				
+					{
+						EmitGetTypeFromHandle(GetSystemType(node));
+						break;
+					}
+					
 				default:
-				{
-					NotImplemented(node, info.ToString());
-					break;
-				}
-				
+					{
+						NotImplemented(node, info.ToString());
+						break;
+					}
+					
 			}
 		}
 		
@@ -2779,47 +2846,47 @@ namespace Boo.Lang.Compiler.Steps
 			switch (index)
 			{
 				case 0:
-				{
-					_il.Emit(OpCodes.Ldarg_0);
-					break;
-				}
-				
+					{
+						_il.Emit(OpCodes.Ldarg_0);
+						break;
+					}
+					
 				case 1:
-				{
-					_il.Emit(OpCodes.Ldarg_1);
-					break;
-				}
-				
+					{
+						_il.Emit(OpCodes.Ldarg_1);
+						break;
+					}
+					
 				case 2:
-				{
-					_il.Emit(OpCodes.Ldarg_2);
-					break;
-				}
-				
+					{
+						_il.Emit(OpCodes.Ldarg_2);
+						break;
+					}
+					
 				case 3:
-				{
-					_il.Emit(OpCodes.Ldarg_3);
-					break;
-				}
-				
+					{
+						_il.Emit(OpCodes.Ldarg_3);
+						break;
+					}
+					
 				default:
-				{
-					if (index < 256)
 					{
-						_il.Emit(OpCodes.Ldarg_S, index);
+						if (index < 256)
+						{
+							_il.Emit(OpCodes.Ldarg_S, index);
+						}
+						else
+						{
+							_il.Emit(OpCodes.Ldarg, index);
+						}
+						break;
 					}
-					else
-					{
-						_il.Emit(OpCodes.Ldarg, index);
-					}
-					break;
-				}
 			}
 		}
 		void SetLocal(BinaryExpression node, InternalLocal tag, bool leaveValueOnStack)
 		{
 			node.Right.Accept(this); // leaves type on stack
-					
+			
 			IType typeOnStack = null;
 			
 			if (leaveValueOnStack)
@@ -2852,12 +2919,12 @@ namespace Boo.Lang.Compiler.Steps
 				if (null != reference)
 				{
 					LoadMemberTarget(
-								((MemberReferenceExpression)reference).Target,
-								field);
+						((MemberReferenceExpression)reference).Target,
+						field);
 				}
 			}
 			
-			value.Accept(this); 
+			value.Accept(this);
 			EmitCastIfNeeded(field.Type, PopType());
 			
 			FieldInfo fi = GetFieldInfo(field);
@@ -2925,7 +2992,11 @@ namespace Boo.Lang.Compiler.Steps
 		bool EmitDebugInfo(Node node)
 		{
 			return EmitDebugInfo(node, node);
-		}
+		}		
+		
+		private const int _DBG_SYMBOLS_QUEUE_CAPACITY = 5; 
+
+		private System.Collections.Generic.Queue<LexicalInfo> _dbgSymbols = new System.Collections.Generic.Queue<LexicalInfo>(_DBG_SYMBOLS_QUEUE_CAPACITY);
 		
 		bool EmitDebugInfo(Node startNode, Node endNode)
 		{
@@ -2934,11 +3005,19 @@ namespace Boo.Lang.Compiler.Steps
 			LexicalInfo start = startNode.LexicalInfo;
 			if (!start.IsValid) return false;
 
-			ISymbolDocumentWriter writer = GetDocumentWriter(start.FileName);
+			ISymbolDocumentWriter writer = GetDocumentWriter(start.FullPath);
 			if (null == writer) return false;
+			
+			// ensure there is no duplicate emitted
+			if (_dbgSymbols.Contains(start)) {
+				_context.TraceInfo("duplicate symbol emit attempt for '{0}' : '{1}'.", start.ToString(), startNode.ToString()); 
+				return false;
+			}
+			if (_dbgSymbols.Count >= _DBG_SYMBOLS_QUEUE_CAPACITY) _dbgSymbols.Dequeue();
+			_dbgSymbols.Enqueue(start);
 
 			try
-			{	
+			{
 				_il.MarkSequencePoint(writer, start.Line, 0, start.Line+1, 0);
 			}
 			catch (Exception x)
@@ -2951,31 +3030,18 @@ namespace Boo.Lang.Compiler.Steps
 		}
 
 		private ISymbolDocumentWriter GetDocumentWriter(string fname)
-		{	
-			string fullname = SafeGetFullPath(fname);
-			ISymbolDocumentWriter writer = GetCachedDocumentWriter(fullname);
+		{
+			ISymbolDocumentWriter writer = GetCachedDocumentWriter(fname);
 			if (null != writer) return writer;
 			
 			writer = _moduleBuilder.DefineDocument(
-				fullname,
+				fname,
 				Guid.Empty,
 				Guid.Empty,
 				SymDocumentType.Text);
-			_symbolDocWriters.Add(fullname, writer);
+			_symbolDocWriters.Add(fname, writer);
 			
 			return writer;
-		}
-
-		private string SafeGetFullPath(string fname)
-		{
-			try
-			{
-				return Path.GetFullPath(fname);
-			}
-			catch (Exception)
-			{
-			}
-			return fname;
 		}
 
 		private ISymbolDocumentWriter GetCachedDocumentWriter(string fname)
@@ -2998,11 +3064,11 @@ namespace Boo.Lang.Compiler.Steps
 				Expression arg = args[i];
 				/*
 				InternalParameter internalparam = parameters[i] as InternalParameter;
-				if ((parameterType.IsByRef) || 
-					(internalparam != null && 
+				if ((parameterType.IsByRef) ||
+					(internalparam != null &&
 					internalparam.Parameter.IsByRef)
 					)
-				*/
+				 */
 				if (parameters[i].IsByRef)
 				{
 					LoadAddress(arg);
@@ -3096,40 +3162,55 @@ namespace Boo.Lang.Compiler.Steps
 			throw new ArgumentException("op");
 		}
 		
-		OpCode GetLoadEntityOpCode(IType tag)
+		OpCode GetLoadEntityOpCode(IType type)
 		{
-			if (tag.IsValueType)
+			if (!type.IsValueType)
 			{
-				if (TypeSystemServices.IntType == tag ||
-					tag.IsEnum)
-				{
-					return OpCodes.Ldelem_I4;
-				}
-				if (TypeSystemServices.LongType == tag)
-				{
-					return OpCodes.Ldelem_I8;
-				}
-				if (TypeSystemServices.ByteType == tag)
-				{
-					return OpCodes.Ldelem_I1;
-				}
-				if (TypeSystemServices.ShortType == tag ||
-					TypeSystemServices.CharType == tag)
-				{
-					return OpCodes.Ldelem_I2;
-				}
-				if (TypeSystemServices.SingleType == tag)
-				{
-					return OpCodes.Ldelem_R4;
-				}
-				if (TypeSystemServices.DoubleType == tag)
-				{
-					return OpCodes.Ldelem_R8;
-				}
-				//NotImplemented("LoadEntityOpCode(" + tag + ")");
-				return OpCodes.Ldelema;
+				return type is IGenericParameter
+					? OpCodes.Ldelem
+					: OpCodes.Ldelem_Ref;	
 			}
-			return OpCodes.Ldelem_Ref;
+
+			if (TypeSystemServices.IntType == type ||
+			    type.IsEnum)
+			{
+				return OpCodes.Ldelem_I4;
+			}
+			if (TypeSystemServices.UIntType == type)
+			{
+				return OpCodes.Ldelem_U4;
+			}				
+			if (TypeSystemServices.LongType == type)
+			{
+				return OpCodes.Ldelem_I8;
+			}	
+			if (TypeSystemServices.SByteType == type)
+			{
+				return OpCodes.Ldelem_I1;
+			}				
+			if (TypeSystemServices.ByteType == type)
+			{
+				return OpCodes.Ldelem_U1;
+			}
+			if (TypeSystemServices.ShortType == type ||
+			    TypeSystemServices.CharType == type)
+			{
+				return OpCodes.Ldelem_I2;
+			}
+			if (TypeSystemServices.UShortType == type)
+			{
+				return OpCodes.Ldelem_U2;
+			}				
+			if (TypeSystemServices.SingleType == type)
+			{
+				return OpCodes.Ldelem_R4;
+			}
+			if (TypeSystemServices.DoubleType == type)
+			{
+				return OpCodes.Ldelem_R8;
+			}
+			//NotImplemented("LoadEntityOpCode(" + tag + ")");
+			return OpCodes.Ldelema;
 		}
 		
 		OpCode GetStoreEntityOpCode(IType tag)
@@ -3137,7 +3218,7 @@ namespace Boo.Lang.Compiler.Steps
 			if (tag.IsValueType)
 			{
 				if (TypeSystemServices.IntType == tag ||
-					tag.IsEnum)
+				    tag.IsEnum)
 				{
 					return OpCodes.Stelem_I4;
 				}
@@ -3150,7 +3231,7 @@ namespace Boo.Lang.Compiler.Steps
 					return OpCodes.Stelem_I1;
 				}
 				if (TypeSystemServices.ShortType == tag ||
-					TypeSystemServices.CharType == tag)
+				    TypeSystemServices.CharType == tag)
 				{
 					return OpCodes.Stelem_I2;
 				}
@@ -3173,7 +3254,7 @@ namespace Boo.Lang.Compiler.Steps
 			if (tag.IsValueType)
 			{
 				if (TypeSystemServices.IntType == tag ||
-					tag.IsEnum)
+				    tag.IsEnum)
 				{
 					return OpCodes.Ldind_I4;
 				}
@@ -3186,7 +3267,7 @@ namespace Boo.Lang.Compiler.Steps
 					return OpCodes.Ldind_I1;
 				}
 				if (TypeSystemServices.ShortType == tag ||
-					TypeSystemServices.CharType == tag)
+				    TypeSystemServices.CharType == tag)
 				{
 					return OpCodes.Ldind_I2;
 				}
@@ -3217,7 +3298,7 @@ namespace Boo.Lang.Compiler.Steps
 			if (tag.IsValueType)
 			{
 				if (TypeSystemServices.IntType == tag ||
-					tag.IsEnum)
+				    tag.IsEnum)
 				{
 					return OpCodes.Stind_I4;
 				}
@@ -3230,7 +3311,7 @@ namespace Boo.Lang.Compiler.Steps
 					return OpCodes.Stind_I1;
 				}
 				if (TypeSystemServices.ShortType == tag ||
-					TypeSystemServices.CharType == tag)
+				    TypeSystemServices.CharType == tag)
 				{
 					return OpCodes.Stind_I2;
 				}
@@ -3249,7 +3330,7 @@ namespace Boo.Lang.Compiler.Steps
 		}
 		
 		bool IsAssignableFrom(IType expectedType, IType actualType)
-		{			
+		{
 			return (IsPtr(expectedType) && IsPtr(actualType))
 				|| expectedType.IsAssignableFrom(actualType);
 		}
@@ -3272,6 +3353,7 @@ namespace Boo.Lang.Compiler.Steps
 				IMethod method = TypeSystemServices.FindImplicitConversionOperator(actualType,expectedType);
 				if (method != null)
 				{
+					EmitBoxIfNeeded(method.GetParameters()[0].Type, actualType);
 					_il.EmitCall(OpCodes.Call, GetMethodInfo(method), null);
 					return;
 				}
@@ -3300,19 +3382,45 @@ namespace Boo.Lang.Compiler.Steps
 				}
 				else
 				{
+					EmitDuckImplicitCastIfNeeded(expectedType, actualType);
+
 					_context.TraceInfo("castclass: expected type='{0}', type on stack='{1}'", expectedType, actualType);
 					_il.Emit(OpCodes.Castclass, GetSystemType(expectedType));
 				}
 			}
 			else
 			{
-				if (actualType.IsValueType && !expectedType.IsValueType)
-				{
-					EmitBox(actualType);
-				}
+				EmitBoxIfNeeded(expectedType, actualType);
+			}
+		}
+
+		virtual protected void EmitDuckImplicitCastIfNeeded(IType expectedType, IType actualType)
+		{
+			if (TypeSystemServices.IsDuckType(actualType))
+			{
+				EmitGetTypeFromHandle(GetSystemType(expectedType));
+				PopType();
+				_il.EmitCall(OpCodes.Call, RuntimeServices_DuckImplicitCast, null);
 			}
 		}
 		
+		virtual protected MethodInfo RuntimeServices_DuckImplicitCast
+		{
+			get
+			{
+				return Types.RuntimeServices.GetMethod("DuckImplicitCast", new Type[] { Types.Object, Types.Type });
+			}
+		}
+
+		private void EmitBoxIfNeeded(IType expectedType, IType actualType)
+		{
+			if ((actualType.IsValueType && !expectedType.IsValueType) ||
+				(actualType is IGenericParameter && !(expectedType is IGenericParameter)))
+			{
+				EmitBox(actualType);
+			}
+		}
+
 		void EmitBox(IType type)
 		{
 			_il.Emit(OpCodes.Box, GetSystemType(type));
@@ -3340,58 +3448,19 @@ namespace Boo.Lang.Compiler.Steps
 		
 		string GetUnboxMethodName(IType type)
 		{
-			if (type == TypeSystemServices.ByteType)
-			{
-				return "UnboxByte";
-			}
-			else if (type == TypeSystemServices.SByteType)
-			{
-				return "UnboxSByte";
-			}
-			else if (type == TypeSystemServices.ShortType)
-			{
-				return "UnboxInt16";
-			}
-			else if (type == TypeSystemServices.UShortType)
-			{
-				return "UnboxUInt16";
-			}
-			if (type == TypeSystemServices.IntType)
-			{
-				return "UnboxInt32";
-			}
-			else if (type == TypeSystemServices.UIntType)
-			{
-				return "UnboxUInt32";
-			}
-			else if (type == TypeSystemServices.LongType)
-			{
-				return "UnboxInt64";
-			}
-			else if (type == TypeSystemServices.ULongType)
-			{
-				return "UnboxUInt64";
-			}
-			else if (type == TypeSystemServices.SingleType)
-			{
-				return "UnboxSingle";
-			}
-			else if (type == TypeSystemServices.DoubleType)
-			{
-				return "UnboxDouble";
-			}
-			else if (type == TypeSystemServices.DecimalType)
-			{
-				return "UnboxDecimal";
-			}
-			else if (type == TypeSystemServices.BoolType)
-			{
-				return "UnboxBoolean";
-			}
-			else if (type == TypeSystemServices.CharType)
-			{
-				return "UnboxChar";
-			}
+			if (type == TypeSystemServices.ByteType) return "UnboxByte";
+			if (type == TypeSystemServices.SByteType) return "UnboxSByte";
+			if (type == TypeSystemServices.ShortType) return "UnboxInt16";
+			if (type == TypeSystemServices.UShortType) return "UnboxUInt16";
+			if (type == TypeSystemServices.IntType) return "UnboxInt32";
+			if (type == TypeSystemServices.UIntType) return "UnboxUInt32";
+			if (type == TypeSystemServices.LongType) return "UnboxInt64";
+			if (type == TypeSystemServices.ULongType) return "UnboxUInt64";
+			if (type == TypeSystemServices.SingleType) return "UnboxSingle";
+			if (type == TypeSystemServices.DoubleType) return "UnboxDouble";
+			if (type == TypeSystemServices.DecimalType) return "UnboxDecimal";
+			if (type == TypeSystemServices.BoolType) return "UnboxBoolean";
+			if (type == TypeSystemServices.CharType) return "UnboxChar";
 			return null;
 		}
 		
@@ -3399,37 +3468,37 @@ namespace Boo.Lang.Compiler.Steps
 		{
 			if (type == TypeSystemServices.SByteType)
 			{
-				return OpCodes.Conv_I1;
+				return _checked ? OpCodes.Conv_Ovf_I1 : OpCodes.Conv_I1;
 			}
 			else if (type == TypeSystemServices.ByteType)
 			{
-				return OpCodes.Conv_U1;
+				return _checked ? OpCodes.Conv_Ovf_U1 : OpCodes.Conv_U1;
 			}
 			else if (type == TypeSystemServices.ShortType)
 			{
-				return OpCodes.Conv_I2;
+				return _checked ? OpCodes.Conv_Ovf_I2 : OpCodes.Conv_I2;
 			}
 			else if (type == TypeSystemServices.UShortType ||
-					type == TypeSystemServices.CharType)
+			         type == TypeSystemServices.CharType)
 			{
-				return OpCodes.Conv_U2;
+				return _checked ? OpCodes.Conv_Ovf_U2 : OpCodes.Conv_U2;
 			}
 			if (type == TypeSystemServices.IntType ||
-				type.IsEnum)
+			    type.IsEnum)
 			{
-				return OpCodes.Conv_I4;
+				return _checked ? OpCodes.Conv_Ovf_I4 : OpCodes.Conv_I4;
 			}
 			else if (type == TypeSystemServices.UIntType)
 			{
-				return OpCodes.Conv_U4;
+				return _checked ? OpCodes.Conv_Ovf_U4 :OpCodes.Conv_U4;
 			}
 			else if (type == TypeSystemServices.LongType)
 			{
-				return OpCodes.Conv_I8;
+				return _checked ? OpCodes.Conv_Ovf_I8 : OpCodes.Conv_I8;
 			}
 			else if (type == TypeSystemServices.ULongType)
 			{
-				return OpCodes.Conv_U8;
+				return _checked ? OpCodes.Conv_Ovf_U8 :OpCodes.Conv_U8;
 			}
 			else if (type == TypeSystemServices.SingleType)
 			{
@@ -3483,8 +3552,8 @@ namespace Boo.Lang.Compiler.Steps
 		CustomAttributeBuilder CreateDebuggableAttribute()
 		{
 			return new CustomAttributeBuilder(
-								DebuggableAttribute_Constructor,
-								new object[] { true, true });
+				DebuggableAttribute_Constructor,
+				new object[] { true, true });
 		}
 		
 		void DefineEntryPoint()
@@ -3498,7 +3567,7 @@ namespace Boo.Lang.Compiler.Steps
 			{
 				Method method = ContextAnnotations.GetEntryPoint(Context);
 				if (null != method)
-				{	
+				{
 					MethodInfo entryPoint = Context.Parameters.GenerateInMemory
 						? _asmBuilder.GetType(method.DeclaringType.FullName).GetMethod(method.Name, BindingFlags.Public|BindingFlags.NonPublic|BindingFlags.Static)
 						: GetMethodBuilder(method);
@@ -3511,6 +3580,15 @@ namespace Boo.Lang.Compiler.Steps
 			}
 		}
 		
+		private static string GetReferenceTypeName(Type t)
+		{
+			//return t.FullName + "&";
+			string name = t.FullName;
+			return name.EndsWith("&")
+				? name
+				: name + "&";
+		}
+		
 		Type[] GetParameterTypes(ParameterDeclarationCollection parameters)
 		{
 			Type[] types = new Type[parameters.Count];
@@ -3519,7 +3597,7 @@ namespace Boo.Lang.Compiler.Steps
 				types[i] = GetSystemType(parameters[i].Type);
 				if (parameters[i].IsByRef)
 				{
-					string typename = TypeSystemServices.GetReferenceTypeName(types[i]);
+					string typename = GetReferenceTypeName(types[i]);
 					Type byreftype = types[i].Assembly.GetType(typename);
 					
 					if (byreftype == null) //internal type
@@ -3592,6 +3670,13 @@ namespace Boo.Lang.Compiler.Steps
 		
 		FieldInfo GetFieldInfo(IField tag)
 		{
+			// If field is mapped from a generic type, get its mapped FieldInfo
+			// on the constructed type
+			MixedGenericType.MappedField mapped = tag as MixedGenericType.MappedField;
+			if (null != mapped && mapped.FieldInfo.DeclaringType.IsGenericType)
+			{
+				return MapGenericField(mapped.DeclaringType, mapped.FieldInfo);
+			}
 			ExternalField external = tag as ExternalField;
 			if (null != external)
 			{
@@ -3602,22 +3687,114 @@ namespace Boo.Lang.Compiler.Steps
 		
 		MethodInfo GetMethodInfo(IMethod entity)
 		{
+			// If method is mapped from a generic type, get its mapped MethodInfo
+			// on the constructed type
+			MixedGenericType.MappedMethod mapped = entity as MixedGenericType.MappedMethod;
+			if (null != mapped && mapped.MethodInfo.DeclaringType.IsGenericType)
+			{
+				return MapGenericMethod(mapped.DeclaringType, (MethodInfo)mapped.MethodInfo);
+			}
+			
+			// If method is a mixed or internal constructed generic method, 
+			// get its mapped MethodInfo
+			if (entity is MixedGenericMethod || entity is InternalGenericMethod)
+			{
+				return MapGenericMethod(entity.GenericMethodInfo);
+			}			
 			ExternalMethod external = entity as ExternalMethod;
 			if (null != external)
 			{
 				return (MethodInfo)external.MethodInfo;
 			}
+			
 			return GetMethodBuilder(((InternalMethod)entity).Method);
 		}
-		
+
 		ConstructorInfo GetConstructorInfo(IConstructor entity)
 		{
+			// If constructor is mapped from a generic type, get its mapped ConstructorInfo
+			MixedGenericType.MappedConstructor mapped = entity as MixedGenericType.MappedConstructor;
+			if (null != mapped && mapped.ConstructorInfo.DeclaringType.IsGenericType)
+			{
+				return MapGenericConstructor(mapped.DeclaringType, mapped.ConstructorInfo);
+			}
 			ExternalConstructor external = entity as ExternalConstructor;
 			if (null != external)
 			{
 				return external.ConstructorInfo;
 			}
+			
 			return GetConstructorBuilder(((InternalMethod)entity).Method);
+		}
+		
+		/// <summary>
+		/// Maps a method declared on a generic type definition or an open constructed type
+		/// to the corresponding method on a closed constructed type.
+		/// </summary>
+		private MethodInfo MapGenericMethod(IType targetType, MethodInfo method)
+		{
+			if (!method.DeclaringType.IsGenericTypeDefinition)
+			{
+				// HACK: .NET Reflection doesn't allow calling TypeBuilder.GetMethod(Type, MethodInfo)
+				// on types that aren't generic definitions, so we have to manually find the
+				// corresponding MethodInfo on the declaring type's definition before mapping it
+				Type definition = method.DeclaringType.GetGenericTypeDefinition();
+				method = Array.Find<MethodInfo>(
+					definition.GetMethods(),
+					delegate(MethodInfo mi) { return mi.MetadataToken == method.MetadataToken; });
+			}
+			
+			return TypeBuilder.GetMethod(GetSystemType(targetType), method);
+		}
+		
+		/// <summary>
+		/// Maps a generic method to its constructed version.
+		/// </summary>
+		private MethodInfo MapGenericMethod(IGenericMethodInfo genericMethodInfo)
+		{
+			Type[] arguments = Array.ConvertAll<IType, Type>(
+				genericMethodInfo.GenericArguments,
+				GetSystemType);
+				
+			return GetMethodInfo(genericMethodInfo.GenericDefinition).MakeGenericMethod(arguments);
+		}
+
+		/// <summary>
+		/// Maps a field declared on a generic type definition or an open constructed type
+		/// to the corresponding field on a closed constructed type.
+		/// </summary>
+		private FieldInfo MapGenericField(IType targetType, FieldInfo field)
+		{
+			if (!field.DeclaringType.IsGenericTypeDefinition)
+			{
+				// HACK: .NET Reflection doesn't allow calling TypeBuilder.GetMethod(Type, FieldInfo)
+				// on types that aren't generic definitions, so we have to manually find the
+				// corresponding FieldInfo on the declaring type's definition before mapping it
+				Type definition = field.DeclaringType.GetGenericTypeDefinition();
+				field = definition.GetField(field.Name);
+			}
+			return TypeBuilder.GetField(GetSystemType(targetType), field);
+		}
+
+		/// <summary>
+		/// Maps a constructor declared on a generic type definition or an open constructed type
+		/// to the corresponding constructor on a closed constructed type.
+		/// </summary>
+		private ConstructorInfo MapGenericConstructor(IType targetType, ConstructorInfo ctor)
+		{
+			if (!ctor.DeclaringType.IsGenericTypeDefinition)
+			{
+				// HACK: .NET Reflection doesn't allow calling
+				// TypeBuilder.GetConstructor(Type, ConstructorInfo) on types that aren't generic
+				// definitions, so we have to manually find the corresponding ConstructorInfo on the
+				// declaring type's definition before mapping it
+				Type definition = ctor.DeclaringType.GetGenericTypeDefinition();
+				ctor = Array.Find<ConstructorInfo>(
+					definition.GetConstructors(),
+					delegate(ConstructorInfo ci) { return ci.MetadataToken == ctor.MetadataToken; });
+			}
+
+			return TypeBuilder.GetConstructor(GetSystemType(targetType), ctor);
 		}
 		
 		Type GetSystemType(Node node)
@@ -3628,130 +3805,77 @@ namespace Boo.Lang.Compiler.Steps
 		Type GetSystemType(IType tag)
 		{
 			Type type = (Type)_typeCache[tag];
-			if (null == type)
+			if (type != null)
 			{
-				ExternalType external = tag as ExternalType;
-				if (null != external)
+				return type;
+			}
+			
+			ExternalType external = tag as ExternalType;
+			if (null != external)
+			{
+				MixedGenericType mixed = tag as MixedGenericType;
+				if (null != mixed)
+				{
+					Type[] arguments = new Type[mixed.GenericArguments.Length];
+					for (int i = 0; i < arguments.Length; i++)
+					{
+						arguments[i] = GetSystemType(mixed.GenericArguments[i]);
+					}
+					type = GetSystemType(mixed.GenericDefinition).MakeGenericType(arguments);
+				}
+				else
 				{
 					type = external.ActualType;
 				}
+			}
+			else if (tag.IsArray)
+			{
+				IArrayType arrayType = (IArrayType)tag;
+				Type systemType = GetSystemType(arrayType.GetElementType());
+				int rank = arrayType.GetArrayRank();
+				
+				if (rank == 1)
+				{
+					type = systemType.MakeArrayType();
+				}
 				else
 				{
-					if (tag.IsArray)
-					{
-						IArrayType arrayType = (IArrayType)tag;
-						IType elementType = GetSimpleEntityType(arrayType);
-						if (elementType is IInternalEntity)
-						{
-							string typeName = GetArrayTypeName(arrayType);
-							type = _moduleBuilder.GetType(typeName, true);
-						}
-						else
-						{
-							if (arrayType.GetArrayRank() > 1)
-							{
-								type = Array.CreateInstance(GetSystemType(arrayType.GetElementType()), new int[arrayType.GetArrayRank()]).GetType();
-							}
-							else
-							{
-								type = Array.CreateInstance(GetSystemType(arrayType.GetElementType()), 0).GetType();
-							}
-						}
-					}
-					else
-					{
-						if (Null.Default == tag)
-						{
-							type = Types.Object;
-						}
-						else
-						{
-							type = (Type)GetBuilder(((AbstractInternalType)tag).TypeDefinition);
-						}
-					}
+					type = systemType.MakeArrayType(rank);
 				}
-				if (null == type)
-				{
-					throw new InvalidOperationException(string.Format("Could not find a Type for {0}.", tag));
-				}
-				_typeCache.Add(tag, type);
 			}
+			else if (Null.Default == tag)
+			{
+				type = Types.Object;
+			}
+			else if (tag is InternalGenericParameter)
+			{
+				return (Type)GetBuilder(((InternalGenericParameter)tag).Node);
+			}
+			else if (tag is AbstractInternalType)
+			{
+				type = (Type)GetBuilder(((AbstractInternalType)tag).TypeDefinition);
+			}
+
+			if (null == type)
+			{
+				throw new InvalidOperationException(string.Format("Could not find a Type for {0}.", tag));
+			}
+
+			_typeCache.Add(tag, type);
+			
 			return type;
-		}
-		
-		IType GetSimpleEntityType(IArrayType tag)
-		{
-			return GetSimpleEntityType(tag.GetElementType());
-		}
-		
-		IType GetSimpleEntityType(IType tag)
-		{
-			if (tag.IsArray)
-			{
-				return GetSimpleEntityType(((IArrayType)tag).GetElementType());
-			}
-			return tag;
-		}
-		
-		string GetArrayTypeName(IType tag)
-		{
-			StringBuilder builder = new StringBuilder();
-			GetArrayTypeName(builder, tag);
-			return builder.ToString();
-		}
-		
-		void GetArrayTypeName(StringBuilder buffer, IType tag)
-		{
-			if (tag.IsArray)
-			{
-				IArrayType array = (IArrayType)tag;
-				GetArrayTypeName(buffer, array.GetElementType());
-				buffer.Append("[");
-				for (int i = 1; i < array.GetArrayRank(); i++)
-				{
-					buffer.Append(",");
-				}
-				buffer.Append("]");
-			}
-			else
-			{
-				AppendFullTypeName(buffer, tag);
-			}
-		}
-		
-		void AppendFullTypeName(StringBuilder buffer, IType type)
-		{
-			AbstractInternalType internalType = (AbstractInternalType)type;
-			AppendFullTypeName(buffer, internalType.TypeDefinition);
-		}
-		
-		void AppendFullTypeName(StringBuilder buffer, TypeDefinition type)
-		{
-			TypeDefinition parent = type.DeclaringType;
-			if (null != parent)
-			{
-				if (NodeType.Module == parent.NodeType)
-				{
-					NamespaceDeclaration ns = parent.EnclosingNamespace;
-					if (null != ns)
-					{
-						buffer.Append(ns.Name);
-						buffer.Append('.');
-					}
-				}
-				else
-				{
-					AppendFullTypeName(buffer, parent);
-					buffer.Append('+'); // nested type
-				}
-			}
-			buffer.Append(type.Name);
 		}
 		
 		TypeAttributes GetNestedTypeAttributes(TypeMember type)
 		{
-			TypeAttributes attributes = type.IsPublic ? TypeAttributes.NestedPublic : TypeAttributes.NestedPrivate;
-			return GetExtendedTypeAttributes(attributes, type);
+			return GetExtendedTypeAttributes(GetNestedTypeAccessibility(type), type);
+		}
+		
+		TypeAttributes GetNestedTypeAccessibility(TypeMember type)
+		{
+			if (type.IsPublic) return TypeAttributes.NestedPublic;
+			if (type.IsInternal) return TypeAttributes.NestedAssembly;
+			return TypeAttributes.NestedPrivate;
 		}
 		
 		TypeAttributes GetTypeAttributes(TypeMember type)
@@ -3765,47 +3889,48 @@ namespace Boo.Lang.Compiler.Steps
 			switch (type.NodeType)
 			{
 				case NodeType.ClassDefinition:
-				{
-					attributes |= (TypeAttributes.AnsiClass | TypeAttributes.AutoLayout);
-					attributes |= TypeAttributes.Class;
+					{
+						attributes |= (TypeAttributes.AnsiClass | TypeAttributes.AutoLayout);
+						attributes |= TypeAttributes.Class;
+						attributes |= TypeAttributes.BeforeFieldInit;
+						
+						if (!type.IsTransient)
+						{
+							attributes |= TypeAttributes.Serializable;
+						}
+						if (type.IsAbstract)
+						{
+							attributes |= TypeAttributes.Abstract;
+						}
+						if (type.IsFinal)
+						{
+							attributes |= TypeAttributes.Sealed;
+						}
+						if (((IType)type.Entity).IsValueType)
+						{
+							attributes |= TypeAttributes.SequentialLayout;
+						}
+						break;
+					}
 					
-					if (!type.IsTransient)
-					{
-						attributes |= TypeAttributes.Serializable;
-					}
-					if (type.IsAbstract)
-					{
-						attributes |= TypeAttributes.Abstract;
-					}
-					if (type.IsFinal)
+				case NodeType.EnumDefinition:
 					{
 						attributes |= TypeAttributes.Sealed;
+						attributes |= TypeAttributes.Serializable;
+						break;
 					}
-					if (((IType)type.Entity).IsValueType)
-					{
-						attributes |= TypeAttributes.SequentialLayout;
-					}
-					break;
-				}
-				
-				case NodeType.EnumDefinition:
-				{
-					attributes |= TypeAttributes.Sealed;
-					attributes |= TypeAttributes.Serializable;
-					break;
-				}
-				
+					
 				case NodeType.InterfaceDefinition:
-				{
-					attributes |= (TypeAttributes.Interface | TypeAttributes.Abstract);
-					break;
-				}
-				
+					{
+						attributes |= (TypeAttributes.Interface | TypeAttributes.Abstract);
+						break;
+					}
+					
 				case NodeType.Module:
-				{
-					attributes |= TypeAttributes.Sealed;
-					break;
-				}
+					{
+						attributes |= TypeAttributes.Sealed;
+						break;
+					}
 			}
 			return attributes;
 		}
@@ -3861,7 +3986,7 @@ namespace Boo.Lang.Compiler.Steps
 			}
 			if (member.IsVirtual || member.IsOverride)
 			{
-				attributes |= MethodAttributes.Virtual;	
+				attributes |= MethodAttributes.Virtual;
 			}
 			return attributes;
 		}
@@ -3885,7 +4010,7 @@ namespace Boo.Lang.Compiler.Steps
 				Debug.Assert(method.IsStatic);
 				attributes |= MethodAttributes.PinvokeImpl;
 			}
-			attributes |= GetMethodAttributesFromTypeMember(method);			
+			attributes |= GetMethodAttributesFromTypeMember(method);
 			return attributes;
 		}
 		
@@ -3939,8 +4064,8 @@ namespace Boo.Lang.Compiler.Steps
 		void DefineEvent(TypeBuilder typeBuilder, Event node)
 		{
 			EventBuilder builder = typeBuilder.DefineEvent(node.Name,
-													EventAttributes.None,
-													GetSystemType(node.Type));
+			                                               EventAttributes.None,
+			                                               GetSystemType(node.Type));
 			//MethodAttributes attribs = GetPropertyMethodAttributes(node);
 			MethodAttributes baseAttributes = MethodAttributes.SpecialName;
 			builder.SetAddOnMethod(DefineMethod(typeBuilder, node.Add, baseAttributes|GetMethodAttributes(node.Add)));
@@ -3967,9 +4092,9 @@ namespace Boo.Lang.Compiler.Steps
 			}
 
 			PropertyBuilder builder = typeBuilder.DefineProperty(name,
-			                                            GetPropertyAttributes(property),
-			                                            GetSystemType(property.Type),
-			                                            GetParameterTypes(property.Parameters));
+			                                                     GetPropertyAttributes(property),
+			                                                     GetSystemType(property.Type),
+			                                                     GetParameterTypes(property.Parameters));
 			Method getter = property.Getter;
 			Method setter = property.Setter;
 			
@@ -4035,7 +4160,7 @@ namespace Boo.Lang.Compiler.Steps
 				new CustomAttributeBuilder(
 					ParamArrayAttribute_Constructor,
 					new object[0]));
-				
+			
 		}
 		
 		MethodImplAttributes GetImplementationFlags(Method method)
@@ -4065,9 +4190,15 @@ namespace Boo.Lang.Compiler.Steps
 			}
 
 			MethodBuilder builder = typeBuilder.DefineMethod(name,
-                                        methodAttributes,
-                                        GetSystemType(method.ReturnType),
-										GetParameterTypes(parameters));
+			                                                 methodAttributes);
+
+			if (method.GenericParameters.Count != 0)
+			{
+				DefineGenericParameters(builder, method.GenericParameters);
+			}
+			
+			builder.SetParameters(GetParameterTypes(parameters));
+			builder.SetReturnType(GetSystemType(method.ReturnType));			
 
 			builder.SetImplementationFlags(GetImplementationFlags(method));
 			
@@ -4080,30 +4211,41 @@ namespace Boo.Lang.Compiler.Steps
 			{
 				builder.SetCustomAttribute(CreateDuckTypedCustomAttribute());
 			}
-			if (methodEntity.IsExtension)
-			{
-				builder.SetCustomAttribute(CreateExtensionAttribute());
-			}
-
 			return builder;
 		}
 
+		void DefineGenericParameters(MethodBuilder builder, GenericParameterDeclarationCollection parameters)
+		{
+			string[] names = new string[parameters.Count];
+			int i = 0;
+			
+			foreach (GenericParameterDeclaration gpd in parameters)
+			{
+				names[i] = gpd.Name;
+				i++;
+			}
+			
+			builder.DefineGenericParameters(names);
+
+			Type[] parameterBuilders = builder.GetGenericArguments();			
+			i = 0;
+			foreach (GenericParameterDeclaration gpd in parameters)
+			{
+				SetBuilder(gpd, parameterBuilders[i++]); 
+			}		
+		}
+		
 		private CustomAttributeBuilder CreateDuckTypedCustomAttribute()
 		{
 			return new CustomAttributeBuilder(DuckTypedAttribute_Constructor, new object[0]);
 		}
 
-		private CustomAttributeBuilder CreateExtensionAttribute()
-		{
-			return new CustomAttributeBuilder(ExtensionAttribute_Constructor, new object[0]);
-		}
-
 		void DefineConstructor(TypeBuilder typeBuilder, Method constructor)
 		{
 			ConstructorBuilder builder = typeBuilder.DefineConstructor(GetMethodAttributes(constructor),
-			                               CallingConventions.Standard,
-			                               GetParameterTypes(constructor.Parameters));
-										   
+			                                                           CallingConventions.Standard,
+			                                                           GetParameterTypes(constructor.Parameters));
+			
 			builder.SetImplementationFlags(GetImplementationFlags(constructor));
 			DefineParameters(builder, constructor.Parameters);
 			
@@ -4144,14 +4286,14 @@ namespace Boo.Lang.Compiler.Steps
 			if (null == enclosingType)
 			{
 				typeBuilder = _moduleBuilder.DefineType(type.FullName,
-										GetTypeAttributes(type),
-										baseType);
+				                                        GetTypeAttributes(type),
+				                                        baseType);
 			}
 			else
 			{
 				typeBuilder = GetTypeBuilder(enclosingType).DefineNestedType(type.Name,
-																GetNestedTypeAttributes(type),
-																baseType);
+				                                                             GetNestedTypeAttributes(type),
+				                                                             baseType);
 			}
 			return typeBuilder;
 		}
@@ -4161,7 +4303,10 @@ namespace Boo.Lang.Compiler.Steps
 			foreach (TypeReference baseType in typeDefinition.BaseTypes)
 			{
 				Type type = GetSystemType(baseType);
-				if (type.IsClass)
+				
+				// For some reason you can't call IsClass on constructed types created at compile time,
+				// so we'll ask the generic definition instead
+				if ((type.IsGenericType && type.GetGenericTypeDefinition().IsClass) || (type.IsClass))
 				{
 					typeBuilder.SetParent(type);
 				}
@@ -4182,7 +4327,7 @@ namespace Boo.Lang.Compiler.Steps
 			IConstructor constructor = (IConstructor)GetEntity(node);
 			ConstructorInfo constructorInfo = GetConstructorInfo(constructor);
 			object[] constructorArgs = GetValues(constructor.GetParameters(),
-													node.Arguments);
+			                                     node.Arguments);
 			
 			ExpressionPairCollection namedArgs = node.NamedArguments;
 			if (namedArgs.Count > 0)
@@ -4192,21 +4337,21 @@ namespace Boo.Lang.Compiler.Steps
 				FieldInfo[] namedFields;
 				object[] fieldValues;
 				GetNamedValues(namedArgs,
-								out namedProperties, out propertyValues,
-								out namedFields, out fieldValues);
+				               out namedProperties, out propertyValues,
+				               out namedFields, out fieldValues);
 				return new CustomAttributeBuilder(
-								constructorInfo, constructorArgs,
-								namedProperties, propertyValues,
-								namedFields, fieldValues);
+					constructorInfo, constructorArgs,
+					namedProperties, propertyValues,
+					namedFields, fieldValues);
 			}
 			return new CustomAttributeBuilder(constructorInfo, constructorArgs);
 		}
 		
 		void GetNamedValues(ExpressionPairCollection values,
-							out PropertyInfo[] outNamedProperties,
-							out object[] outPropertyValues,
-							out FieldInfo[] outNamedFields,
-							out object[] outFieldValues)
+		                    out PropertyInfo[] outNamedProperties,
+		                    out object[] outPropertyValues,
+		                    out FieldInfo[] outNamedFields,
+		                    out object[] outFieldValues)
 		{
 			List namedProperties = new List();
 			List propertyValues = new List();
@@ -4249,59 +4394,72 @@ namespace Boo.Lang.Compiler.Steps
 			switch (expression.NodeType)
 			{
 				case NodeType.StringLiteralExpression:
-				{
-					return ((StringLiteralExpression)expression).Value;
-				}
-				
+					{
+						return ((StringLiteralExpression)expression).Value;
+					}
+					
 				case NodeType.CharLiteralExpression:
-				{
-					return ((CharLiteralExpression)expression).Value[0];
-				}
-				
+					{
+						return ((CharLiteralExpression)expression).Value[0];
+					}
+					
 				case NodeType.BoolLiteralExpression:
-				{
-					return ((BoolLiteralExpression)expression).Value;
-				}
-				
+					{
+						return ((BoolLiteralExpression)expression).Value;
+					}
+					
 				case NodeType.IntegerLiteralExpression:
-				{
-					return ConvertValue(expectedType,
-							((IntegerLiteralExpression)expression).Value);
-				}
-				
+					{
+						return ConvertValue(expectedType,
+						                    ((IntegerLiteralExpression)expression).Value);
+					}
+					
 				case NodeType.DoubleLiteralExpression:
-				{
-					return ConvertValue(expectedType,
-							((DoubleLiteralExpression)expression).Value);
-				}
-				
+					{
+						return ConvertValue(expectedType,
+						                    ((DoubleLiteralExpression)expression).Value);
+					}
+					
 				case NodeType.TypeofExpression:
-				{
-					return GetSystemType(((TypeofExpression)expression).Type);
-				}
+					{
+						return GetSystemType(((TypeofExpression)expression).Type);
+					}
 
 				case NodeType.CastExpression:
-				{
-					return GetValue(expectedType, ((CastExpression)expression).Target);
-				}
-				
+					{
+						return GetValue(expectedType, ((CastExpression)expression).Target);
+					}
+					
 				default:
-				{
-					IEntity tag = GetEntity(expression);
-					if (EntityType.Type == tag.EntityType)
 					{
-						return GetSystemType(expression);
-					}
-					else if (EntityType.Field == tag.EntityType)
-					{
-						IField field = (IField)tag;
-						if (field.IsLiteral)
+						IEntity tag = GetEntity(expression);
+						if (EntityType.Type == tag.EntityType)
 						{
-							return field.StaticValue;
+							return GetSystemType(expression);
 						}
+						else if (EntityType.Field == tag.EntityType)
+						{
+							IField field = (IField)tag;
+							if (field.IsLiteral)
+							{
+								//Scenario:
+								//IF:
+								//SomeType.StaticReference = "hamsandwich"
+								//[RandomAttribute(SomeType.StaticReferenece)]
+								//THEN:
+								//field.StaticValue != "hamsandwich"
+								//field.StaticValue == SomeType.StaticReference
+								//SO:
+								//If field.StaticValue is an AST Expression, call GetValue() on it
+								if (field.StaticValue is Expression)
+								{
+									return GetValue(expectedType, field.StaticValue as Expression);
+								}
+								return field.StaticValue;
+							}
+						}
+						break;
 					}
-					break;
-				}
 			}
 			NotImplemented(expression, "Expression value: " + expression);
 			return null;
@@ -4317,7 +4475,7 @@ namespace Boo.Lang.Compiler.Steps
 		}
 
 		private Type GetUnderlyingEnumType(IType expectedType)
-		{	
+		{
 			return expectedType is IInternalEntity
 				? Types.Int
 				: Enum.GetUnderlyingType(GetSystemType(expectedType));
@@ -4336,34 +4494,34 @@ namespace Boo.Lang.Compiler.Steps
 				switch (member.NodeType)
 				{
 					case NodeType.Method:
-					{
-						DefineMethod(typeBuilder, (Method)member, 0);
-						break;
-					}
-					
+						{
+							DefineMethod(typeBuilder, (Method)member, 0);
+							break;
+						}
+						
 					case NodeType.Constructor:
-					{
-						DefineConstructor(typeBuilder, (Constructor)member);
-						break;
-					}
-					
+						{
+							DefineConstructor(typeBuilder, (Constructor)member);
+							break;
+						}
+						
 					case NodeType.Field:
-					{
-						DefineField(typeBuilder, (Field)member);
-						break;
-					}
-					
+						{
+							DefineField(typeBuilder, (Field)member);
+							break;
+						}
+						
 					case NodeType.Property:
-					{
-						DefineProperty(typeBuilder, (Property)member);
-						break;
-					}
-					
+						{
+							DefineProperty(typeBuilder, (Property)member);
+							break;
+						}
+						
 					case NodeType.Event:
-					{
-						DefineEvent(typeBuilder, (Event)member);
-						break;
-					}
+						{
+							DefineEvent(typeBuilder, (Event)member);
+							break;
+						}
 				}
 			}
 		}
@@ -4389,7 +4547,7 @@ namespace Boo.Lang.Compiler.Steps
 				else
 				{
 					fname += ".exe";
-			
+					
 				}
 			}
 			return Path.GetFullPath(fname);
@@ -4547,7 +4705,7 @@ namespace Boo.Lang.Compiler.Steps
 			if (srcFile != null)
 			{
 				fname = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(srcFile),
-								relativeFile));
+				                                      relativeFile));
 				if (File.Exists(fname))
 				{
 					return fname;
@@ -4558,7 +4716,7 @@ namespace Boo.Lang.Compiler.Steps
 			if (targetFile != null)
 			{
 				fname = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(targetFile),
-							relativeFile));
+				                                      relativeFile));
 			}
 			return fname;
 		}
@@ -4569,6 +4727,27 @@ namespace Boo.Lang.Compiler.Steps
 			if (null == version)
 			{
 				version = "0.0.0.0";
+			}
+			/* 1.0.* -- BUILD -- based on days since January 1, 2000
+			 * 1.0.0.* -- REVISION -- based on seconds since midnight, January 1, 2000, divided by 2			 *
+			 */
+			string[] sliced = version.Split('.');
+			if (sliced.Length > 2)
+			{
+				DateTime baseTime = new DateTime(2000, 1, 1);
+				TimeSpan mark = (DateTime.Now - baseTime);
+				if (sliced[2].StartsWith("*"))
+				{
+					sliced[2] = Math.Round(mark.TotalDays).ToString();
+				}
+				if (sliced.Length > 3)
+				{
+					if (sliced[3].StartsWith("*"))
+					{
+						sliced[3] = Math.Round(mark.TotalSeconds).ToString();
+					}
+				}
+				version = Boo.Lang.Builtins.join(sliced, ".");
 			}
 			return new Version(version);
 		}

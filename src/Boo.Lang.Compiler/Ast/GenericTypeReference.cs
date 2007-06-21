@@ -36,8 +36,7 @@ namespace Boo.Lang.Compiler.Ast
 {
 	using System;
 	
-	[Serializable]
-	public class GenericTypeReference : Boo.Lang.Compiler.Ast.Impl.GenericTypeReferenceImpl
+	public partial class GenericTypeReference
 	{
 		public GenericTypeReference()
 		{
@@ -52,9 +51,9 @@ namespace Boo.Lang.Compiler.Ast
 			this.Name = name;
 		}
 		
-		override public void Accept(IAstVisitor visitor)
+		override public string ToString()
 		{
-			visitor.OnGenericTypeReference(this);
+			return ToCodeString();
 		}
 	}
 }

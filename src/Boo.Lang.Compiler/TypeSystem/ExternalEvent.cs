@@ -30,9 +30,13 @@ namespace Boo.Lang.Compiler.TypeSystem
 {
 	public class ExternalEvent : IEvent
 	{
-		TypeSystemServices _typeSystemServices;
+		protected TypeSystemServices _typeSystemServices;
 		
-		System.Reflection.EventInfo _event;
+		private System.Reflection.EventInfo _event;
+
+	    private IMethod _add;
+
+	    private IMethod _remove;
 		
 		public ExternalEvent(TypeSystemServices tagManager, System.Reflection.EventInfo event_)
 		{
@@ -40,59 +44,56 @@ namespace Boo.Lang.Compiler.TypeSystem
 			_event = event_;
 		}
 		
-		public IType DeclaringType
+		public virtual IType DeclaringType
 		{
-			get
-			{
-				return _typeSystemServices.Map(_event.DeclaringType);
-			}
+			get { return _typeSystemServices.Map(_event.DeclaringType); }
 		}
 		
-		public IMethod GetAddMethod()
+		public virtual IMethod GetAddMethod()
 		{
-			return (IMethod)_typeSystemServices.Map(_event.GetAddMethod());
+            if (null != _add) return _add;
+			return _add = FindAddMethod();
 		}
-		
-		public IMethod GetRemoveMethod()
+
+	    private IMethod FindAddMethod()
+	    {
+	        return _typeSystemServices.Map(_event.GetAddMethod(true));
+	    }
+
+	    public virtual IMethod GetRemoveMethod()
 		{
-			return (IMethod)_typeSystemServices.Map(_event.GetRemoveMethod());
+            if (null != _remove) return _remove;
+			return _remove = FindRemoveMethod();
 		}
-		
-		public IMethod GetRaiseMethod()
+
+	    private IMethod FindRemoveMethod()
+	    {
+	        return _typeSystemServices.Map(_event.GetRemoveMethod(true));
+	    }
+
+	    public virtual IMethod GetRaiseMethod()
 		{
-			return (IMethod)_typeSystemServices.Map(_event.GetRaiseMethod());
+			return _typeSystemServices.Map(_event.GetRaiseMethod(true));
 		}
 		
 		public System.Reflection.EventInfo EventInfo
 		{
-			get
-			{
-				return _event;
-			}
+			get { return _event; }
 		}
 		
 		public bool IsPublic
 		{
-			get
-			{
-				return _event.GetAddMethod(true).IsPublic;
-			}
+			get { return GetAddMethod().IsPublic; }
 		}
 		
 		public string Name
 		{
-			get
-			{
-				return _event.Name;
-			}
+			get { return _event.Name; }
 		}
 		
 		public string FullName
 		{
-			get
-			{
-				return _event.DeclaringType.FullName + "." + _event.Name;
-			}
+			get { return _event.DeclaringType.FullName + "." + _event.Name; }
 		}
 		
 		public EntityType EntityType
@@ -103,7 +104,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 			}
 		}
 		
-		public IType Type
+		public virtual IType Type
 		{
 			get
 			{
@@ -115,7 +116,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 		{
 			get
 			{
-				return _event.GetAddMethod().IsStatic;
+				return GetAddMethod().IsStatic;
 			}
 		}
 
@@ -123,7 +124,8 @@ namespace Boo.Lang.Compiler.TypeSystem
 		{
 			get
 			{
-				return _event.GetAddMethod().IsAbstract;
+				return GetAddMethod().IsAbstract;
+				
 			}
 		}
 
@@ -131,7 +133,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 		{
 			get
 			{
-				return _event.GetAddMethod().IsVirtual;
+				return GetAddMethod().IsVirtual;
 			}
 		}
 		

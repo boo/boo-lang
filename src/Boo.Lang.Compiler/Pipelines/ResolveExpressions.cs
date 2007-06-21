@@ -36,10 +36,11 @@ namespace Boo.Lang.Compiler.Pipelines
 		{
 			Add(new InitializeTypeSystemServices());
 			Add(new PreErrorChecking());
+
+			Add(new ExpandAstLiterals());
 			
 			Add(new MergePartialClasses());
 			
-			Add(new PreProcessExtensionMethods());
 			Add(new InitializeNameResolutionService());
 			Add(new IntroduceGlobalNamespaces());
 			Add(new TransformCallableDefinitions());
@@ -47,6 +48,7 @@ namespace Boo.Lang.Compiler.Pipelines
 			Add(new BindNamespaces());
 			Add(new BindBaseTypes());
 			Add(new BindAndApplyAttributes());
+			
 			Add(new ExpandMacros());
 			Add(new IntroduceModuleClasses());
 			Add(new NormalizeStatementModifiers());
@@ -55,15 +57,17 @@ namespace Boo.Lang.Compiler.Pipelines
 			Add(new BindTypeDefinitions());
 			Add(new BindEnumMembers());
 			Add(new BindBaseTypes());
-
-			Add(new ResolveTypeReferences());
 			
-			Add(new BindTypeMembers());			
+			Add(new BindMethods());
+			Add(new ResolveTypeReferences());
+			Add(new BindTypeMembers());
+			
 			Add(new ProcessInheritedAbstractMembers());
 			Add(new CheckMemberNames());
 			
-			Add(new ExpandAstLiterals());
 			Add(new ProcessMethodBodiesWithDuckTyping());
+			
+			Add(new PreProcessExtensionMethods());
 		}
 	}
 }

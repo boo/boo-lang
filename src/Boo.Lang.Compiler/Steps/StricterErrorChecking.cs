@@ -38,6 +38,8 @@ namespace Boo.Lang.Compiler.Steps
 	{	
 		Hashtable _types = new Hashtable();
 		
+		int _ensureBlock;
+		
 		override public void Run()
 		{
 			Visit(CompileUnit);
@@ -116,9 +118,37 @@ namespace Boo.Lang.Compiler.Steps
 			if (AstUtil.IsTargetOfMemberReference(node)) return;
 			Error(CompilerErrorFactory.InvalidSuper(node));
 		}
+		
+		bool InsideEnsure
+		{
+			get { return _ensureBlock > 0; }
+		}
+		
+		public override void OnTryStatement(TryStatement node)
+		{
+			Visit(node.ProtectedBlock);
+			Visit(node.ExceptionHandlers);
+			EnterEnsureBlock();
+			Visit(node.EnsureBlock);
+			LeaveEnsureBlock();
+		}
+		
+		private void EnterEnsureBlock()
+		{
+			++_ensureBlock;
+		}
+		
+		private void LeaveEnsureBlock()
+		{
+			--_ensureBlock;
+		}
 
 		public override void LeaveReturnStatement(ReturnStatement node)
 		{
+			if (InsideEnsure)
+			{
+				Error(CompilerErrorFactory.CantReturnFromEnsure(node));
+			}
 			if (null == node.Expression) return;
 			CheckExpressionType(node.Expression);
 		}
@@ -146,6 +176,11 @@ namespace Boo.Lang.Compiler.Steps
 					break;
 			}
 		}
+
+        public override void LeaveGeneratorExpression(GeneratorExpression node)
+        {
+            CheckExpressionType(node.Expression);
+        }
 		
 		override public void LeaveBinaryExpression(BinaryExpression node)
 		{
@@ -164,8 +199,6 @@ namespace Boo.Lang.Compiler.Steps
 		{	
 			if (!IsLastArgumentOfVarArgInvocation(node))
 			{
-				Console.WriteLine(node.ParentNode);
-				Console.WriteLine(((MethodInvocationExpression)node.ParentNode).Target.Entity);
 				Error(CompilerErrorFactory.ExplodeExpressionMustMatchVarArgCall(node));
 			}
 		}
@@ -176,8 +209,10 @@ namespace Boo.Lang.Compiler.Steps
 			if (null == parent) return false;
 			if (parent.Arguments.Count == 0 || node != parent.Arguments[-1]) return false;
 			ICallableType type = parent.Target.ExpressionType as ICallableType;
-			if (null == type) return false;
-			return type.GetSignature().AcceptVarArgs;
+			if (null != type) return type.GetSignature().AcceptVarArgs;
+			
+			IMethod method = TypeSystemServices.GetOptionalEntity(parent.Target) as IMethod;
+			return null != method && method.AcceptVarArgs;
 		}
 		
 		bool IsTypeReference(Expression node)
@@ -192,8 +227,8 @@ namespace Boo.Lang.Compiler.Steps
 		{			
 			LabelStatement target = ((InternalLabel)node.Label.Entity).LabelStatement; 
 					
-			int gotoDepth = ContextAnnotations.GetTryBlockDepth(node);
-			int targetDepth = ContextAnnotations.GetTryBlockDepth(target);
+			int gotoDepth = AstAnnotations.GetTryBlockDepth(node);
+			int targetDepth = AstAnnotations.GetTryBlockDepth(target);
 			if (gotoDepth < targetDepth)
 			{
 				BranchError(node, target);
@@ -380,8 +415,8 @@ namespace Boo.Lang.Compiler.Steps
 			}
 			return false;
 		}
-		
-		bool IsAddressOfBuiltin(Expression node)
+
+	    static bool IsAddressOfBuiltin(Expression node)
 		{
 			return BuiltinFunction.AddressOf == node.Entity;
 		}

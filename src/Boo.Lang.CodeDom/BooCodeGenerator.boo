@@ -189,6 +189,9 @@ class BooCodeGenerator(CodeGenerator):
 		Output.WriteLine()
 
 	protected override def GenerateMethodReturnStatement(e as CodeMethodReturnStatement) :
+		if e.Expression is null:
+			Output.WriteLine("return")			
+			return
 		Output.Write("return ")
 		GenerateExpression(e.Expression)
 		Output.WriteLine()
@@ -312,7 +315,15 @@ class BooCodeGenerator(CodeGenerator):
 		
 	protected override def GenerateMethod(e as CodeMemberMethod, c as CodeTypeDeclaration) :
 		Method(e, e.Name)
-		
+	
+	protected override def GeneratePrimitiveExpression(e as CodePrimitiveExpression) :
+		if e.Value isa char:
+			Output.Write("char(")
+			super.GeneratePrimitiveExpression(e)
+			Output.Write(")")
+		else:
+			super.GeneratePrimitiveExpression(e)
+	
 	protected override def GenerateProperty(e as CodeMemberProperty, c as CodeTypeDeclaration) :		
 		ModifiersAndAttributes(e)
 		
@@ -343,11 +354,13 @@ class BooCodeGenerator(CodeGenerator):
 		EndBlock()
 		
 	protected override def GenerateConstructor(e as CodeConstructor, c as CodeTypeDeclaration) :
+		e.Attributes |= MemberAttributes.Final
 		Method(e, "constructor")
 		
 
 	protected override def GenerateTypeConstructor(e as CodeTypeConstructor) :		
 		e.Attributes |= MemberAttributes.Static
+		e.Attributes |= MemberAttributes.Public
 		e.Parameters.Clear()
 		Method(e, "constructor")
 
@@ -505,8 +518,11 @@ class BooCodeGenerator(CodeGenerator):
 		EndBlock()
 		
 	def MemberReference(target as CodeExpression, member as string):
-		GenerateExpression(target)
-		Output.Write(".${member}")
+		if target: #target.method( ... )
+			GenerateExpression(target)
+			Output.Write(".${member}")
+		else: #method( ... )
+			Output.Write(member)
 		
 	def Indexer(target as CodeExpression, indices as CodeExpressionCollection):
 		GenerateExpression(target)
@@ -537,7 +553,7 @@ class BooCodeGenerator(CodeGenerator):
 	def passcheck(stuff as ICollection):
 		return if stuff.IsValid()
 		if not AsBool(Options["WhiteSpaceAgnostic"]):
-			Output.Write("pass")
+			Output.WriteLine("pass")
 		
 	override def OutputTypeNamePair(type as CodeTypeReference, name as string):
 		Output.Write("${name} as ")

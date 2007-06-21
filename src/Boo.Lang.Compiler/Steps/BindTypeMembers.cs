@@ -75,10 +75,8 @@ namespace Boo.Lang.Compiler.Steps
 		
 		override public void OnMethod(Method node)
 		{
-			if (null == node.Entity)
-			{
-				node.Entity = new InternalMethod(TypeSystemServices, node);
-			}
+			// The method itself has been bound earlier during BindMethods, so
+			// we just have to remember to bind its parameters 
 			_parameters.Add(node);
 			Visit(node.ExplicitInfo);
 		}

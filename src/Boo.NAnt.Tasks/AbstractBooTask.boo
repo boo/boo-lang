@@ -39,7 +39,9 @@ import Boo.Lang.Compiler
 
 abstract class AbstractBooTask(Task):
 	
-	_references = FileSet()	
+	_references = FileSet()
+	
+	_packages = OptionCollection()
 	
 	_pipeline as string
 	
@@ -48,7 +50,14 @@ abstract class AbstractBooTask(Task):
 		get:
 			return _references
 		set:
-			_references = value
+			_references = value			
+		
+	[BuildElementCollection("pkg-references", "package")]
+	Packages:
+		get:
+			return _packages
+		set:
+			_packages = value
 			
 	[TaskAttribute("pipeline")]
 	Pipeline:
@@ -59,6 +68,7 @@ abstract class AbstractBooTask(Task):
 	
 	protected def RunCompiler(compiler as BooCompiler):
 		AddReferences(compiler.Parameters)
+		AddPackages(compiler.Parameters)
 		if _pipeline:
 			compiler.Parameters.Pipeline = CompilerPipeline.GetPipeline(_pipeline)
 		else:
@@ -68,14 +78,12 @@ abstract class AbstractBooTask(Task):
 		return result
 			
 	protected def AddReferences(parameters as CompilerParameters):
-		
 		if _references.BaseDirectory is not null:
 			baseDir = _references.BaseDirectory.ToString()
 		else:
 			baseDir = Project.BaseDirectory
 		
 		for reference as string in _references.Includes:
-			
 			path = reference
 			if not Path.IsPathRooted(path):
 				path = Path.Combine(baseDir, reference)
@@ -86,13 +94,25 @@ abstract class AbstractBooTask(Task):
 					asm = Reflection.Assembly.LoadFrom(path)
 			else:
 				asm = Reflection.Assembly.LoadFrom(path)
-					
-			print("reference: ${path}")		
+
+			print("reference: ${path}")
 			try:
 				parameters.References.Add(asm)
+				//TODO: rationalize above call to parameters.References.Add(parameters.LoadAssembly(reference)) ?
+				//      move basedir into CompilerParameters ?
 			except x:
 				raise BuildException(
 					Boo.Lang.ResourceManager.Format("BCE0041", reference),
+					Location,
+					x)
+					
+	protected def AddPackages(parameters as CompilerParameters):
+		for package as string in _packages:
+			try:
+				parameters.LoadReferencesFromPackage(package);
+			except x:
+				raise BuildException(
+					Boo.Lang.ResourceManager.Format("BCE0041", package),
 					Location,
 					x)
 	

@@ -35,7 +35,6 @@ using Boo.Lang.Compiler.Ast;
 namespace Boo.Lang.Compiler.Ast.Visitors
 {
 	/// <summary>
-	/// Imprime uma AST boo em boo.
 	/// </summary>
 	public class BooPrinterVisitor : TextEmitter
 	{
@@ -43,12 +42,13 @@ namespace Boo.Lang.Compiler.Ast.Visitors
 		public enum PrintOptions
 		{
 			None,
-			PrintLocals = 1
+			PrintLocals = 1,
+			WSA = 2,
 		}
 
 		static Regex _identifierRE = new Regex("^[a-zA-Z.]+$");
 		
-		static Regex _extendedRE = new Regex(@"\s");
+		//static Regex _extendedRE = new Regex(@"\s");
 
 		public PrintOptions Options = PrintOptions.None;
 		
@@ -125,12 +125,13 @@ namespace Boo.Lang.Compiler.Ast.Visitors
 			WriteLine();
 		}
 		
-		bool IsExtendedRE(string s)
+		static bool IsExtendedRE(string s)
 		{
-			return _extendedRE.IsMatch(s);
+			return s.IndexOfAny(new char[] { ' ', '\t' }) > -1;
+			//return _extendedRE.IsMatch(s);
 		}
 		
-		bool IsSimpleIdentifier(string s)
+		static bool IsSimpleIdentifier(string s)
 		{
 			return _identifierRE.IsMatch(s);
 		}
@@ -160,21 +161,60 @@ namespace Boo.Lang.Compiler.Ast.Visitors
 			}
 			WriteLine();
 		}
-
-		public void WriteBlock(Block b)
+		
+		public bool IsWhiteSpaceAgnostic
 		{
-			Indent();
-			if (0 == b.Statements.Count)
+			get { return IsOptionSet(PrintOptions.WSA); }
+		}
+		
+		private void WritePass()
+		{
+			if (!IsWhiteSpaceAgnostic)
 			{
 				WriteIndented();
 				WriteKeyword("pass");
 				WriteLine();
 			}
+		}
+		
+		private void WriteBlockStatements(Block b)
+		{
+			if (0 == b.Statements.Count)
+			{
+				WritePass();
+			}
 			else
 			{
 				Visit(b.Statements);
 			}
+		}
+
+		public void WriteBlock(Block b)
+		{
+			BeginBlock();
+			WriteBlockStatements(b);
+			EndBlock();
+		}
+		
+		private void BeginBlock()
+		{
+			Indent();
+		}
+		
+		private void EndBlock()
+		{
 			Dedent();
+			if (IsWhiteSpaceAgnostic)
+			{
+				WriteEnd();
+			}
+		}
+		
+		private void WriteEnd()
+		{
+			WriteIndented();
+			WriteKeyword("end");
+			WriteLine();
 		}
 		
 		override public void OnAttribute(Attribute att)
@@ -245,7 +285,7 @@ namespace Boo.Lang.Compiler.Ast.Visitors
 			}
 			WriteTypeReference(node.Type);
 			WriteLine(":");
-			Indent();
+			BeginBlock();
 			if (null != node.Getter)
 			{
 				WriteAttributes(node.Getter.Attributes, true);
@@ -262,7 +302,7 @@ namespace Boo.Lang.Compiler.Ast.Visitors
 				WriteLine(":");
 				WriteBlock(node.Setter.Body);
 			}
-			Dedent();
+			EndBlock();
 		}
 		
 		override public void OnEnumMember(EnumMember node)
@@ -350,6 +390,10 @@ namespace Boo.Lang.Compiler.Ast.Visitors
 				Visit(em.ExplicitInfo);
 			}
 			Write(node.Name);
+			if (node.GenericParameters.Count > 0)
+			{
+				WriteGenericParameterList(node.GenericParameters);
+			}
 			WriteParameterList(node.Parameters);
 			WriteTypeReference(node.ReturnType);
 			if (node.ReturnTypeAttributes.Count > 0)
@@ -366,13 +410,9 @@ namespace Boo.Lang.Compiler.Ast.Visitors
 
 		override public void OnMethod(Method m)
 		{
-            if (m.IsRuntime)
-            {
-                WriteImplementationComment("runtime");
-            }
-			if (m.IsExtension)
+			if (m.IsRuntime)
 			{
-				WriteImplementationComment("extension");
+				WriteImplementationComment("runtime");
 			}
 			WriteCallableDefinitionHeader("def ", m);
 			WriteLine(":");
@@ -426,6 +466,11 @@ namespace Boo.Lang.Compiler.Ast.Visitors
 				WriteTypeReference(p.Type);
 			}
 		}
+
+		override public void OnGenericParameterDeclaration(GenericParameterDeclaration gp)
+		{
+			Write(gp.Name);
+		}
 		
 		override public void OnTypeofExpression(TypeofExpression node)
 		{
@@ -438,11 +483,22 @@ namespace Boo.Lang.Compiler.Ast.Visitors
 		{
 			Write(t.Name);
 		}
-		
+			
 		override public void OnGenericTypeReference(GenericTypeReference node)
 		{
 			OnSimpleTypeReference(node);
 			WriteGenericArguments(node.GenericArguments);
+		}
+		
+		override public void OnGenericTypeDefinitionReference(GenericTypeDefinitionReference node)
+		{
+			OnSimpleTypeReference(node);
+			Write("[of *");
+			for (int i = 1; i < node.GenericPlaceholders; i++)
+			{
+				Write(", *");
+			}
+			Write("]");						
 		}
 		
 		override public void OnGenericReferenceExpression(GenericReferenceExpression node)
@@ -602,7 +658,15 @@ namespace Boo.Lang.Compiler.Ast.Visitors
 			Write(" ");
 			WriteOperator(GetBinaryOperatorText(e.Operator));
 			Write(" ");
-			Visit(e.Right);
+			if (e.Operator == BinaryOperatorType.TypeTest)
+			{
+				// isa rhs is encoded in a typeof expression
+				Visit(((TypeofExpression)e.Right).Type);
+			}
+			else
+			{
+				Visit(e.Right);
+			}
 			if (needsParens)
 			{
 				Write(")");
@@ -739,9 +803,9 @@ namespace Boo.Lang.Compiler.Ast.Visitors
 			else
 			{
 				WriteLine(":");
-				Indent();
+				BeginBlock();
 				Visit(e.Node);
-				Dedent();
+				EndBlock();
 			}
 		}
 
@@ -864,13 +928,6 @@ namespace Boo.Lang.Compiler.Ast.Visitors
 			WriteBlock(fs.Block);
 		}
 		
-		override public void OnRetryStatement(RetryStatement node)
-		{
-			WriteIndented();
-			WriteKeyword("retry");
-			WriteLine();
-		}
-		
 		override public void OnTryStatement(TryStatement node)
 		{
 			WriteIndented();
@@ -878,13 +935,6 @@ namespace Boo.Lang.Compiler.Ast.Visitors
 			WriteLine();
 			WriteBlock(node.ProtectedBlock);
 			Visit(node.ExceptionHandlers);
-			if (null != node.SuccessBlock)
-			{
-				WriteIndented();
-				WriteKeyword("success:");
-				WriteLine();
-				WriteBlock(node.SuccessBlock);
-			}
 			if (null != node.EnsureBlock)
 			{
 				WriteIndented();
@@ -948,13 +998,22 @@ namespace Boo.Lang.Compiler.Ast.Visitors
 			WriteKeyword("if ");
 			Visit(ifs.Condition);
 			WriteLine(":");
-			WriteBlock(ifs.TrueBlock);
+			Indent();
+			WriteBlockStatements(ifs.TrueBlock);
+			Dedent();
 			if (null != ifs.FalseBlock)
 			{
 				WriteIndented();
 				WriteKeyword("else:");
 				WriteLine();
 				WriteBlock(ifs.FalseBlock);
+			}
+			else
+			{
+				if (IsWhiteSpaceAgnostic)
+				{
+					WriteEnd();
+				}
 			}
 		}
 		
@@ -1385,7 +1444,8 @@ namespace Boo.Lang.Compiler.Ast.Visitors
 		{
 			Write(st);
 			int last = items.Count-1;
-			for (int i=0; i<items.Count; ++i)
+			int i = 0;
+			foreach (ParameterDeclaration item in items)
 			{
 				if (i > 0)
 				{
@@ -1395,9 +1455,17 @@ namespace Boo.Lang.Compiler.Ast.Visitors
 				{
 					Write("*");
 				}
-				Visit(items.GetNodeAt(i));
+				Visit(item);
+				++i;
 			}
 			Write(ed);
+		}
+		
+		void WriteGenericParameterList(GenericParameterDeclarationCollection items)
+		{
+			Write("[of ");
+			WriteCommaSeparatedList(items);
+			Write("]");
 		}
 		
 		void WriteAttribute(Attribute attribute)
@@ -1496,7 +1564,7 @@ namespace Boo.Lang.Compiler.Ast.Visitors
 			}
 		}
 
-		void WriteTypeDefinition(string keyword, TypeDefinition td)
+		virtual protected void WriteTypeDefinition(string keyword, TypeDefinition td)
 		{
 			WriteAttributes(td.Attributes, true);
 			WriteModifiers(td);
@@ -1515,7 +1583,7 @@ namespace Boo.Lang.Compiler.Ast.Visitors
 				Write(")");
 			}
 			WriteLine(":");
-			Indent();
+			BeginBlock();
 			if (td.Members.Count > 0)
 			{
 				foreach (TypeMember member in td.Members)
@@ -1526,11 +1594,9 @@ namespace Boo.Lang.Compiler.Ast.Visitors
 			}
 			else
 			{
-				WriteIndented();
-				WriteKeyword("pass");
-				WriteLine();
+				WritePass();
 			}
-			Dedent();
+			EndBlock();
 		}
 		
 		bool WasOmitted(Expression node)

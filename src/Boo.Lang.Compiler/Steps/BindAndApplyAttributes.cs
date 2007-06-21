@@ -42,12 +42,25 @@ namespace Boo.Lang.Compiler.Steps
 		Boo.Lang.Compiler.Ast.Attribute _attribute;
 
 		Type _type;
+		
+		Node _targetNode;
 
 		public ApplyAttributeTask(CompilerContext context, Boo.Lang.Compiler.Ast.Attribute attribute, Type type)
 		{
 			_context = context;
 			_attribute = attribute;
 			_type = type;
+			_targetNode = GetTargetNode();
+		}
+		
+		private Node GetTargetNode()
+		{
+			Module module = _attribute.ParentNode as Module;
+			if (module != null && module.AssemblyAttributes.ContainsNode(_attribute))
+			{
+				return module.ParentNode;
+			}
+			return _attribute.ParentNode;
 		}
 
 		public void Execute()
@@ -60,13 +73,15 @@ namespace Boo.Lang.Compiler.Steps
 					aa.Initialize(_context);
 					using (aa)
 					{
-						aa.Apply(_attribute.ParentNode);
+						aa.Apply(_targetNode);
 					}
 				}
 			}
 			catch (Exception x)
 			{
+				_context.TraceError(x);
 				_context.Errors.Add(CompilerErrorFactory.AttributeApplicationError(x, _attribute, _type));
+				System.Console.WriteLine(x.StackTrace);
 			}
 		}
 
@@ -194,16 +209,47 @@ namespace Boo.Lang.Compiler.Steps
 				++step;
 			}
 		}
-
-		override public bool EnterModule(Boo.Lang.Compiler.Ast.Module module)
+		
+		override public void OnModule(Boo.Lang.Compiler.Ast.Module module)
 		{
 			EnterNamespace((INamespace)TypeSystemServices.GetEntity(module));
-			return true;
+			try
+			{
+				Visit(module.Members);
+				Visit(module.Globals);
+				Visit(module.Attributes);
+				Visit(module.AssemblyAttributes);
+			}
+			finally
+			{
+				LeaveNamespace();
+			}
 		}
 		
-		override public void LeaveModule(Boo.Lang.Compiler.Ast.Module module)
+		void VisitTypeDefinition(TypeDefinition node)
 		{
-			LeaveNamespace();
+			Visit(node.Members);
+			Visit(node.Attributes);
+		}
+		
+		override public void OnClassDefinition(ClassDefinition node)
+		{
+			VisitTypeDefinition(node);
+		}
+		
+		override public void OnInterfaceDefinition(InterfaceDefinition node)
+		{
+			VisitTypeDefinition(node);
+		}
+		
+		override public void OnStructDefinition(StructDefinition node)
+		{
+			VisitTypeDefinition(node);
+		}
+		
+		override public void OnEnumDefinition(EnumDefinition node)
+		{
+			VisitTypeDefinition(node);
 		}
 
 		override public void OnBlock(Block node)
@@ -220,65 +266,67 @@ namespace Boo.Lang.Compiler.Steps
 			
 			_elements.Clear();
 			
-			if (!NameResolutionService.ResolveQualifiedName(_elements, BuildAttributeName(attribute.Name)))
+			if (!NameResolutionService.ResolveQualifiedName(_elements, BuildAttributeName(attribute.Name, true)))
 			{
-				NameResolutionService.ResolveQualifiedName(_elements, attribute.Name);
+				if (!NameResolutionService.ResolveQualifiedName(_elements, BuildAttributeName(attribute.Name, false)))
+				{
+					NameResolutionService.ResolveQualifiedName(_elements, attribute.Name);
+				}
 			}
 
-			if (_elements.Count > 0)
+			if (_elements.Count == 0)
 			{
-				if (_elements.Count > 1)
+				Error(attribute, CompilerErrorFactory.UnknownAttribute(attribute, attribute.Name));
+				return;
+			}
+						
+			if (_elements.Count > 1)
+			{
+				Error(attribute, CompilerErrorFactory.AmbiguousReference(
+								attribute,
+								attribute.Name,
+								_elements));
+				return;
+			}
+
+			// if _elements.Count == 1
+			IEntity tag = (IEntity)_elements[0];
+			if (EntityType.Type != tag.EntityType)
+			{
+				Error(attribute, CompilerErrorFactory.NameNotType(attribute, attribute.Name));
+				return;
+			}
+			
+			IType attributeType = ((ITypedEntity)tag).Type;
+			if (IsAstAttribute(attributeType))
+			{
+				ExternalType externalType = attributeType as ExternalType;
+				if (null == externalType)
 				{
-					Error(attribute, CompilerErrorFactory.AmbiguousReference(
-									attribute,
-									attribute.Name,
-									_elements));
+					Error(attribute, CompilerErrorFactory.AstAttributeMustBeExternal(attribute, attributeType.FullName));
 				}
 				else
 				{
-					IEntity tag = (IEntity)_elements[0];
-					if (EntityType.Type != tag.EntityType)
-					{
-						Error(attribute, CompilerErrorFactory.NameNotType(attribute, attribute.Name));
-					}
-					else
-					{
-						IType attributeType = ((ITypedEntity)tag).Type;
-						if (IsAstAttribute(attributeType))
-						{
-							ExternalType externalType = attributeType as ExternalType;
-							if (null == externalType)
-							{
-								Error(attribute, CompilerErrorFactory.AstAttributeMustBeExternal(attribute, attributeType.FullName));
-							}
-							else
-							{
-								ScheduleAttributeApplication(attribute, externalType.ActualType);
-								
-								RemoveCurrentNode();
-							}
-						}
-						else
-						{
-							if (!IsSystemAttribute(attributeType))
-							{
-								Error(attribute, CompilerErrorFactory.TypeNotAttribute(attribute, attributeType.FullName));
-							}
-							else
-							{
-								// remember the attribute's type
-								attribute.Name = attributeType.FullName;
-								attribute.Entity = attributeType;
-								CheckAttributeParameters(attribute);
-							}
-						}
-					}
+					ScheduleAttributeApplication(attribute, externalType.ActualType);
+					
+					RemoveCurrentNode();
 				}
 			}
 			else
 			{
-				Error(attribute, CompilerErrorFactory.UnknownAttribute(attribute, attribute.Name));
+				if (!IsSystemAttribute(attributeType))
+				{
+					Error(attribute, CompilerErrorFactory.TypeNotAttribute(attribute, attributeType.FullName));
+				}
+				else
+				{
+					// remember the attribute's type
+					attribute.Name = attributeType.FullName;
+					attribute.Entity = attributeType;
+					CheckAttributeParameters(attribute);
+				}
 			}
+
 		}
 		
 		private void CheckAttributeParameters(Boo.Lang.Compiler.Ast.Attribute node)
@@ -336,10 +384,10 @@ namespace Boo.Lang.Compiler.Steps
 			_tasks.Add(new ApplyAttributeTask(_context, attribute, type));
 		}
 
-		string BuildAttributeName(string name)
+		string BuildAttributeName(string name, bool forcePascalNaming)
 		{
 			_buffer.Length = 0;
-			if (!Char.IsUpper(name[0]))
+			if (forcePascalNaming && !Char.IsUpper(name[0]))
 			{
 				_buffer.Append(Char.ToUpper(name[0]));
 				_buffer.Append(name.Substring(1));

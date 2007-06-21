@@ -170,6 +170,8 @@ namespace Boo.Lang.Compiler.Steps
 		public BooClassBuilder CreateSkeletonClass(string name)
 		{
 			BooClassBuilder builder = CodeBuilder.CreateClass(name);
+			builder.Modifiers |= TypeMemberModifiers.Internal;
+			
 			builder.AddBaseType(CodeBuilder.TypeSystemServices.ObjectType);
 			DeclareFieldsAndConstructor(builder);
 			return builder;
@@ -180,13 +182,13 @@ namespace Boo.Lang.Compiler.Steps
 			// referenced entities turn into fields
 			foreach (ITypedEntity entity in Builtins.array(_referencedEntities.Keys))
 			{
-				Field field = builder.AddField("__" + entity.Name + _context.AllocIndex(), entity.Type);
-				field.Modifiers = TypeMemberModifiers.Internal;
+				Field field = builder.AddInternalField("__" + entity.Name + _context.AllocIndex(), entity.Type);
 				_referencedEntities[entity] = field.Entity;
 			}
 			
 			// single constructor taking all referenced entities
 			BooMethodBuilder constructor = builder.AddConstructor();
+			constructor.Modifiers = TypeMemberModifiers.Public;			
 			constructor.Body.Add(CodeBuilder.CreateSuperConstructorInvocation(builder.Entity.BaseType));
 			foreach (ITypedEntity entity in _referencedEntities.Keys)
 			{
@@ -268,55 +270,6 @@ namespace Boo.Lang.Compiler.Steps
 				}
 			}
 			return false;
-		}
-	}
-	
-	public class SelfEntity : ITypedEntity
-	{
-		string _name;
-		IType _type;
-		
-		public SelfEntity(string name, IType type)
-		{
-			_name = name;
-			_type = type;
-		}
-		
-		public string Name
-		{
-			get
-			{
-				return _name;
-			}
-		}
-		
-		public string FullName
-		{
-			get
-			{
-				return _name;
-			}
-		}
-		
-		public EntityType EntityType
-		{
-			get
-			{
-				return EntityType.Unknown;
-			}
-		}
-
-		public IType Type
-		{
-			get
-			{
-				return _type;
-			}
-			
-			set
-			{
-				_type = value;
-			}
 		}
 	}
 }

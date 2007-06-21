@@ -37,9 +37,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 	using Module = Boo.Lang.Compiler.Ast.Module;
 
 	public class TypeSystemServices
-	{
-		private static readonly bool Version1 = Environment.Version < new Version(2, 0);
-		
+	{	
 		public DuckTypeImpl DuckType;
 		
 		public ExternalType IQuackFuType;
@@ -115,9 +113,13 @@ namespace Boo.Lang.Compiler.TypeSystem
 		public ExternalType ICallableType;
 		
 		public ExternalType IEnumerableType;
-		
+
 		public ExternalType IEnumeratorType;
 		
+		public ExternalType	IEnumerableGenericType;
+
+		public ExternalType	IEnumeratorGenericType;
+
 		public ExternalType ICollectionType;
 		
 		public ExternalType IListType;
@@ -204,8 +206,10 @@ namespace Boo.Lang.Compiler.TypeSystem
 			Cache(UIntPtrType = new ExternalType(this, Types.UIntPtr));
 			Cache(MulticastDelegateType = new ExternalType(this, Types.MulticastDelegate));
 			Cache(DelegateType = new ExternalType(this, Types.Delegate));
-			Cache(SystemAttribute = new ExternalType(this, typeof(System.Attribute)));
-						
+			Cache(SystemAttribute = new ExternalType(this, typeof(System.Attribute)));			
+			Cache(IEnumerableGenericType = new ExternalType(this, typeof(System.Collections.Generic.IEnumerable<>)));
+			Cache(IEnumeratorGenericType = new ExternalType(this, typeof(System.Collections.Generic.IEnumerator<>)));
+
 			ObjectArrayType = GetArrayType(ObjectType, 1);
 
 			PreparePrimitives();
@@ -383,14 +387,14 @@ namespace Boo.Lang.Compiler.TypeSystem
 			return (TypeType == type) || IsCallableType(type) || IsDuckType(type);
 		}
 
-		public bool IsDuckTyped(Expression expression)
+		public virtual bool IsDuckTyped(Expression expression)
 		{
 			IType type = expression.ExpressionType;
 			return null != type && this.IsDuckType(type);
 		}
 
 		public bool IsQuackBuiltin(Expression node)
-		{
+		{	
 			return IsQuackBuiltin(GetOptionalEntity(node));
 		}
 		
@@ -407,11 +411,16 @@ namespace Boo.Lang.Compiler.TypeSystem
 			}
 			return (
 				(type == DuckType)
-				|| type.IsSubclassOf(IQuackFuType)
+				|| KnowsQuackFu(type)
 				|| (_context.Parameters.Ducky
 					&& (type == ObjectType)));
 		}
-		
+
+		public bool KnowsQuackFu(IType type)
+		{
+			return type.IsSubclassOf(IQuackFuType);
+		}
+
 		bool IsCallableType(IType type)
 		{
 			return (ICallableType.IsAssignableFrom(type)) ||
@@ -454,6 +463,12 @@ namespace Boo.Lang.Compiler.TypeSystem
 					return enumeratorItemType;
 				}
 			}
+
+			IType genericItemType = GetGenericEnumerableItemType(iteratorType);
+			if (null != genericItemType)
+			{
+				return genericItemType;
+			}
 			return ObjectType;
 		}
 		
@@ -487,7 +502,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 				GetConcreteExpressionType(item);
 			}
 		}
-
+		
 		public ClassDefinition GetCompilerGeneratedExtensionsClass()
 		{
 			if (null == _compilerGeneratedExtensionsClass)
@@ -510,15 +525,20 @@ namespace Boo.Lang.Compiler.TypeSystem
 			}
 			return _compilerGeneratedExtensionsClass;
 		}
-
+		
 		public Module GetCompilerGeneratedExtensionsModule()
 		{
 			if (null == _compilerGeneratedExtensionsModule)
 			{
-				_compilerGeneratedExtensionsModule = NewModule(null);
+				_compilerGeneratedExtensionsModule = NewModule(null, "CompilerGeneratedExtensions");
 			}
 			return _compilerGeneratedExtensionsModule;
 		}
+		
+		public void AddCompilerGeneratedType(TypeDefinition type)
+		{
+			GetCompilerGeneratedTypesModule().Members.Add(type);
+		}		
 		
 		public Module GetCompilerGeneratedTypesModule()
 		{
@@ -529,10 +549,16 @@ namespace Boo.Lang.Compiler.TypeSystem
 			return _compilerGeneratedTypesModule;
 		}
 
-		private Module NewModule(string ns)
-		{
-			Module module = new Module();
-			if (null != ns) module.Namespace = new NamespaceDeclaration(ns);
+        private Module NewModule(string nameSpace)
+        {
+            return NewModule(nameSpace, nameSpace);
+        }
+
+		private Module NewModule(string nameSpace, string moduleName)
+		{  
+            Module module = new Module();
+		    module.Name = moduleName;
+			if (null != nameSpace) module.Namespace = new NamespaceDeclaration(nameSpace);
 			module.Entity = new ModuleEntity(_context.NameResolutionService, this, module);
 			_context.CompileUnit.Modules.Add(module);
 			return module;
@@ -541,6 +567,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 		public ClassDefinition CreateCallableDefinition(string name)
 		{
 			ClassDefinition cd = new ClassDefinition();
+			cd.IsSynthetic = true;
 			cd.BaseTypes.Add(CodeBuilder.CreateTypeReference(this.MulticastDelegateType));
 			cd.BaseTypes.Add(CodeBuilder.CreateTypeReference(this.ICallableType));
 			cd.Name = name;
@@ -554,6 +581,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 		Method CreateCallMethod()
 		{
 			Method method = new Method("Call");
+			method.IsSynthetic = true;
 			method.Modifiers = TypeMemberModifiers.Public|TypeMemberModifiers.Virtual;
 			method.Parameters.Add(CodeBuilder.CreateParameterDeclaration(1, "args", ObjectArrayType));
 			method.ReturnType = CodeBuilder.CreateTypeReference(ObjectType);
@@ -564,6 +592,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 		Constructor CreateCallableConstructor()
 		{
 			Constructor constructor = new Constructor();
+			constructor.IsSynthetic = true;
 			constructor.Modifiers = TypeMemberModifiers.Public;
 			constructor.ImplementationFlags = MethodImplementationFlags.Runtime;
 			constructor.Parameters.Add(
@@ -582,6 +611,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 				return ctype.IsAssignableFrom(rhs)
 					|| ctype.IsSubclassOf(rhs);
 			}
+			
 			return lhs.IsAssignableFrom(rhs)
 				|| (lhs.IsInterface && !rhs.IsFinal)
 				|| (rhs.IsInterface && !lhs.IsFinal)
@@ -603,51 +633,46 @@ namespace Boo.Lang.Compiler.TypeSystem
 		{	
 			while (fromType != this.ObjectType)
 			{
-				foreach (IEntity entity in fromType.GetMembers())
-				{
-					if (EntityType.Method == entity.EntityType &&
-						name == entity.Name)
-					{
-						IMethod method = (IMethod)entity;
-						if (IsConversionOperator(method, fromType, toType))
-						{
-							return method;
-						}
-					}
-				}
-				foreach (IEntity entity in toType.GetMembers())
-				{
-					if (EntityType.Method == entity.EntityType &&
-						name == entity.Name)
-					{
-						IMethod method = (IMethod)entity;
-						if (IsConversionOperator(method, fromType, toType))
-						{
-							return method;
-						}
-					}
-				}
+				IMethod method = FindConversionOperator(name, fromType, toType, fromType.GetMembers());
+				if (null != method) return method;
+				method = FindConversionOperator(name, fromType, toType, toType.GetMembers());
+				if (null != method) return method;
+				method = FindConversionOperator(name, fromType, toType, FindExtension(fromType, name));
+				if (null != method) return method;
+
 				fromType = fromType.BaseType;
 				if (null == fromType) break;
+			}
+			return null;
+		}
+
+		private IEntity[] FindExtension(IType fromType, string name)
+		{
+			IEntity extension = _context.NameResolutionService.ResolveExtension(fromType, name);
+			if (null == extension) return Ambiguous.NoEntities;
+			
+			Ambiguous a = extension as Ambiguous;
+			if (null != a) return a.Entities;
+			return new IEntity[] { extension };
+		}
+
+		IMethod FindConversionOperator(string name, IType fromType, IType toType, IEntity[] candidates)
+		{
+			foreach (IEntity entity in candidates)
+			{
+				if (EntityType.Method != entity.EntityType || name != entity.Name) continue;
+				IMethod method = (IMethod)entity;
+				if (IsConversionOperator(method, fromType, toType)) return method;
 			}
 			return null;
 		}
 		
 		bool IsConversionOperator(IMethod method, IType fromType, IType toType)
 		{
-			if (method.IsStatic)
-			{
-				if (method.ReturnType == toType)
-				{
-					IParameter[] parameters = method.GetParameters();
-					if (1 == parameters.Length &&
-						fromType == parameters[0].Type)
-					{
-						return true;
-					}
-				}
-			}
-			return false;
+			if (!method.IsStatic) return false;
+			if (method.ReturnType != toType) return false;
+			IParameter[] parameters = method.GetParameters();
+			return  (1 == parameters.Length &&	fromType == parameters[0].Type);
 		}
 		
 		public bool IsCallableTypeAssignableFrom(ICallableType lhs, IType rhs)
@@ -690,27 +715,8 @@ namespace Boo.Lang.Compiler.TypeSystem
 					return true;
 				}
 			}
+			
 			return false;
-		}
-		
-		public static string GetReferenceTypeName(Type t)
-		{
-			string name = t.FullName;
-			if (!(name.EndsWith("&")))
-			{
-				return name+"&";
-			}
-			return name;
-		}
-		
-		public static string DeReferenceTypeName(IType t)
-		{
-			string name = t.FullName;
-			if (name.EndsWith("&"))
-			{
-				return name.Substring(0, t.FullName.Length-1);
-			}
-			return name;
 		}
 		
 		public static bool CheckOverrideSignature(IMethod impl, IMethod baseMethod)
@@ -722,44 +728,46 @@ namespace Boo.Lang.Compiler.TypeSystem
 
 		public static bool CheckOverrideSignature(IParameter[] implParameters, IParameter[] baseParameters)
 		{	
-			if (implParameters.Length == baseParameters.Length)
+			if (implParameters.Length != baseParameters.Length) return false;
+			
+			for (int i=0; i<implParameters.Length; ++i)
 			{
-				for (int i=0; i<implParameters.Length; ++i)
+				IParameter implParameter = implParameters[i];
+				IParameter baseParameter = baseParameters[i];
+				IType implType = implParameter.Type;
+				IType baseType = baseParameter.Type;
+				
+				if (baseType.IsByRef)
 				{
-					IParameter implParameter = implParameters[i];
-					IParameter baseParameter = baseParameters[i];
-					IType impltype = implParameter.Type;
-					IType basetype = baseParameter.Type;
-					
-					if (basetype.IsByRef)
-					{
-						if (!(implParameter.IsByRef))
-						{
-							return false;
-						}
-						if (DeReferenceTypeName(basetype) != impltype.FullName)
-						{
-							return false;
-						}
-					}
-					else if (impltype != basetype)
-					{
-						return false;
-					}
+					if (!implParameter.IsByRef) return false;
+					if (baseType.GetElementType() != implType) return false;
 				}
-				return true;
+				else
+				{
+					if (implType != baseType) return false;
+				}
 			}
-			return false;
+			return true;
 		}
 		
-		public bool CanBeReachedByDownCastOrPromotion(IType expectedType, IType actualType)
+		public virtual bool CanBeReachedByDownCastOrPromotion(IType expectedType, IType actualType)
 		{
-			return actualType.IsAssignableFrom(expectedType)
-				|| (expectedType.IsValueType
-				&& IsNumber(expectedType)
-				&& IsNumber(actualType));
+			return CanBeReachedByDowncast(expectedType, actualType)
+				|| CanBeReachedByPromotion(expectedType, actualType);
 		}
-		
+
+		public virtual bool CanBeReachedByDowncast(IType expectedType, IType actualType)
+		{
+			return actualType.IsAssignableFrom(expectedType);
+		}
+
+		public virtual bool CanBeReachedByPromotion(IType expectedType, IType actualType)
+		{
+			return (expectedType.IsValueType
+			        && IsNumber(expectedType)
+			        && IsNumber(actualType));
+		}
+
 		public bool CanBeExplicitlyCastToInteger(IType type)
 		{
 			return type.IsEnum || type == this.CharType;
@@ -769,10 +777,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 		{
 			foreach (IEntity member in members)
 			{
-				if (EntityType.Method != member.EntityType)
-				{
-					return false;
-				}
+				if (EntityType.Method != member.EntityType) return false;
 			}
 			return true;
 		}
@@ -883,7 +888,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 		{
 			List members = new List();
 			GetAllMembers(members, entity);
-			return (IEntity[])members.ToArray(typeof(IEntity));
+			return (IEntity[])members.ToArray(new IEntity[members.Count]);
 		}
 		
 		private static void GetAllMembers(List members, INamespace entity)
@@ -923,6 +928,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 		{
 			IEntity tag = GetOptionalEntity(node);
 			if (null == tag) InvalidNode(node);
+			
 			return tag;
 		}
 		
@@ -936,6 +942,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 				}
 				case NodeType.ReferenceExpression:
 				case NodeType.MemberReferenceExpression:
+				case NodeType.GenericReferenceExpression:
 				{
 					return typeref.Entity as IType;
 				}
@@ -945,7 +952,6 @@ namespace Boo.Lang.Compiler.TypeSystem
 		
 		public virtual bool IsModule(Type type)
 		{
-			//return MetadataUtil.IsAttributeDefined(type, Types.ModuleAttribute);
 			return type.IsClass
 				&& type.IsSealed
 				&& !type.IsNestedPublic
@@ -967,36 +973,30 @@ namespace Boo.Lang.Compiler.TypeSystem
 			ExternalType entity = (ExternalType)_entityCache[type];
 			if (null == entity)
 			{
-				if (type.IsArray)
-				{
-					return GetArrayType(Map(type.GetElementType()), type.GetArrayRank());
-				}
-				else
-				{
-					if (type.IsSubclassOf(Types.MulticastDelegate))
-					{	
-						entity = new ExternalCallableType(this, type);
-					}
-					else
-					{
-						entity = new ExternalType(this, type);
-					}
-				}
+				if (type.IsArray) return GetArrayType(Map(type.GetElementType()), type.GetArrayRank());
+				entity = CreateEntityForType(type);
 				Cache(entity);
 			}
 			return entity;
 		}
-		
+
+		private ExternalType CreateEntityForType(Type type)
+		{
+			if (type.IsGenericParameter) return new ExternalGenericParameter(this, type);
+			if (type.IsSubclassOf(Types.MulticastDelegate)) return new ExternalCallableType(this, type);
+			return new ExternalType(this, type);
+		}
+
 		public IArrayType GetArrayType(IType elementType, int rank)
 		{
 			ArrayHash key = new ArrayHash(elementType, rank);
-			IArrayType tag = (IArrayType)_arrayCache[key];
-			if (null == tag)
+			IArrayType entity = (IArrayType)_arrayCache[key];
+			if (null == entity)
 			{
-				tag = new ArrayType(this, elementType, rank);
-				_arrayCache.Add(key, tag);
+				entity = new ArrayType(this, elementType, rank);
+				_arrayCache.Add(key, entity);
 			}
-			return tag;
+			return entity;
 		}
 
 		protected class ArrayHash
@@ -1186,6 +1186,12 @@ namespace Boo.Lang.Compiler.TypeSystem
 		{
 			return type == ObjectType || type == DuckType;
 		}
+
+		public bool RequiresBoxing(IType expectedType, IType actualType)
+		{
+			if (!actualType.IsValueType) return false;
+			return IsSystemObject(expectedType);
+		}
 		
 		protected virtual void PreparePrimitives()
 		{
@@ -1260,7 +1266,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 			
 			Method extension = CodeBuilder.CreateMethod("BeginInvoke", Map(typeof(IAsyncResult)),
 										TypeMemberModifiers.Public|TypeMemberModifiers.Static);
-			extension.ImplementationFlags = MethodImplementationFlags.Extension;
+			extension.Attributes.Add(CodeBuilder.CreateAttribute(Types.ExtensionAttribute));
 
 			ParameterDeclaration self = CodeBuilder.CreateParameterDeclaration(0, "self", beginInvokeEntity.DeclaringType);
 			
@@ -1383,6 +1389,79 @@ namespace Boo.Lang.Compiler.TypeSystem
 			return null;
 		}
 		
+
+		public IType GetGenericEnumerableItemType(IType iteratorType)		
+		{
+			// Arrays implicitly implement IEnumerable<elementType>
+			if (iteratorType is ArrayType) return iteratorType.GetElementType();
+			
+			// If type is not an array, try to find IEnumerable<T> in its interfaces
+			IType genericEnumerable = IEnumerableGenericType;			
+
+			IType itemType = null;
+			foreach (IType type in FindConstructedTypes(iteratorType, genericEnumerable))
+			{
+				IType candidateItemType = type.GenericTypeInfo.GenericArguments[0];				
+				
+				if (itemType != null)
+				{
+					itemType = GetMostGenericType(itemType, candidateItemType);
+				}
+				else
+				{					 
+					itemType = candidateItemType;
+				}				
+			}
+			
+			return itemType;
+		}
+		
+		public System.Collections.Generic.IEnumerable<IType> FindConstructedTypes(IType type, IType definition)
+		{	
+			while (type != null)
+			{			
+				if (type.GenericTypeInfo != null && 
+				    type.GenericTypeInfo.GenericDefinition == definition)
+				{
+					yield return type;
+				}
+
+				IType[] interfaces = type.GetInterfaces();
+				if (interfaces != null)
+				{
+					foreach (IType interfaceType in interfaces)
+					{
+						foreach (IType match in FindConstructedTypes(interfaceType, definition))
+						{
+							yield return match;
+						}
+					}
+				}
+								
+				type = type.BaseType;
+			}
+		}
+		
+		public static bool IsOpenGenericType(IType type)
+		{
+			if (type is IGenericParameter)
+			{
+				return true;
+			}
+			
+			if (type.GenericTypeInfo != null)
+			{
+				return !type.GenericTypeInfo.FullyConstructed;
+			}
+			
+			if (type.IsByRef || type.IsArray)
+			{
+				return IsOpenGenericType(type.GetElementType());
+			}
+			
+			return false;
+		}
+						                                         
 		public virtual IType GetConcreteCallableType(Node sourceNode, AnonymousCallableType anonymousType)
 		{
 			if (null == anonymousType.ConcreteType)
@@ -1391,6 +1470,38 @@ namespace Boo.Lang.Compiler.TypeSystem
 			}
 			return anonymousType.ConcreteType;
 		}
+
+		public IEntity GetMemberEntity(TypeMember member)
+		{
+			if (null == member.Entity)
+			{
+				member.Entity = CreateEntity(member);
+			}
+			return member.Entity;
+		}
+
+		private IEntity CreateEntity(TypeMember member)
+		{
+			switch (member.NodeType)
+			{
+				case NodeType.ClassDefinition:
+					return new InternalClass(this, (TypeDefinition) member);
+				case NodeType.Field:
+					return new InternalField((Field)member);
+				case NodeType.EnumMember:
+					return new InternalEnumMember(this, (EnumMember)member);
+				case NodeType.Method:
+					return new InternalMethod(this, (Method)member);
+				case NodeType.Constructor:
+					return new InternalConstructor(this, (Constructor)member);
+				case NodeType.Property:
+					return new InternalProperty(this, (Property)member);
+				case NodeType.Event:
+					return new InternalEvent(this, (Event)member);
+			}
+			throw new ArgumentException("Member type not supported: " + member);
+		}
+
 		
 		protected virtual IType CreateConcreteCallableType(Node sourceNode, AnonymousCallableType anonymousType)
 		{

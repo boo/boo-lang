@@ -2518,8 +2518,9 @@ namespace Boo.Lang.Compiler.Steps
 				{
 					IEntity found = null;
 					if (!AstUtil.IsTargetOfGenericMethodInvocation(node)) {
-						Visit(((MethodInvocationExpression)node.ParentNode).Arguments);
-						found = ResolveAmbiguousMethodReference(node, candidates, ((MethodInvocationExpression)node.ParentNode).Arguments);
+						//Visit(((MethodInvocationExpression)node.ParentNode).Arguments);
+						//found = ResolveAmbiguousMethodReference(node, candidates, ((MethodInvocationExpression)node.ParentNode).Arguments);
+						found = ResolveAmbiguousMethodReference(node, candidates, EmptyExpressionCollection);
 					} else {
 						Visit(((MethodInvocationExpression)node.ParentNode.ParentNode).Arguments);
 						found = ResolveAmbiguousMethodReference(node, candidates, ((MethodInvocationExpression)node.ParentNode.ParentNode).Arguments);
@@ -2545,7 +2546,9 @@ namespace Boo.Lang.Compiler.Steps
 			{
 				return candidates.Entities[0];
 			}
-			return GetCorrectCallableReference(node, args, candidates.Entities) ?? candidates;
+			if (args != EmptyExpressionCollection)
+				return GetCorrectCallableReference(node, args, candidates.Entities) ?? candidates;
+			return candidates;
 		}
 
 		private IEntity ResolveAmbiguousPropertyReference(ReferenceExpression node, Ambiguous candidates, ExpressionCollection args)

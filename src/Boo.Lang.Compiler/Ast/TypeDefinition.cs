@@ -48,6 +48,10 @@ namespace Boo.Lang.Compiler.Ast
 		{
 			get
 			{
+				string genericsSuffix = string.Empty;
+				if (HasGenericParameters) {
+					genericsSuffix = "`"+_genericParameters.Count;
+				}
 				Node parent = ParentNode;
 				if (null != parent)
 				{
@@ -56,15 +60,15 @@ namespace Boo.Lang.Compiler.Ast
 						NamespaceDeclaration ns = EnclosingNamespace;
 						if (null != ns)
 						{
-							return ns.Name + "." + Name;
+							return ns.Name + "." + Name + genericsSuffix;
 						}
 					}
 					else
 					{
-						return ((TypeDefinition)parent).FullName + "." + Name;
+						return ((TypeDefinition)parent).FullName + "." + Name + genericsSuffix;
 					}
 				}
-				return Name;
+				return Name + genericsSuffix;
 			}
 		}
 		

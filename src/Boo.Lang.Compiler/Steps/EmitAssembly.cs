@@ -2780,7 +2780,7 @@ namespace Boo.Lang.Compiler.Steps
 						node.Target.Accept(this);
 						break;
 					}
-					
+
 				default:
 					{
 						NotImplemented(node, tag.ToString());
@@ -2794,6 +2794,7 @@ namespace Boo.Lang.Compiler.Steps
 			IEntity tag = TypeSystem.TypeSystemServices.GetEntity(node);
 			switch (tag.EntityType)
 			{
+				case EntityType.Ambiguous:
 				case EntityType.Method:
 					{
 						node.Target.Accept(this);

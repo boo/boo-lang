@@ -27,6 +27,7 @@
 #endregion
 
 using System;
+using System.Text;
 
 namespace Boo.Lang.Compiler.Ast
 {
@@ -48,10 +49,9 @@ namespace Boo.Lang.Compiler.Ast
 		{
 			get
 			{
-				string genericsSuffix = string.Empty;
-				if (HasGenericParameters) {
-					genericsSuffix = "`"+_genericParameters.Count;
-				}
+				StringBuilder fullName = new StringBuilder();
+
+				// Prefix name with enclosing type or namespace
 				Node parent = ParentNode;
 				if (null != parent)
 				{
@@ -60,15 +60,24 @@ namespace Boo.Lang.Compiler.Ast
 						NamespaceDeclaration ns = EnclosingNamespace;
 						if (null != ns)
 						{
-							return ns.Name + "." + Name + genericsSuffix;
-						}
+							fullName.Append(ns.Name).Append(".");
+						} 
 					}
 					else
 					{
-						return ((TypeDefinition)parent).FullName + "." + Name + genericsSuffix;
+						fullName.Append(((TypeDefinition)parent).FullName).Append(".");
 					}
 				}
-				return Name + genericsSuffix;
+
+				fullName.Append(Name);
+
+				// Suffix name with a generity marker if needed
+				if (HasGenericParameters) 
+				{
+					fullName.Append("`").Append(_genericParameters.Count);
+				}
+
+				return fullName.ToString();
 			}
 		}
 		

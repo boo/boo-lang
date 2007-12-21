@@ -45,7 +45,6 @@ namespace Boo.Lang.Compiler.TypeSystem
 		private const int ImplicitConversionScore = 5;
 		private const int NarrowingPromotion = 4;
 		private const int DowncastScore = 3;
-		private const int GenericScore = 1;
 
 		private List _candidates = new List();
 		private ExpressionCollection _arguments;
@@ -197,27 +196,12 @@ namespace Boo.Lang.Compiler.TypeSystem
 		
 		public IEntity ResolveCallableReference(ExpressionCollection args, IEntity[] candidates)
 		{
-			return	ResolveCallableReference(null, args, candidates);
-		}
-		
-		//we need the sourceNode to deal with generic method invocations
-		public IEntity ResolveCallableReference(ReferenceExpression sourceNode, ExpressionCollection args, IEntity[] candidates)
-		{
 			Reset(args);
 			FindApplicableCandidates(candidates);
-
 			if (ValidCandidates.Count == 0) return null;
 			if (ValidCandidates.Count == 1) return ((Candidate)ValidCandidates[0]).Method;
 
-			List dataPreserving = ValidCandidates;
-
-			//filter out non-generic candidates if necessary
-			if (null != sourceNode && AstUtil.IsTargetOfGenericMethodInvocation(sourceNode)) {
-				dataPreserving = dataPreserving.Collect(FilterNonGeneric);
-				if (dataPreserving.Count == 1) return ((Candidate)dataPreserving[0]).Method;
-			}
-			
-			dataPreserving = dataPreserving.Collect(DoesNotRequireConversions);
+			List dataPreserving = ValidCandidates.Collect(DoesNotRequireConversions);
 			if (dataPreserving.Count > 0)
 			{
 				if (dataPreserving.Count == 1) return ((Candidate)dataPreserving[0]).Method;
@@ -225,16 +209,6 @@ namespace Boo.Lang.Compiler.TypeSystem
 				if (null != found) return found;
 			}
 			return BestCandidate();
-		}
-
-		private static bool FilterNonGeneric(object candidate)
-		{
-			return Array.Exists(((Candidate) candidate).ArgumentScores, IsGenericScore);
-		}
-
-		private static bool IsGenericScore(int score)
-		{
-			return score == GenericScore;
 		}
 
 		private static bool DoesNotRequireConversions(object candidate)
@@ -508,16 +482,6 @@ namespace Boo.Lang.Compiler.TypeSystem
 		private int CalculateArgumentScore(IParameter param, IType parameterType, Node arg)
 		{
 			IType argumentType = GetExpressionTypeOrEntityType(arg);
-
-			/*FIXME: HACK: if param is generic let's say it's ok and applicability will
-				be sorted out at construction step since currently we do not have 
-				constructed parameters here
-			 */
-			IGenericParameter genericParam = parameterType as IGenericParameter;
-			if (genericParam != null) {
-				return GenericScore;
-			}
-
 			if (param.IsByRef)
 			{
 				if (IsValidByRefArg(param, parameterType, argumentType, arg))

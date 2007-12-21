@@ -2128,8 +2128,6 @@ namespace Boo.Lang.Compiler.Steps
 		override public void LeaveGenericReferenceExpression(GenericReferenceExpression node)
 		{
 			IEntity entity = NameResolutionService.ResolveGenericReferenceExpression(node, node.Target.Entity);
-			IType entityType = (entity is IType ? (IType)entity : ((IMethod)entity).Type);
-
 			Bind(node, entity);
 
 			if (node.Target.Entity == null || TypeSystemServices.IsError(node.Target.Entity))
@@ -2138,11 +2136,11 @@ namespace Boo.Lang.Compiler.Steps
 			}
 			else if (node.Target.Entity.EntityType == EntityType.Type)
 			{
-				BindTypeReferenceExpressionType(node, entityType);
+				BindTypeReferenceExpressionType(node, (IType)entity);
 			}
-			else
+			else if (node.Target.Entity.EntityType == EntityType.Method)
 			{
-				BindExpressionType(node, entityType);
+				BindExpressionType(node, ((IMethod)entity).Type);
 			}
 		}
 
@@ -2516,18 +2514,8 @@ namespace Boo.Lang.Compiler.Steps
 				}
 				else if (candidates.AllEntitiesAre(EntityType.Method))
 				{
-					IEntity found = null;
-					if (!AstUtil.IsTargetOfGenericMethodInvocation(node)) {
-						//Visit(((MethodInvocationExpression)node.ParentNode).Arguments);
-						//found = ResolveAmbiguousMethodReference(node, candidates, ((MethodInvocationExpression)node.ParentNode).Arguments);
-						found = ResolveAmbiguousMethodReference(node, candidates, EmptyExpressionCollection);
-					} else {
-						Visit(((MethodInvocationExpression)node.ParentNode.ParentNode).Arguments);
-						found = ResolveAmbiguousMethodReference(node, candidates, ((MethodInvocationExpression)node.ParentNode.ParentNode).Arguments);
+					return ResolveAmbiguousMethodReference(node, candidates, EmptyExpressionCollection);
 					}
-					_context.TraceVerbose("{0}: resolving ambiguous method reference : {1}", node.LexicalInfo, found);
-					return found;
-				}
 				else if (candidates.AllEntitiesAre(EntityType.Type))
 				{
 					return ResolveAmbiguousTypeReference(node, candidates);
@@ -2546,8 +2534,6 @@ namespace Boo.Lang.Compiler.Steps
 			{
 				return candidates.Entities[0];
 			}
-			if (args != EmptyExpressionCollection)
-				return GetCorrectCallableReference(node, args, candidates.Entities) ?? candidates;
 			return candidates;
 		}
 
@@ -2568,23 +2554,16 @@ namespace Boo.Lang.Compiler.Steps
 		private IEntity ResolveAmbiguousTypeReference(ReferenceExpression node, Ambiguous candidates)
 		{
 			bool isGenericReference = (node.ParentNode is GenericReferenceExpression);
+
 		    List matches = new List();
-			
+
 			foreach (IEntity candidate in candidates.Entities)
 			{
 				IType type = candidate as IType;
-			    bool isGenericType = (type != null && type.GenericInfo != null);
+				bool isGenericType = (type != null && type.GenericInfo != null);
 				if (isGenericType == isGenericReference)
 				{
-					if (AstUtil.IsTargetOfGenericMethodInvocation(node)) {
-						//FIXME: handle constraints ?
-						if (((GenericReferenceExpression) node.ParentNode).GenericArguments.Count == type.GenericInfo.GenericParameters.Length)
-						{
-							matches.Add(candidate);
-						}
-					} else {
-						matches.Add(candidate);
-					}
+					matches.Add(candidate);
 				}
 			}
 			
@@ -3839,7 +3818,7 @@ namespace Boo.Lang.Compiler.Steps
 		
 		protected virtual IEntity ResolveAmbiguousMethodInvocation(MethodInvocationExpression node, Ambiguous entity)
 		{
-			_context.TraceVerbose("{0}: resolving ambiguous method invocation: {1}", node.LexicalInfo, entity);
+			_context.TraceVerbose("{0}: resolving ambigous method invocation: {1}", node.LexicalInfo, entity);
 
 			IEntity resolved = ResolveCallableReference(node, entity);
 			if (null != resolved) return resolved;
@@ -5224,7 +5203,7 @@ namespace Boo.Lang.Compiler.Steps
                 EnsureRelatedNodeWasVisited(sourceNode, candidate);
             }
 
-			IEntity found = _callableResolution.ResolveCallableReference(sourceNode as ReferenceExpression, args, candidates);
+			IEntity found = _callableResolution.ResolveCallableReference(args, candidates);
 			if (null == found) EmitCallableResolutionError(sourceNode, candidates, args);
 			return found;
 		}

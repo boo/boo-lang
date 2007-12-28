@@ -75,3 +75,4 @@ Optimizations
 * tail call prefix para funçoes recursivas com a ScanDirectories do rgrep.boo
 * const expression unfolding
 * proper tail recursion (fatorial)
+

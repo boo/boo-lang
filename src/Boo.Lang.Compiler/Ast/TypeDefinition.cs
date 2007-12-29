@@ -28,6 +28,7 @@
 
 using System;
 using System.Text;
+using System.Collections.Generic;
 
 namespace Boo.Lang.Compiler.Ast
 {
@@ -49,35 +50,47 @@ namespace Boo.Lang.Compiler.Ast
 		{
 			get
 			{
-				StringBuilder fullName = new StringBuilder();
-
-				// Prefix name with enclosing type or namespace
-				Node parent = ParentNode;
-				if (null != parent)
+				if (HasGenericParameters)
 				{
-					if (NodeType.Module == parent.NodeType)
+					string[] parameterNames = Array.ConvertAll<GenericParameterDeclaration, string>(
+						GenericParameters.ToArray(),
+						delegate(GenericParameterDeclaration gpd) { return gpd.Name; });
+
+					return string.Format(
+						"{0}[of {1}]",
+						QualifiedName,
+						string.Join(", ", parameterNames));
+				}
+				else
+				{
+					return QualifiedName;
+				}
+			}
+		}
+
+		public string QualifiedName
+		{
+			get
+			{
+				StringBuilder qualifiedName = new StringBuilder();
+
+				Module parentModule = ParentNode as Module;
+				TypeDefinition parentType = ParentNode as TypeDefinition;
+
+				if (ParentNode != null && ParentNode.NodeType == NodeType.Module)
+				{
+					if (EnclosingNamespace != null)
 					{
-						NamespaceDeclaration ns = EnclosingNamespace;
-						if (null != ns)
-						{
-							fullName.Append(ns.Name).Append(".");
-						} 
-					}
-					else
-					{
-						fullName.Append(((TypeDefinition)parent).FullName).Append(".");
+						qualifiedName.Append(EnclosingNamespace.Name).Append(".");
 					}
 				}
-
-				fullName.Append(Name);
-
-				// Suffix name with a generity marker if needed
-				if (HasGenericParameters) 
+				else if (parentType != null)
 				{
-					fullName.Append("`").Append(_genericParameters.Count);
+					qualifiedName.Append(parentType.QualifiedName).Append(".");
 				}
-
-				return fullName.ToString();
+				
+				qualifiedName.Append(Name);
+				return qualifiedName.ToString();
 			}
 		}
 		

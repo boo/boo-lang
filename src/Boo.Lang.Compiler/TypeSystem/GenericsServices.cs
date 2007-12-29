@@ -289,14 +289,11 @@ namespace Boo.Lang.Compiler.TypeSystem
 		public bool ViolatesParameterConstraints(IEntity definition)
 		{
 			IGenericParameter[] parameters = GetGenericParameters(definition);
-			IType[] arguments = Array.ConvertAll<TypeReference, IType>(
-				ArgumentNodes.ToArray(),
-				delegate(TypeReference tr) { return (IType)TypeSystemServices.GetEntity(tr); });
 
 			bool valid = true;
 			for (int i = 0; i < parameters.Length; i++)
 			{
-				if (ViolatesParameterConstraints(parameters[i], arguments[i]))
+				if (ViolatesParameterConstraints(parameters[i], ArgumentNodes[i]))
 				{
 					valid = false;
 				}
@@ -308,10 +305,12 @@ namespace Boo.Lang.Compiler.TypeSystem
 		/// <summary>
 		/// Checks if a specified argument violates the constraints declared on a specified paramter.
 		/// </summary>
-		public bool ViolatesParameterConstraints(IGenericParameter parameter, IType argument)
+		public bool ViolatesParameterConstraints(IGenericParameter parameter, TypeReference argumentNode)
 		{
+			IType argument = TypeSystemServices.GetEntity(argumentNode) as IType;
+			
 			// Ensure argument is a valid type
-			if (TypeSystemServices.IsError(argument))
+			if (argument == null || TypeSystemServices.IsError(argument))
 			{
 				return false;
 			}
@@ -327,14 +326,14 @@ namespace Boo.Lang.Compiler.TypeSystem
 
 			if (parameter.IsValueType && !argument.IsValueType)
 			{
-				Errors.Add(CompilerErrorFactory.GenericArgumentMustBeValueType(ConstructionNode, parameter, argument));
+				Errors.Add(CompilerErrorFactory.GenericArgumentMustBeValueType(argumentNode, parameter, argument));
 				valid = false;
 			}
 
 			// Check for default constructor
 			if (parameter.MustHaveDefaultConstructor && !HasDefaultConstructor(argument))
 			{
-				Errors.Add(CompilerErrorFactory.GenericArgumentMustHaveDefaultConstructor(ConstructionNode, parameter, argument));
+				Errors.Add(CompilerErrorFactory.GenericArgumentMustHaveDefaultConstructor(argumentNode, parameter, argument));
 				valid = false;
 			}
 
@@ -351,7 +350,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 
 					if (!baseType.IsAssignableFrom(argument))
 					{
-						Errors.Add(CompilerErrorFactory.GenericArgumentMustHaveBaseType(ConstructionNode, parameter, argument, baseType));
+						Errors.Add(CompilerErrorFactory.GenericArgumentMustHaveBaseType(argumentNode, parameter, argument, baseType));
 						valid = false;
 					}
 				}

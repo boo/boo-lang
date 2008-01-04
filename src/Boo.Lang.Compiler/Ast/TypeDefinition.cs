@@ -28,7 +28,6 @@
 
 using System;
 using System.Text;
-using System.Collections.Generic;
 
 namespace Boo.Lang.Compiler.Ast
 {
@@ -37,7 +36,7 @@ namespace Boo.Lang.Compiler.Ast
 	[System.Xml.Serialization.XmlInclude(typeof(InterfaceDefinition))]
 	[System.Xml.Serialization.XmlInclude(typeof(EnumDefinition))]
 	public abstract partial class TypeDefinition
-	{		
+	{
 		protected TypeDefinition()
 		{
  		}	
@@ -74,7 +73,6 @@ namespace Boo.Lang.Compiler.Ast
 			{
 				StringBuilder qualifiedName = new StringBuilder();
 
-				Module parentModule = ParentNode as Module;
 				TypeDefinition parentType = ParentNode as TypeDefinition;
 
 				if (ParentNode != null && ParentNode.NodeType == NodeType.Module)
@@ -88,7 +86,7 @@ namespace Boo.Lang.Compiler.Ast
 				{
 					qualifiedName.Append(parentType.QualifiedName).Append(".");
 				}
-				
+
 				qualifiedName.Append(Name);
 				return qualifiedName.ToString();
 			}

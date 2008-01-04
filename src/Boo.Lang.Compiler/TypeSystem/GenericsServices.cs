@@ -48,16 +48,19 @@ namespace Boo.Lang.Compiler.TypeSystem
 		/// <returns>The constructed entity.</returns>
 		public IEntity ConstructEntity(IEntity definition, Node constructionNode, TypeReferenceCollection argumentNodes)
 		{
+			// Ambiguous generic constructions are handled separately
 			if (definition.EntityType == EntityType.Ambiguous)
 			{
 				return ConstructAmbiguousEntity((Ambiguous)definition, constructionNode, argumentNodes);
 			}
 
+			// Check that the construction is valid
 			if (!CheckGenericConstruction(definition, constructionNode, argumentNodes, Errors))
 			{
 				return TypeSystemServices.ErrorEntity;
 			}
 
+			// Construct a type or a method according to the definition
 			IType[] arguments = Array.ConvertAll<TypeReference, IType>(
 				argumentNodes.ToArray(),
 				delegate(TypeReference tr) { return (IType)tr.Entity; });
@@ -76,54 +79,52 @@ namespace Boo.Lang.Compiler.TypeSystem
 			return TypeSystemServices.ErrorEntity;
 		}
 
-		private IEntity ConstructAmbiguousEntity(Ambiguous ambiguousDefinition, Node node, TypeReferenceCollection argumentNodes)
+		/// <summary>
+		/// Constructs generic entities out of an ambiguous definition.
+		/// </summary>
+		private IEntity ConstructAmbiguousEntity(Ambiguous ambiguousDefinition, Node constructionNode, TypeReferenceCollection argumentNodes)
 		{
-			List<IEntity> matches = new List<IEntity>(ambiguousDefinition.Entities);
 			GenericConstructionChecker checker = new GenericConstructionChecker(
-				TypeSystemServices, node, argumentNodes, new CompilerErrorCollection());
+				TypeSystemServices, 
+				constructionNode, 
+				argumentNodes, 
+				new CompilerErrorCollection()); 
 
-			// Filter non-generic matches
-			matches.RemoveAll(checker.NotGenericDefinition);
-			if (matches.Count == 0)
+			List<IEntity> matches = new List<IEntity>(ambiguousDefinition.Entities);
+
+			// Filter matches by genericness, generity and constraints
+			Predicate<IEntity>[] filters = new Predicate<IEntity>[] { 
+				checker.NotGenericDefinition,
+				checker.IncorrectGenerity,
+				checker.ViolatesParameterConstraints };
+
+			foreach (Predicate<IEntity> filter in filters)
 			{
-				Errors.Add(CompilerErrorFactory.NotAGenericDefinition(node, ambiguousDefinition.Name));
-				return TypeSystemServices.ErrorEntity;
-			}
-			if (matches.Count == 1)
-			{
-				return ConstructEntity(matches[0], node, argumentNodes);
+				checker.Errors.Clear();
+				matches.RemoveAll(filter);
+
+				// If no matches pass the filter, record the first error only
+				// (providing all the distinct errors that occured would be superfluous)
+				if (matches.Count == 0)
+				{
+					Errors.Add(checker.Errors[0]);
+					return TypeSystemServices.ErrorEntity;
+				}
+
+				// If only one match passes the filter, continue construction normally
+				if (matches.Count == 1)
+				{
+					return ConstructEntity(matches[0], constructionNode, argumentNodes);
+				}
 			}
 
-			// Filter matches by generity
-			matches.RemoveAll(checker.IncorrectGenerity);
-			if (matches.Count == 0)
-			{
-				// TODO: Error("No version of <name> requires <count> arguments.")
-				return TypeSystemServices.ErrorEntity;
-			}
-			if (matches.Count == 1)
-			{
-				return ConstructEntity(matches[0], node, argumentNodes);
-			}
+			// Several matches have passed the filter - 
+			// construct all of them and return another Ambiguous entity
+			IEntity[] constructed = Array.ConvertAll<IEntity, IEntity>(
+				matches.ToArray(),
+				delegate(IEntity def) { return ConstructEntity(def, constructionNode, argumentNodes); });
 
-			matches.RemoveAll(checker.ViolatesParameterConstraints);
-			if (matches.Count == 0)
-			{
-				// TODO: Error("No version of <name> can be constructed using the supplied type arguments.");
-				return TypeSystemServices.ErrorEntity;
-			}
-			if (matches.Count == 1)
-			{
-				return ConstructEntity(matches[0], node, argumentNodes);
-			}
-			else
-			{
-				IEntity[] constructed = Array.ConvertAll<IEntity, IEntity>(
-					matches.ToArray(),
-					delegate(IEntity def) { return ConstructEntity(def, node, argumentNodes); });
-
-				return new Ambiguous(constructed);
-			}
+			return new Ambiguous(constructed);
 		}
 
 		/// <summary>
@@ -270,7 +271,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 
 		/// <summary>
 		/// Checks if the number of generic parameters on a specified definition 
-		/// matches the number of supplied arguments.
+		/// does not match the number of supplied type arguments.
 		/// </summary>
 		public bool IncorrectGenerity(IEntity definition)
 		{
@@ -284,7 +285,8 @@ namespace Boo.Lang.Compiler.TypeSystem
 		}
 
 		/// <summary>
-		/// Checks if the given arguments violate any constraints declared on a specified generic definition.
+		/// Checks if the given type arguments violate any constraints 
+		/// declared on the type parameters of a specified generic definition.
 		/// </summary>
 		public bool ViolatesParameterConstraints(IEntity definition)
 		{
@@ -303,7 +305,8 @@ namespace Boo.Lang.Compiler.TypeSystem
 		}
 
 		/// <summary>
-		/// Checks if a specified argument violates the constraints declared on a specified paramter.
+		/// Checks if a specified type argument violates the constraints 
+		/// declared on a specified type paramter.
 		/// </summary>
 		public bool ViolatesParameterConstraints(IGenericParameter parameter, TypeReference argumentNode)
 		{

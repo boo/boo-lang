@@ -44,12 +44,16 @@ namespace Boo.Lang.Compiler.Ast
 		{
 			get
 			{
-				NamespaceDeclaration ns = EnclosingNamespace;
-				if (null != ns)
+				if (NodeType.CallableDefinition == this.NodeType)
 				{
-					return ns.Name + "." + Name;
+					NamespaceDeclaration ns = EnclosingNamespace;
+					if (null != ns)
+					{
+						return ns.Name + "." + Name;
+					}
+					return Name;
 				}
-				return Name;
+				return base.FullName;
 			}
 		}
 	}

@@ -48,6 +48,12 @@ namespace Boo.Lang.Compiler.TypeSystem
 		/// <returns>The constructed entity.</returns>
 		public IEntity ConstructEntity(IEntity definition, Node constructionNode, TypeReferenceCollection argumentNodes)
 		{
+			// Ensure definition is a valid entity
+			if (definition == null || TypeSystemServices.IsError(definition))
+			{
+				return TypeSystemServices.ErrorEntity;
+			}
+
 			// Ambiguous generic constructions are handled separately
 			if (definition.EntityType == EntityType.Ambiguous)
 			{
@@ -132,13 +138,6 @@ namespace Boo.Lang.Compiler.TypeSystem
 		/// </summary>
 		public bool CheckGenericConstruction(IEntity definition, Node node, TypeReferenceCollection arguments, CompilerErrorCollection errors)
 		{
-			// Ensure definition is a valid entity
-			if (definition == null || TypeSystemServices.IsError(definition))
-			{
-				return false;
-			}
-
-			// Ensure definition really is a generic definition
 			GenericConstructionChecker checker = new GenericConstructionChecker(
 				TypeSystemServices, node, arguments, Errors);
 

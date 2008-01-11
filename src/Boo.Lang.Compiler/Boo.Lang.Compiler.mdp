@@ -87,6 +87,7 @@
     <File name="Ast/ForStatement.cs" buildaction="Compile" subtype="Code" />
     <File name="Ast/GeneratorExpression.cs" buildaction="Compile" subtype="Code" />
     <File name="Ast/GeneratorExpressionCollection.cs" buildaction="Compile" subtype="Code" />
+    <File name="Ast/GenericParameterConstraints.cs" buildaction="Compile" subtype="Code" />
     <File name="Ast/GenericParameterDeclaration.cs" buildaction="Compile" subtype="Code" />
     <File name="Ast/GenericParameterDeclarationCollection.cs" buildaction="Compile" subtype="Code" />
     <File name="Ast/GenericReferenceExpression.cs" buildaction="Compile" subtype="Code" />

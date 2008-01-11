@@ -130,6 +130,7 @@
     <Compile Include="Ast\ForStatement.cs" />
     <Compile Include="Ast\GeneratorExpression.cs" />
     <Compile Include="Ast\GeneratorExpressionCollection.cs" />
+    <Compile Include="Ast\GenericParameterConstraints.cs" />
     <Compile Include="Ast\GenericParameterDeclaration.cs" />
     <Compile Include="Ast\GenericParameterDeclarationCollection.cs" />
     <Compile Include="Ast\GenericReferenceExpression.cs" />

@@ -263,10 +263,7 @@ callable_definition [TypeMemberCollection container]
 		container.Add(cd);
 		genericParameters = cd.GenericParameters;
 	}
-	(
-		(LBRACK (OF)? generic_parameter_declaration_list[genericParameters] RBRACK) |
-		(OF generic_parameter_declaration[genericParameters])
-	)?
+	(LBRACK (OF)? generic_parameter_declaration_list[genericParameters] RBRACK)?
 	LPAREN parameter_declaration_list[cd.Parameters] RPAREN
 	(AS returnType=type_reference { cd.ReturnType=returnType; })?			
 	eos
@@ -393,10 +390,7 @@ class_definition [TypeMemberCollection container]
 		members = td.Members;
 		genericParameters = td.GenericParameters;
 	}
-	(
-		(LBRACK (OF)? generic_parameter_declaration_list[genericParameters] RBRACK) |
-		(OF generic_parameter_declaration[genericParameters])
-	)?
+	(LBRACK (OF)? generic_parameter_declaration_list[genericParameters] RBRACK)?
 	(base_types[baseTypes])?
 	begin_with_doc[td]					
 	(type_definition_member[members])*
@@ -433,10 +427,7 @@ interface_definition [TypeMemberCollection container]
 		members = itf.Members;
 		genericParameters = itf.GenericParameters;
 	}
-	(
-		(LBRACK (OF)? generic_parameter_declaration_list[genericParameters] RBRACK) |
-		(OF generic_parameter_declaration[genericParameters])
-	)?
+	(LBRACK (OF)? generic_parameter_declaration_list[genericParameters] RBRACK)?
 	(base_types[itf.BaseTypes])?
 	begin_with_doc[itf]
 	(
@@ -627,15 +618,7 @@ method [TypeMemberCollection container]
 		body = m.Body;
 		statements = body.Statements;
 	}
-	(
-		(
-			LBRACK (OF)? generic_parameter_declaration_list[genericParameters] RBRACK
-		)
-		|
-		(
-			OF generic_parameter_declaration[genericParameters]
-		)
-	)?
+	(LBRACK (OF)? generic_parameter_declaration_list[genericParameters] RBRACK)?
 	LPAREN parameter_declaration_list[parameters] RPAREN
 			attributes { AddAttributes(m.ReturnTypeAttributes); }
 			(AS rt=type_reference { m.ReturnType = rt; })?
@@ -885,13 +868,47 @@ generic_parameter_declaration_list[GenericParameterDeclarationCollection c]:
 	;
 
 protected 
-generic_parameter_declaration[GenericParameterDeclarationCollection c]:
+generic_parameter_declaration[GenericParameterDeclarationCollection c]
+	{
+		GenericParameterDeclaration gpd = null;
+	}:
 	id:ID 
 	{
-		GenericParameterDeclaration gpd = new GenericParameterDeclaration(SourceLocationFactory.ToLexicalInfo(id));
+		gpd = new GenericParameterDeclaration(SourceLocationFactory.ToLexicalInfo(id));
 		gpd.Name = id.getText();
 		c.Add(gpd);
 	}
+	(LPAREN generic_parameter_constraints[gpd] RPAREN)?
+	;
+	
+	
+protected 
+generic_parameter_constraints[GenericParameterDeclaration gpd]
+	{
+		TypeReference tr = null;
+	}:
+	(
+		CLASS
+		{
+			gpd.Constraints |= GenericParameterConstraints.ReferenceType;
+		}
+		|
+		STRUCT
+		{
+			gpd.Constraints |= GenericParameterConstraints.ValueType;
+		}
+		|
+		CONSTRUCTOR
+		{
+			gpd.Constraints |= GenericParameterConstraints.Constructable;
+		}
+		|
+		tr=type_reference
+		{
+			gpd.BaseTypes.Add(tr);
+		}
+	) 
+	(COMMA generic_parameter_constraints[gpd])?
 	;
 	
 protected

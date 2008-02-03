@@ -27,8 +27,6 @@
 #endregion
 
 using System;
-using System.Reflection;
-using Boo.Lang.Compiler;
 using Boo.Lang.Compiler.Ast;
 using System.Collections.Generic;
 
@@ -39,16 +37,14 @@ namespace Boo.Lang.Compiler.TypeSystem
     /// </summary>
 	public class InternalGenericParameter : IType, IInternalEntity, IGenericParameter
 	{
-		TypeSystemServices _tss;
+    	readonly TypeSystemServices _tss;
+    	readonly TypeDefinition _declaringType;
+    	readonly Method _declaringMethod;
+    	readonly GenericParameterDeclaration _declaration;
 		int _position = -1;
-		TypeDefinition _declaringType;
-		Method _declaringMethod;
-		GenericParameterDeclaration _declaration;
 
 		IType[] _baseTypes = null;
 
-		IType[] _emptyTypeArray = new IType[0];
-		
 		public InternalGenericParameter(TypeSystemServices tss, GenericParameterDeclaration declaration)
 		{
 			_tss = tss;
@@ -101,7 +97,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 			}
 		}
 
-		public IType[] GetBaseTypeConstraints()
+		public IType[] GetTypeConstraints()
 		{
 			if (_baseTypes == null)
 			{
@@ -210,7 +206,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 		{
 			List<IType> interfaces = new List<IType>();
 
-			foreach (IType type in GetBaseTypeConstraints())
+			foreach (IType type in GetTypeConstraints())
 			{
 				if (type.IsInterface)
 				{
@@ -289,7 +285,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 			bool resolved = false;
 			
 			// Resolve using base type constraints
-			foreach (IType type in GetBaseTypeConstraints())
+			foreach (IType type in GetTypeConstraints())
 			{
 				resolved |= type.Resolve(targetList, name, flags);
 			}
@@ -317,7 +313,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 
 		private IType FindBaseType()
 		{
-			foreach (IType type in GetBaseTypeConstraints())
+			foreach (IType type in GetTypeConstraints())
 			{
 				if (!type.IsInterface)
 				{

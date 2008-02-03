@@ -815,6 +815,31 @@ namespace Boo.Lang.Compiler
 			return new CompilerError("BCE0152", SafeLexicalInfo(node), memberName);
 		}
 
+		public static CompilerError StructAndClassConstraintsConflict(GenericParameterDeclaration gpd)
+		{
+			return new CompilerError("BCE0153", SafeLexicalInfo(gpd), gpd.Name);
+		}
+
+		public static CompilerError StructAndConstructorConstraintsConflict(GenericParameterDeclaration gpd)
+		{
+			return new CompilerError("BCE0154", SafeLexicalInfo(gpd), gpd.Name);
+		}
+
+		public static CompilerError TypeConstraintConflictsWithSpecialConstraint(GenericParameterDeclaration gpd, TypeReference type, string constraint)
+		{
+			return new CompilerError("BCE0155", SafeLexicalInfo(type), gpd.Name, type, constraint);
+		}
+
+		public static CompilerError InvalidTypeConstraint(GenericParameterDeclaration gpd, TypeReference type)
+		{
+			return new CompilerError("BCE0156", SafeLexicalInfo(type), gpd.Name, type);
+		}
+
+		public static CompilerError MultipleBaseTypeConstraints(GenericParameterDeclaration gpd, TypeReference type, TypeReference other)
+		{
+			return new CompilerError("BCE0157", SafeLexicalInfo(type), gpd.Name, type, other);
+		}
+
 		public static string ToStringList(System.Collections.IEnumerable names)
 		{
 			StringBuilder builder = new StringBuilder();

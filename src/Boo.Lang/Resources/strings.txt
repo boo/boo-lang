@@ -152,6 +152,11 @@ BCE0149=The type '{0}' must derive from '{2}' in order to substitute the generic
 BCE0150='final' cannot be applied to interface definitions.
 BCE0151='static' cannot be applied to interface or struct definitions.
 BCE0152=Constructors cannot be marked virtual, abstract, or override: '{0}'
+BCE0153=Generic parameter '{0}' cannot have both a reference type constraint and a value type constraint.
+BCE0154=Generic parameter '{0}' cannot have both a value type constraint and a default constructor constraint.
+BCE0155=Type constraint '{1}' cannot be used together with the '{2}' constraint on generic parameter '{0}'.
+BCE0156=Type '{1}' must be an interface type or a non-final class type to be used as a type constraint on generic parameter '{0}'.
+BCE0157=Type constraint '{1}' on generic parameter '{0}' conflicts with type constraint '{2}'. At most one non-interface type constraint can be specified for a generic parameter.
 
 ;Compiler warnings
 BCW0000=WARNING: {0}

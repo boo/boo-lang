@@ -7,7 +7,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 		int GenericParameterPosition { get; }
 
 		bool MustHaveDefaultConstructor { get; }
-		IType[] GetBaseTypeConstraints();
+		IType[] GetTypeConstraints();
 		Variance Variance { get; }
 	}
 }

@@ -312,6 +312,7 @@
     <File name="Steps/BindTypeDefinitions.cs" buildaction="Compile" subtype="Code" />
     <File name="Steps/BindTypeMembers.cs" buildaction="Compile" subtype="Code" />
     <File name="Steps/BranchChecking.cs" buildaction="Compile" subtype="Code" />
+    <File name="Steps/CheckGenericConstraints.cs" buildaction="Compile" subtype="Code" />
     <File name="Steps/CheckIdentifiers.cs" buildaction="Compile" subtype="Code" />
     <File name="Steps/CheckMemberNames.cs" buildaction="Compile" subtype="Code" />
     <File name="Steps/CheckMembersProtectionLevel.cs" buildaction="Compile" subtype="Code" />
@@ -327,6 +328,7 @@
     <File name="Steps/ForeignReferenceCollector.cs" buildaction="Compile" subtype="Code" />
     <File name="Steps/GeneratorExpressionProcessor.cs" buildaction="Compile" subtype="Code" />
     <File name="Steps/GeneratorMethodProcessor.cs" buildaction="Compile" subtype="Code" />
+    <File name="Steps/GenericConstraintsValidator.cs" buildaction="Compile" subtype="Code" />
     <File name="Steps/GotoOnTopLevelContinue.cs" buildaction="Compile" subtype="Code" />
     <File name="Steps/ImplementICallableOnCallableDefinitions.cs" buildaction="Compile" subtype="Code" />
     <File name="Steps/InitializeNameResolutionService.cs" buildaction="Compile" subtype="Code" />

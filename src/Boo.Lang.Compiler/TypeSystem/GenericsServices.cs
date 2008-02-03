@@ -340,7 +340,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 			}
 
 			// Check base type constraints
-			IType[] baseTypes = parameter.GetBaseTypeConstraints();
+			IType[] baseTypes = parameter.GetTypeConstraints();
 			if (baseTypes != null)
 			{
 				foreach (IType baseType in baseTypes)

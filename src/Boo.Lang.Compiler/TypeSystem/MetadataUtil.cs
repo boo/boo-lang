@@ -29,7 +29,9 @@
 
 using System;
 using System.Reflection;
+using System.Collections.Generic;
 using Boo.Lang.Compiler.Ast;
+using Boo.Lang.Compiler.Util;
 
 namespace Boo.Lang.Compiler.TypeSystem
 {
@@ -52,6 +54,45 @@ namespace Boo.Lang.Compiler.TypeSystem
 				if (constructor.DeclaringType == attributeType) return true;
 			}
 			return false;
+		}
+
+		public static Boo.Lang.Compiler.Ast.Attribute[] GetCustomAttributes(TypeMember member, IType attributeType)
+		{
+			List<Boo.Lang.Compiler.Ast.Attribute> attrs = new List<Boo.Lang.Compiler.Ast.Attribute>();
+			foreach (Boo.Lang.Compiler.Ast.Attribute attr in member.Attributes)
+			{
+				IEntity entity = TypeSystemServices.GetEntity(attr);
+				if (entity == attributeType) { // pre bound attribute
+					attrs.Add(attr);
+					continue;
+				}
+				IConstructor constructor = entity as IConstructor;
+				if (null == constructor) continue;
+				if (constructor.DeclaringType == attributeType) {
+					attrs.Add(attr);
+					continue;
+				}
+			}
+			return attrs.ToArray();
+		}
+
+		private static readonly MemberInfo[] NoExtensions = new MemberInfo[0];
+
+		public static MemberInfo[] GetClrExtensions(Type type, string memberName)
+		{	
+			if (!HasClrExtensions()) return NoExtensions;
+			if (!IsAttributeDefined(type, Types.ClrExtensionAttribute)) return NoExtensions;
+			return type.FindMembers(MemberTypes.Method, BindingFlags.Public | BindingFlags.Static, ClrExtensionFilter, memberName);
+		}
+
+		public static bool HasClrExtensions()
+		{
+			return Types.ClrExtensionAttribute != null;
+		}
+
+		private static bool ClrExtensionFilter(MemberInfo member, object memberName)
+		{
+			return TypeUtilities.TypeName(member.Name).Equals(memberName) && IsAttributeDefined(member, Types.ClrExtensionAttribute);
 		}
 
 		public static bool IsAttributeDefined(MemberInfo member, Type attributeType)

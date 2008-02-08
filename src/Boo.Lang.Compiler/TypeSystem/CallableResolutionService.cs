@@ -27,6 +27,7 @@
 #endregion
 
 using System;
+
 using Boo.Lang.Compiler.Ast;
 
 namespace Boo.Lang.Compiler.TypeSystem
@@ -36,13 +37,14 @@ namespace Boo.Lang.Compiler.TypeSystem
 	/// </summary>
 	public class CallableResolutionService : AbstractCompilerComponent
 	{
-		private const int CallableExactMatchScore = 9;
-		private const int CallableUpCastScore = 8;
-		private const int CallableImplicitConversionScore = 7;
-		private const int ExactMatchScore = 7;
-		private const int UpCastScore = 6;
+		private const int CallableExactMatchScore = 10;
+		private const int CallableUpCastScore = 9;
+		private const int CallableImplicitConversionScore = 8;
+		private const int ExactMatchScore = 8;
+		private const int UpCastScore = 7;
+		private const int WideningPromotion = 6;
 		private const int ImplicitConversionScore = 5;
-		private const int PromotionScore = 4;
+		private const int NarrowingPromotion = 4;
 		private const int DowncastScore = 3;
 
 		private List _candidates = new List();
@@ -55,10 +57,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 
 		public List ValidCandidates
 		{
-			get
-			{
-				return _candidates;
-			}
+			get { return _candidates; }
 		}
 
 		public override void Dispose()
@@ -202,28 +201,50 @@ namespace Boo.Lang.Compiler.TypeSystem
 			FindApplicableCandidates(candidates);
 			if (ValidCandidates.Count == 0) return null;
 			if (ValidCandidates.Count == 1) return ((Candidate)ValidCandidates[0]).Method;
+
+			List dataPreserving = ValidCandidates.Collect(DoesNotRequireConversions);
+			if (dataPreserving.Count > 0)
+			{
+				if (dataPreserving.Count == 1) return ((Candidate)dataPreserving[0]).Method;
+				IEntity found = BestMethod(dataPreserving);
+				if (null != found) return found;
+			}
 			return BestCandidate();
+		}
+
+		private static bool DoesNotRequireConversions(object candidate)
+		{
+			return !Array.Exists(((Candidate) candidate).ArgumentScores, RequiresConversion);
+		}
+
+		private static bool RequiresConversion(int score)
+		{
+			return score < WideningPromotion;
 		}
 
 		private IEntity BestCandidate()
 		{
-			_candidates.Sort(new Comparer(BetterCandidate));
+			return BestMethod(_candidates);
+		}
 
-			if (BetterCandidate(_candidates[-1], _candidates[-2]) == 0)
+		private IEntity BestMethod(List candidates)
+		{
+			candidates.Sort(new Comparer(BetterCandidate));
+
+			if (BetterCandidate(candidates[-1], candidates[-2]) == 0)
 			{
-				object pivot = _candidates[-2];
+				object pivot = candidates[-2];
 
-				_candidates.RemoveAll(delegate(object item)
-				                      	{	
-				                      		return 0 != BetterCandidate(item, pivot);
-				                      	});
+				candidates.RemoveAll(delegate(object item)
+				                     	{	
+				                     		return 0 != BetterCandidate(item, pivot);
+				                     	});
 				// Ambiguous match
 				return null;
 			}
 
 			// SUCCESS: _candidates[-1] is the winner
-			return ((Candidate)_candidates[-1]).Method;
-
+			return ((Candidate)candidates[-1]).Method;
 		}
 
 		private int BetterCandidate(object lhs, object rhs)
@@ -321,21 +342,24 @@ namespace Boo.Lang.Compiler.TypeSystem
 				return result;
 			}
 
-//			Console.WriteLine("{0} tied to {1}", c1, c2);
-
 			// --- Tie breaking mode! ---
 
 			// Non-generic methods are better than generic ones
-//			IGenericMethodInfo generic1 = c1.Method.GenericMethodInfo;
-//			IGenericMethodInfo generic2 = c2.Method.GenericMethodInfo;
-//			if (generic1 == null && generic2 != null)
-//			{
-//				return 1;
-//			}
-//			else if (generic1 != null && generic2 == null)
-//			{
-//				return -1;
-//			}
+
+			// Commented out since current syntax distinguishes between invoking
+			// a generic method and a non generic one
+			/*
+			IGenericMethodInfo generic1 = c1.Method.GenericMethodInfo;
+			IGenericMethodInfo generic2 = c2.Method.GenericMethodInfo;
+			if (generic1 == null && generic2 != null)
+			{
+				return 1;
+			}
+			else if (generic1 != null && generic2 == null)
+			{
+				return -1;
+			}
+			*/
 
 			// Non-expanded methods are better than expanded ones
 			if (!c1.Expanded && c2.Expanded)
@@ -363,13 +387,24 @@ namespace Boo.Lang.Compiler.TypeSystem
 			{
 				if (c1.ArgumentScores[i] <= DowncastScore) continue;
 
-				int better = MoreSpecific(c1.Parameters[i].Type, c2.Parameters[i].Type);
-				if (better == 0) continue;
+				// Select the most specific of the parameters' types, 
+				// taking into account generic mapped parameters
+				int better = MoreSpecific(
+					GetParameterTypeTemplate(c1, i), 
+					GetParameterTypeTemplate(c2, i));
 
+				// Skip parameters that are the same for both candidates
+				if (better == 0)
+				{
+					continue;
+				}
+
+				// Keep the first result that is not a tie
 				if (result == 0)
 				{
 					result = better;
 				}
+				// If a further result contradicts the initial result, neither candidate is more specific					
 				else if (result != better)
 				{
 					return 0;
@@ -378,21 +413,40 @@ namespace Boo.Lang.Compiler.TypeSystem
 			return result;
 		}
 
+		private IType GetParameterTypeTemplate(Candidate candidate, int position)
+		{
+			// Get the method this candidate represents, or its generic template
+			IMethod method = candidate.Method;
+			if (candidate.Method.DeclaringType.ConstructedInfo != null)
+			{
+				method = candidate.Method.DeclaringType.ConstructedInfo.GetMethodTemplate(method);
+			}
+
+			// If the parameter is the varargs parameter, use its element type
+			IParameter[] parameters = method.GetParameters();
+			if (candidate.Expanded && position >= parameters.Length)
+			{
+				return parameters[parameters.Length - 1].Type.GetElementType();
+			}
+			
+			// Otherwise use the parameter's original type
+			return parameters[position].Type;
+		}
+
 		private int MoreSpecific(IType t1, IType t2)
 		{
-			if (t1.IsArray && t2.IsArray)
+			// Dive into array types and ref types
+			if (t1.IsArray && t2.IsArray || t1.IsByRef && t2.IsByRef)
 			{
 				return MoreSpecific(t1.GetElementType(), t2.GetElementType());
 			}
+
+			// The less-generic type is more specific
+			int result = GenericsServices.GetTypeGenerity(t2) - GenericsServices.GetTypeGenerity(t1);
+			if (result != 0) return result;
+
+			// If both types have the same genrity, the deeper-nested type is more specific
 			return GetLogicalTypeDepth(t1) - GetLogicalTypeDepth(t2);
-
-			// TODO: if one of the types was once a generic parameter, the other
-			// one is the more specific
-
-			// TODO: recursively examine constructed types
-
-			// Neither type is more specific
-			return 0;
 		}
 
 		private void FindApplicableCandidates(IEntity[] candidates)
@@ -494,13 +548,23 @@ namespace Boo.Lang.Compiler.TypeSystem
 			}
 			else if (TypeSystemServices.CanBeReachedByPromotion(parameterType, argumentType))
 			{
-				return PromotionScore;
+				if (IsWideningPromotion(parameterType, argumentType)) return WideningPromotion;
+				return NarrowingPromotion;
 			}
 			else if (TypeSystemServices.CanBeReachedByDowncast(parameterType, argumentType))
 			{
 				return DowncastScore;
 			}
 			return -1;
+		}
+
+		private bool IsWideningPromotion(IType paramType, IType argumentType)
+		{
+			ExternalType expected = paramType as ExternalType;
+			if (null == expected) return false;
+			ExternalType actual = argumentType as ExternalType;
+			if (null == actual) return false;
+			return Boo.Lang.Runtime.NumericTypes.IsWideningPromotion(expected.ActualType, actual.ActualType);
 		}
 
 		private static int CalculateCallableScore(ICallableType parameterType, ICallableType argType)

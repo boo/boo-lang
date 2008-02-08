@@ -26,140 +26,79 @@
 // THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #endregion
 
+using System;
+
 namespace Boo.Lang.Compiler.TypeSystem
 {	
-	public class ExternalField : IField
+	public class ExternalField : ExternalEntity<System.Reflection.FieldInfo>, IField
 	{
-		protected TypeSystemServices _typeSystemServices;
-		
-		System.Reflection.FieldInfo _field;
-		
-		public ExternalField(TypeSystemServices tagManager, System.Reflection.FieldInfo field)
-		{
-			_typeSystemServices = tagManager;
-			_field = field;
+		public ExternalField(TypeSystemServices typeSystemServices, System.Reflection.FieldInfo field) : base(typeSystemServices, field)
+		{	
 		}
 		
 		public virtual IType DeclaringType
 		{
-			get
-			{
-				return _typeSystemServices.Map(_field.DeclaringType);
-			}
-		}
-		
-		public string Name
-		{
-			get
-			{
-				return _field.Name;
-			}
-		}
-		
-		public string FullName
-		{
-			get
-			{
-				return DeclaringType.FullName + "." + _field.Name;
-			}
+			get { return _typeSystemServices.Map(_memberInfo.DeclaringType); }
 		}
 		
 		public bool IsPublic
 		{
-			get
-			{
-				return _field.IsPublic;
-			}
+			get { return _memberInfo.IsPublic; }
 		}
 		
 		public bool IsProtected
 		{
-			get
-			{
-				return _field.IsFamily || _field.IsFamilyOrAssembly;
-			}
+			get { return _memberInfo.IsFamily || _memberInfo.IsFamilyOrAssembly; }
 		}
 
 		public bool IsPrivate
 		{
-			get
-			{
-				return _field.IsPrivate;
-			}
+			get { return _memberInfo.IsPrivate; }
 		}
 
 		public bool IsInternal
 		{
-			get
-			{
-				return _field.IsAssembly;
-			}
+			get { return _memberInfo.IsAssembly; }
 		}
 		
 		public bool IsStatic
 		{
-			get
-			{
-				return _field.IsStatic;
-			}
+			get { return _memberInfo.IsStatic; }
 		}
 		
 		public bool IsLiteral
 		{
-			get
-			{
-				return _field.IsLiteral;
-			}
+			get { return _memberInfo.IsLiteral; }
 		}
 		
 		public bool IsInitOnly
 		{
-			get
-			{
-				return _field.IsInitOnly;
-			}
+			get { return _memberInfo.IsInitOnly; }
 		}
 		
-		public EntityType EntityType
+		override public EntityType EntityType
 		{
-			get
-			{
-				return EntityType.Field;
-			}
+			get { return EntityType.Field; }
 		}
 		
 		public virtual IType Type
 		{
-			get
-			{
-				return _typeSystemServices.Map(_field.FieldType);
-			}
+			get { return _typeSystemServices.Map(_memberInfo.FieldType); }
 		}
 		
 		public object StaticValue
 		{
-			get
-			{
-				return _field.GetValue(null);
-			}
+			get { return _memberInfo.GetValue(null); }
 		}
 		
 		public System.Reflection.FieldInfo FieldInfo
 		{
-			get
-			{
-				return _field;
-			}
+			get { return _memberInfo; }
 		}
 		
-		override public string ToString()
+		protected override Type MemberType
 		{
-			return _field.ToString();
-		}
-
-		public bool IsDuckTyped
-		{
-			get { return false; }
+			get { return _memberInfo.FieldType; }
 		}
 	}
 }

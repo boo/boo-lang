@@ -31,7 +31,6 @@ namespace Boo.Lang.Useful.Attributes
 
 import Boo.Lang.Compiler
 import Boo.Lang.Compiler.Ast
-import Boo.Lang.Compiler.Pipelines
 import Boo.Lang.Compiler.Steps
 
 class NoTrace(AbstractAstAttribute):
@@ -50,7 +49,7 @@ class TraceMethodCallsAttribute(AbstractAstAttribute):
 	_traceMethod as ReferenceExpression
 	
 	def constructor():
-		self(ast { System.Console.WriteLine });
+		self([| System.Console.WriteLine |]);
 		
 	def constructor(traceMethod as ReferenceExpression):
 		_traceMethod = traceMethod
@@ -63,7 +62,7 @@ class TraceMethodCallsAttribute(AbstractAstAttribute):
 		[getter(IsGenerator)]
 		_isGenerator = false
 		
-		override def OnCallableBlockExpression(node as CallableBlockExpression):
+		override def OnBlockExpression(node as BlockExpression):
 			pass
 		
 		override def OnYieldStatement(node as YieldStatement):
@@ -102,12 +101,12 @@ class TraceMethodCallsAttribute(AbstractAstAttribute):
 			if IsGenerator(method):
 				return
 				
-			stmt = TryStatement()
-			stmt.ProtectedBlock = method.Body
-			stmt.EnsureBlock = Block()
-			stmt.EnsureBlock.Add(TraceCall("TRACE: Leaving ${fullName}"))
-			method.Body = Block()
-			method.Body.Add(stmt)
+			method.Body = [|
+				try:
+					$(method.Body)
+				ensure:
+					$(TraceCall("TRACE: Leaving ${fullName}"))
+			|].ToBlock()
 			
 		def IsGenerator(method as Method):
 			visitor = IsGeneratorVisitor()
@@ -120,7 +119,5 @@ class TraceMethodCallsAttribute(AbstractAstAttribute):
 			return true
 			
 		def TraceCall(msg as string):
-			mie = MethodInvocationExpression(Target: _traceMethod.CloneNode())
-			mie.Arguments.Add(StringLiteralExpression(msg))
-			return mie
+			return [| $_traceMethod($msg) |]
 			

@@ -88,8 +88,8 @@ namespace Boo.Lang.Compiler.Steps
 		{
 			OnMethod(node);
 		}
-		
-		override public void OnCallableBlockExpression(CallableBlockExpression node)
+
+		override public void OnBlockExpression(BlockExpression node)
 		{
 			// ignore closure's body since it will be visited
 			// through the closure's newly created method
@@ -569,6 +569,7 @@ namespace Boo.Lang.Compiler.Steps
 			// __end = __arr.Length
 			body.Add(
 				CodeBuilder.CreateAssignment(
+					node.Iterator.LexicalInfo,
 					endRef,
 					CodeBuilder.CreateMethodInvocation(
 							arrayRef,
@@ -630,7 +631,7 @@ namespace Boo.Lang.Compiler.Steps
 
 		private LabelStatement CreateUpdateLabel(ForStatement node)
 		{
-			return new LabelStatement(LexicalInfo.Empty, "___" + _context.AllocIndex());
+			return new LabelStatement(LexicalInfo.Empty, "$label$" + _context.AllocIndex());
 		}
 
 		private static SlicingExpression CreateRawArraySlicing(ReferenceExpression arrayRef, Expression numRef, IType elementType)

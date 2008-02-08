@@ -28,48 +28,46 @@
 
 using System;
 using System.Reflection;
-using System.Collections.Generic;
 using System.Reflection.Emit;
 
 namespace Boo.Lang.Runtime
 {
-	internal delegate object MethodDispatcher(object target, object[] args);
+	public delegate object Dispatcher(object target, object[] args);
 
-	internal class MethodDispatcherEmitter
+	public class MethodDispatcherEmitter : DispatcherEmitter
 	{
-		private readonly CandidateMethod _found;
-		private readonly Type[] _argumentTypes;
-		private readonly DynamicMethod _method;
-		private readonly ILGenerator _il;
+		protected readonly CandidateMethod _found;
+		protected readonly Type[] _argumentTypes;
 
-		public MethodDispatcherEmitter(Type owner, CandidateMethod found, Type[] argumentTypes)
+		public MethodDispatcherEmitter(CandidateMethod found, params  Type[] argumentTypes) : this(found.Method.DeclaringType, found, argumentTypes)
+		{	
+		}
+
+		public MethodDispatcherEmitter(Type owner, CandidateMethod found, Type[] argumentTypes) : base(owner, found.Method.Name + "$" + Builtins.join(argumentTypes, "$"))
 		{
 			_found = found;
 			_argumentTypes = argumentTypes;
-			_method = new DynamicMethod(string.Empty, typeof(object), new Type[] { typeof(object), typeof(object[]) }, owner);
-			_il = _method.GetILGenerator();
 		}
 
-		public MethodDispatcher Emit()
-		{	
+		protected override void EmitMethodBody()
+		{
+			EmitInvocation();
+			EmitMethodReturn();
+		}
+
+		protected void EmitInvocation()
+		{
 			EmitLoadTargetObject();
 			EmitMethodArguments();
 			EmitMethodCall();
-			EmitMethodReturn();
-			return CreateMethodDispatcher();
 		}
 
-		private MethodDispatcher CreateMethodDispatcher()
-		{
-			return (MethodDispatcher)_method.CreateDelegate(typeof(MethodDispatcher));
-		}
-
-		private void EmitMethodCall()
+		protected void EmitMethodCall()
 		{
 			_il.Emit(_found.Method.IsStatic ? OpCodes.Call : OpCodes.Callvirt, _found.Method);
 		}
 
-		private void EmitMethodArguments()
+		protected void EmitMethodArguments()
 		{
 			EmitFixedMethodArguments();
 			if (_found.VarArgs) EmitVarArgsMethodArguments();
@@ -77,45 +75,51 @@ namespace Boo.Lang.Runtime
 
 		private void EmitFixedMethodArguments()
 		{
-			for (int i = 0; i < _found.MinimumArgumentCount; ++i)
+			int offset = FixedArgumentOffset;
+			int count = MinimumArgumentCount();
+			for (int i = 0; i < count; ++i)
 			{
-				Type paramType = _found.GetParameterType(i);
-
+				Type paramType = _found.GetParameterType(i + offset);
 				EmitMethodArgument(i, paramType);
 			}
 		}
 
+		protected virtual int FixedArgumentOffset
+		{
+			get { return 0; }
+		}
+
 		private void EmitVarArgsMethodArguments()
 		{
-			int varArgCount = _argumentTypes.Length - _found.MinimumArgumentCount;
+			int varArgCount = _argumentTypes.Length - MinimumArgumentCount();
 			Type varArgType = _found.VarArgsParameterType;
 			OpCode storeOpCode = GetStoreElementOpCode(varArgType);
 			_il.Emit(OpCodes.Ldc_I4, varArgCount);
 			_il.Emit(OpCodes.Newarr, varArgType);
 			for (int i = 0; i < varArgCount; ++i)
 			{
-				_il.Emit(OpCodes.Dup);
+				Dup();
 				_il.Emit(OpCodes.Ldc_I4, i);
 				if (IsStobj(storeOpCode))
 				{
 					_il.Emit(OpCodes.Ldelema, varArgType);
-					EmitMethodArgument(_found.MinimumArgumentCount + i, varArgType);
+					EmitMethodArgument(MinimumArgumentCount() + i, varArgType);
 					_il.Emit(storeOpCode, varArgType);
 				}
 				else
 				{
-					EmitMethodArgument(_found.MinimumArgumentCount + i, varArgType);
+					EmitMethodArgument(MinimumArgumentCount() + i, varArgType);
 					_il.Emit(storeOpCode);
 				}
 			}
 		}
-		
-		bool IsStobj(OpCode code)
+
+		private int MinimumArgumentCount()
 		{
-			return OpCodes.Stobj.Value == code.Value;
+			return _found.MinimumArgumentCount - FixedArgumentOffset;
 		}
 
-		OpCode GetStoreElementOpCode(Type type)
+		static OpCode GetStoreElementOpCode(Type type)
 		{
 			if (type.IsValueType)
 			{
@@ -141,79 +145,26 @@ namespace Boo.Lang.Runtime
 			return OpCodes.Stelem_Ref;
 		}
 
-		private void EmitMethodArgument(int argumentIndex, Type paramType)
+		protected void EmitMethodArgument(int argumentIndex, Type expectedType)
 		{
-			_il.Emit(OpCodes.Ldarg_1);
-			_il.Emit(OpCodes.Ldc_I4, argumentIndex);
-			_il.Emit(OpCodes.Ldelem_Ref);
-
-			switch (_found.ArgumentScores[argumentIndex])
-			{
-				case CandidateMethod.PromotionScore:
-					_il.Emit(OpCodes.Castclass, typeof(IConvertible));
-					_il.Emit(OpCodes.Ldnull);
-					_il.Emit(OpCodes.Callvirt, GetPromotionMethod(paramType));
-					break;
-				case CandidateMethod.ImplicitConversionScore:
-					EmitCastOrUnbox(_argumentTypes[argumentIndex]);
-					_il.Emit(OpCodes.Call, _found.GetArgumentConversion(argumentIndex));
-					break;
-				default:
-					EmitCastOrUnbox(paramType);
-					break;
-			}
+			EmitArgArrayElement(argumentIndex);
+			EmitCoercion(argumentIndex, expectedType, _found.ArgumentScores[argumentIndex]);
 		}
 
-		private void EmitLoadTargetObject()
+		private void EmitCoercion(int argumentIndex, Type expectedType, int score)
+		{
+			EmitCoercion(_argumentTypes[argumentIndex], expectedType, score);
+		}
+
+		protected virtual void EmitLoadTargetObject()
 		{
 			if (_found.Method.IsStatic) return;
-
-			_il.Emit(OpCodes.Ldarg_0); // target object is the first argument
-
-			Type declaringType = _found.Method.DeclaringType;
-			if (declaringType.IsValueType) 
-			{
-				_il.Emit(OpCodes.Unbox, declaringType);
-			}
-			else
-			{
-				_il.Emit(OpCodes.Castclass, declaringType);
-			}
+			EmitLoadTargetObject(_found.Method.DeclaringType);
 		}
 
 		private void EmitMethodReturn()
 		{
-			Type returnType = _found.Method.ReturnType;
-			if (returnType == typeof(void))
-			{
-				_il.Emit(OpCodes.Ldnull);
-			}
-			else
-			{
-				if (returnType.IsValueType)
-				{
-					_il.Emit(OpCodes.Box, returnType);
-				}
-			}
-			_il.Emit(OpCodes.Ret);
-		}
-
-		private void EmitCastOrUnbox(Type type)
-		{
-			if (type.IsValueType)
-			{
-				_il.Emit(OpCodes.Unbox, type);
-				_il.Emit(OpCodes.Ldobj, type);
-			}
-			else
-			{
-				_il.Emit(OpCodes.Castclass, type);
-			}
-		}
-
-		private MethodInfo GetPromotionMethod(Type type)
-		{
-			return typeof(IConvertible).GetMethod("To" + Type.GetTypeCode(type));
+			EmitReturn(_found.Method.ReturnType);
 		}
 	}
 }

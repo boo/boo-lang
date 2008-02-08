@@ -1,24 +1,27 @@
 """
 [System.Runtime.CompilerServices.CompilerGlobalScopeAttribute]
-public final transient class Numericpromo0Module(System.Object):
+public final transient class Numericpromo0Module(object):
 
-	public static def d() as System.Double:
-		return 3.0
-		return 1L
+	public static def d(dummy as int) as double:
+		if dummy == 0:
+			return 3.0
+		if dummy == 1:
+			return 1L
 		return 2
 
-	public static def l() as System.Int64:
-		return 1
+	public static def l(dummy as int) as long:
+		if dummy == 0:
+			return 1
 		return 2L
 
 	private def constructor():
 		super()
 """
-def d():
-	return 3.0
-	return 1L
+def d(dummy as int):
+	return 3.0 if dummy == 0
+	return 1L if dummy == 1
 	return 2
-	
-def l():
-	return 1
+
+def l(dummy as int):
+	return 1 if dummy == 0
 	return 2L

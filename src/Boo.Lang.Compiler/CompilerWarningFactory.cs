@@ -103,5 +103,31 @@ namespace Boo.Lang.Compiler
 		{
 			return new CompilerWarning("BCW0011", node.LexicalInfo, typeName, memberName);
 		}
+		
+		public static CompilerWarning Obsolete(Node node, string memberName, string message)
+		{
+			return new CompilerWarning("BCW0012", node.LexicalInfo, memberName, message);
+		}
+		
+		public static CompilerWarning StaticClassMemberRedundantlyMarkedStatic(Node node, string typeName, string memberName)
+		{
+			return new CompilerWarning("BCW0013", node.LexicalInfo, typeName, memberName);
+		}
+
+		public static CompilerWarning PrivateMemberNeverUsed(Node node)
+		{
+			return new CompilerWarning("BCW0014", node.LexicalInfo, node.NodeType.ToString().ToLower(), (node as TypeMember).FullName);
+		}
+
+		public static CompilerWarning UnreachableCodeDetected(Node node)
+		{
+			return new CompilerWarning("BCW0015", node.LexicalInfo);
+		}
+
+		public static CompilerWarning NamespaceNeverUsed(Import node)
+		{
+			return new CompilerWarning("BCW0016", node.LexicalInfo, node.Namespace);
+		}
+
 	}
 }

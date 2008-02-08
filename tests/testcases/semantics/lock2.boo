@@ -1,10 +1,10 @@
 """
 [System.Reflection.DefaultMemberAttribute('Item')]
-public class LockedList(System.Object):
+public class LockedList(object):
 
 	protected _list as Boo.Lang.List
 
-	public Item[index as System.Int32] as System.Object:
+	public Item[index as int] as object:
 		public get:
 			__monitor1__ = self._list
 			System.Threading.Monitor.Enter(__monitor1__)
@@ -15,9 +15,9 @@ public class LockedList(System.Object):
 
 	public def constructor():
 		super()
-		self.___initializer()
+		self.$initializer$()
 
-	def ___initializer() as System.Void:
+	def $initializer$() as void:
 		self._list = []
 """
 class LockedList:

@@ -17,8 +17,8 @@ BCE0014=AssemblyBuilder was not correctly set up.
 BCE0015=Node '{0}' has not been correctly processed.
 BCE0016=No overload of the method '{0}' takes '{1}' parameter(s).
 BCE0017=The best overload for the method '{0}' is not compatible with the argument list '{1}'.
-BCE0018=The name '{0}' does not denote a valid type.
-BCE0019='{0}' is not a member of '{1}'.
+BCE0018=The name '{0}' does not denote a valid type. {1}
+BCE0019='{0}' is not a member of '{1}'. {2}
 BCE0020=An instance of type '{0}' is required to access non static member '{1}'.
 BCE0021=Namespace '{0}' not found, maybe you forgot to add an assembly reference?
 BCE0022=Cannot convert '{1}' to '{0}'.
@@ -38,7 +38,7 @@ BCE0035='{0}' conflicts with inherited member '{1}'.
 BCE0036=typeof must be used with a type reference as its single argument.
 BCE0037=Unknown macro: '{0}'.
 BCE0038='{0}' is not a valid macro.
-BCE0039='{0}' is internal. Only external macros can be expanded.
+BCE0039=Internal macro '{0}' could not be compiled. Errors were reported.
 BCE0040=Generic error.
 BCE0041=Failed to load assembly '{0}'.
 BCE0042=Error reading from '{0}': '{1}'.
@@ -63,7 +63,7 @@ BCE0060='{0}': no suitable method found to override.
 BCE0061='{0}' is not an override.
 BCE0062=Could not infer the return type for the method '{0}'.
 BCE0063=No enclosing loop out of which to break or continue.
-BCE0064=No attribute with the name '{0}' or '{0}Attribute' was found (attribute names are case insensitive).
+BCE0064=No attribute with the name '{0}' or '{0}Attribute' was found (attribute names are case insensitive). {1}
 BCE0065=Cannot iterate over expression of type '{0}'.
 BCE0066=The attribute '{0}' can only be applied to '{1}' nodes.
 BCE0067=There is already a local variable with the name '{0}'.
@@ -127,7 +127,7 @@ BCE0124=Invalid field type '{0}'.
 BCE0125=Invalid declaration type '{0}'.
 BCE0126=It is not possible to evaluate an expression of type '{0}'.
 BCE0127=A ref or out argument must be an lvalue: '{0}'
-BCE0128='try' block must be followed by either 'except' or 'ensure'.
+BCE0128='try' block must be followed by at least one 'except' block or either a 'failure' or 'ensure' block.
 BCE0129=Invalid extension definition, only static methods are allowed.
 BCE0130='partial' can only be applied to class definitions.
 BCE0131=Invalid combination of modifiers on '{0}': {1}.
@@ -135,7 +135,7 @@ BCE0132=The namespace '{0}' already contains a definition for '{1}'.
 BCE0133=Invalid signature for Main. It should be one of: 'Main() as void', 'Main() as int', 'Main(argv as (string)) as void', 'Main(argv as (string)) as int'.
 BCE0134='{0}' cannot return values.
 BCE0135=Invalid name: '{0}'
-BCE0136=Use a colon(:) instead of equal sign(=) for named parameters.
+BCE0136=Use a colon (:) instead of equal sign (=) for named parameters.
 BCE0137=Property '{0}' is write only.
 BCE0138='{0}' is not a generic definition.
 BCE0139='{0}' requires '{1}' arguments.
@@ -143,6 +143,20 @@ BCE0140=Yield statement type '{0}' does not match generator element type '{1}'.
 BCE0141=Duplicate parameter name '{0}' in '{1}'.
 BCE0142=Cannot bind [default] attribute to value type parameter '{0}' in '{1}'.
 BCE0143=Cannot return from an ensure block.
+BCE0144='{0}' is obsolete. {1}
+BCE0145=Cannot catch type '{0}'; 'except' blocks can only catch exceptions derived from 'System.Exception'. To catch non-CLS compliant exceptions, use a default exception handler or catch 'System.Runtime.CompilerServices.RuntimeWrappedException'.
+BCE0146=The type '{0}' must be a reference type in order to substitute the generic parameter '{1}'. 
+BCE0147=The type '{0}' must be a value type in order to substitute the generic parameter '{1}'. 
+BCE0148=The type '{0}' must have a public default constructor in order to substitute the generic parameter '{1}'.
+BCE0149=The type '{0}' must derive from '{2}' in order to substitute the generic parameter '{1}'. 
+BCE0150='final' cannot be applied to interface definitions.
+BCE0151='static' cannot be applied to interface or struct definitions.
+BCE0152=Constructors cannot be marked virtual, abstract, or override: '{0}'.
+BCE0153='{0}' can be applied on one of these targets only : {1}.
+BCE0154='{0}' cannot be applied multiple times on the same target.
+BCE0155=Instantiating generic parameters is not yet supported.
+;BCE0155=Cannot create an instance of the variable type '{0}' because it doesn't have a default constructor constraint.
+BCE0156=Event '{0}' can only be invoked from within the class it was declared ('{1}').
 
 ;Compiler warnings
 BCW0000=WARNING: {0}
@@ -157,6 +171,11 @@ BCW0008=WARNING: Duplicate namespace: '{0}'.
 BCW0009=WARNING: The -keyfile option will override your AssemblyKeyFile attribute.
 BCW0010=WARNING: The -keycontainer option will override your AssemblyKeyName attribute.
 BCW0011=WARNING: Type '{0}' does not provide an implementation for '{1}', a stub has been created.
+BCW0012=WARNING: '{0}' is obsolete. {1}
+BCW0013=WARNING: '{1}' on static type '{0}' is redundantly marked static. All members of static types are automatically assumed to be static.
+BCW0014=WARNING: Private {0} '{1}' is never used.
+BCW0015=WARNING: Unreachable code detected.
+BCW0016=WARNING: Namespace '{0}' is never used.
 
 ; BooC Command Line Errors
 BCE0500=Response file '{0}' listed more than once.
@@ -188,6 +207,7 @@ BooC.NoSystemPath=Cannot find path to mscorlib.
 BooC.BadLibPath=Not a valid directory for -lib argument: '{0}'
 BooC.PkgConfigNotFound=Cannot execute pkg-config, is it in your PATH ?
 BooC.PkgConfigReportedErrors=pkg-config returned errors: {0}
+BooC.DidYouMean=Did you mean '{0}' ?
 
 ;Boo.Lang
 ListWasModified=The list was modified. 

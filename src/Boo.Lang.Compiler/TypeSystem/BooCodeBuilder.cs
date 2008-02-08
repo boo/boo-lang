@@ -68,12 +68,15 @@ namespace Boo.Lang.Compiler.TypeSystem
 		
 		public Statement CreateFieldAssignment(LexicalInfo lexicalInfo, IField fieldEntity, Expression initializer)
 		{
-			return new ExpressionStatement(
-				CreateAssignment(initializer.LexicalInfo,
-					CreateReference(fieldEntity),
-					initializer));
+			return new ExpressionStatement(lexicalInfo,
+				CreateFieldAssignmentExpression(fieldEntity, initializer));
 		}
-		
+
+		public Expression CreateFieldAssignmentExpression(IField fieldEntity, Expression initializer)
+		{
+			return CreateAssignment(initializer.LexicalInfo, CreateReference(fieldEntity), initializer);
+		}
+
 		public Attribute CreateAttribute(System.Type type)
 		{
 			return CreateAttribute(_tss.Map(type));
@@ -240,6 +243,13 @@ namespace Boo.Lang.Compiler.TypeSystem
 			mie.Arguments.Add(arg2);
 			return mie;
 		}
+
+		public MethodInvocationExpression CreateMethodInvocation(LexicalInfo li, IMethod staticMethod, Expression arg0, Expression arg1)
+		{
+			MethodInvocationExpression expression = CreateMethodInvocation(staticMethod, arg0, arg1);
+			expression.LexicalInfo = li;
+			return expression;
+		}
 		
 		public MethodInvocationExpression CreateMethodInvocation(IMethod staticMethod, Expression arg0, Expression arg1)
 		{
@@ -247,7 +257,14 @@ namespace Boo.Lang.Compiler.TypeSystem
 			mie.Arguments.Add(arg1);
 			return mie;
 		}
-		
+
+		public MethodInvocationExpression CreateMethodInvocation(LexicalInfo li, IMethod staticMethod, Expression arg0, Expression arg1, Expression arg2)
+		{
+			MethodInvocationExpression expression = CreateMethodInvocation(staticMethod, arg0, arg1, arg2);
+			expression.LexicalInfo = li;
+			return expression;
+		}
+
 		public MethodInvocationExpression CreateMethodInvocation(IMethod staticMethod, Expression arg0, Expression arg1, Expression arg2)
 		{
 			MethodInvocationExpression mie = CreateMethodInvocation(staticMethod, arg0, arg1);
@@ -275,7 +292,19 @@ namespace Boo.Lang.Compiler.TypeSystem
 		{
 			return CreateTypeReference(_tss.Map(type));
 		}
-		
+
+		public TypeReference CreateTypeReference(LexicalInfo li, Type type)
+		{
+			return CreateTypeReference(li, _tss.Map(type));
+		}
+
+		public TypeReference CreateTypeReference(LexicalInfo li, IType type)
+		{
+			TypeReference reference = CreateTypeReference(type);
+			reference.LexicalInfo = li;
+			return reference;
+		}
+
 		public TypeReference CreateTypeReference(IType tag)
 		{
 			TypeReference typeReference = null;
@@ -341,7 +370,14 @@ namespace Boo.Lang.Compiler.TypeSystem
 		{
 			return CreateLocalReference(local.Name, local);
 		}
-		
+
+		public MemberReferenceExpression CreateReference(LexicalInfo li, Field field)
+		{
+			MemberReferenceExpression e = CreateReference(field);
+			e.LexicalInfo = li;
+			return e;
+		}
+
 		public MemberReferenceExpression CreateReference(Field field)
 		{
 			return CreateReference((IField)field.Entity);
@@ -368,22 +404,42 @@ namespace Boo.Lang.Compiler.TypeSystem
 				: (Expression)CreateSelfReference(member.DeclaringType);
 			return CreateMemberReference(target, member);
 		}
-		
+
+		public MemberReferenceExpression CreateMemberReference(LexicalInfo li, Expression target, IMember member)
+		{
+			MemberReferenceExpression expression = CreateMemberReference(target, member);
+			expression.LexicalInfo = li;
+			return expression;
+		}
+
 		public MemberReferenceExpression CreateMemberReference(Expression target, IMember member)
 		{
-			MemberReferenceExpression reference = new MemberReferenceExpression(target.LexicalInfo);
-			reference.Target = target;
-			reference.Name = member.Name;
-			reference.Entity = member;
+			MemberReferenceExpression reference = MemberReferenceForEntity(target, member);
 			reference.ExpressionType = member.Type;
 			return reference;
 		}
-		
-		public MethodInvocationExpression CreateMethodInvocation(Expression target, IMethod tag)
+
+		public MemberReferenceExpression MemberReferenceForEntity(Expression target, IEntity entity)
+		{
+			MemberReferenceExpression reference = new MemberReferenceExpression(target.LexicalInfo);
+			reference.Target = target;
+			reference.Name = entity.Name;
+			reference.Entity = entity;
+			return reference;
+		}
+
+		public MethodInvocationExpression CreateMethodInvocation(LexicalInfo li, Expression target, IMethod entity)
+		{
+			MethodInvocationExpression expression = CreateMethodInvocation(target, entity);
+			expression.LexicalInfo = li;
+			return expression;
+		}
+
+		public MethodInvocationExpression CreateMethodInvocation(Expression target, IMethod entity)
 		{
 			MethodInvocationExpression mie = new MethodInvocationExpression(target.LexicalInfo);
-			mie.Target = CreateMemberReference(target, tag);			
-			mie.ExpressionType = tag.ReturnType;
+			mie.Target = CreateMemberReference(target, entity);			
+			mie.ExpressionType = entity.ReturnType;
 			return mie;			
 		}
 		

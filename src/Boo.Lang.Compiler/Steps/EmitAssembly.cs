@@ -64,6 +64,10 @@ namespace Boo.Lang.Compiler.Steps
 	public class EmitAssembly : AbstractVisitorCompilerStep
 	{
 		static ConstructorInfo DebuggableAttribute_Constructor = typeof(DebuggableAttribute).GetConstructor(new Type[] { Types.Bool, Types.Bool });
+		
+		static ConstructorInfo RuntimeCompatibilityAttribute_Constructor = typeof(System.Runtime.CompilerServices.RuntimeCompatibilityAttribute).GetConstructor(new Type[0]);
+		
+		static PropertyInfo[] RuntimeCompatibilityAttribute_Property = new PropertyInfo[] { typeof(System.Runtime.CompilerServices.RuntimeCompatibilityAttribute).GetProperty("WrapNonExceptionThrows") };
 
 		static ConstructorInfo DuckTypedAttribute_Constructor = Types.DuckTypedAttribute.GetConstructor(new Type[0]);
 		
@@ -74,6 +78,10 @@ namespace Boo.Lang.Compiler.Steps
 		static MethodInfo RuntimeServices_ToBool_Object = Types.RuntimeServices.GetMethod("ToBool", new Type[] { Types.Object });
 
 		static MethodInfo RuntimeServices_ToBool_Decimal = Types.RuntimeServices.GetMethod("ToBool", new Type[] { Types.Decimal });
+		
+		static MethodInfo RuntimeServices_ToBool_Single = Types.RuntimeServices.GetMethod("ToBool", new Type[] { Types.Single });
+		
+		static MethodInfo RuntimeServices_ToBool_Double = Types.RuntimeServices.GetMethod("ToBool", new Type[] { Types.Double });
 
 		static MethodInfo Builtins_ArrayTypedConstructor = Types.Builtins.GetMethod("array", new Type[] { Types.Type, Types.Int });
 		
@@ -428,10 +436,11 @@ namespace Boo.Lang.Compiler.Steps
 								CreateType(tag.TypeDefinition);
 							}
 
-							// If base type is generic, create any internal parameters it might have
-							if (baseType.GenericTypeInfo != null)
+							// If base type is a constructed generic type, create any internal 
+                            // parameters it might have
+							if (baseType.ConstructedInfo != null)
 							{
-								foreach (IType argument in baseType.GenericTypeInfo.GenericArguments)
+								foreach (IType argument in baseType.ConstructedInfo.GenericArguments)
 								{
 									tag = argument as AbstractInternalType;
 									if (null != tag)
@@ -550,15 +559,7 @@ namespace Boo.Lang.Compiler.Steps
 
 		override public void OnEnumDefinition(EnumDefinition node)
 		{
-			Type baseType = typeof(int);
-			
-			TypeBuilder builder = GetTypeBuilder(node);
-			
-			builder.DefineField("value__", baseType,
-			                    FieldAttributes.Public |
-			                    FieldAttributes.SpecialName |
-			                    FieldAttributes.RTSpecialName);
-			
+			TypeBuilder builder = GetTypeBuilder(node);			
 			foreach (EnumMember member in node.Members)
 			{
 				FieldBuilder field = builder.DefineField(member.Name, builder,
@@ -595,6 +596,11 @@ namespace Boo.Lang.Compiler.Steps
 			{
 				builder.AddInterfaceImplementation(GetSystemType(baseType));
 			}
+		}
+		
+		override public void OnMacroStatement(MacroStatement node)
+		{
+			NotImplemented(node, "Unexpected macro: " + node.ToCodeString());
 		}
 		
 		override public void OnCallableDefinition(CallableDefinition node)
@@ -742,28 +748,138 @@ namespace Boo.Lang.Compiler.Steps
 		override public void OnTryStatement(TryStatement node)
 		{
 			++_tryBlock;
-			_il.BeginExceptionBlock();
+			Label end = _il.BeginExceptionBlock();
+			
+			// The fault handler isn't very well supported by the
+			// the ILGenerator. Thus, when there is a failure block
+			// in the same try as an except or ensure block, we
+			// need to do some special brute forcing with the exception
+			// block context in the ILGenerator.
+			if(null != node.FailureBlock && null != node.EnsureBlock)
+			{
+				++_tryBlock;
+				_il.BeginExceptionBlock();
+			}
+
+			if(null != node.FailureBlock && node.ExceptionHandlers.Count > 0)
+			{
+				++_tryBlock;
+				_il.BeginExceptionBlock();
+			}
+
 			Visit(node.ProtectedBlock);
+						
 			Visit(node.ExceptionHandlers);
-			--_tryBlock;
+
+			if(null != node.FailureBlock)
+			{
+				// Logic to back out of the manually forced blocks
+				if(node.ExceptionHandlers.Count > 0)
+				{
+					_il.EndExceptionBlock();
+					--_tryBlock;
+				}
+				
+				_il.BeginFaultBlock();
+				Visit(node.FailureBlock);
+				
+				// Logic to back out of the manually forced blocks once more
+				if(null != node.EnsureBlock)
+				{
+					_il.EndExceptionBlock();
+					--_tryBlock;
+				}
+			}
 			
 			if (null != node.EnsureBlock)
 			{
 				_il.BeginFinallyBlock();
 				Visit(node.EnsureBlock);
 			}
+
 			_il.EndExceptionBlock();
-			
-			
+			--_tryBlock;
 		}
 		
 		override public void OnExceptionHandler(ExceptionHandler node)
 		{
-			_il.BeginCatchBlock(GetSystemType(node.Declaration));
-			_il.Emit(OpCodes.Stloc, GetLocalBuilder(node.Declaration));
+			if((node.Flags & ExceptionHandlerFlags.Filter) == ExceptionHandlerFlags.Filter)
+			{
+				_il.BeginExceptFilterBlock();
+				
+				Label endLabel = _il.DefineLabel();
+			
+				// If the filter is not untyped, then test the exception type
+				// before testing the filter condition
+				if((node.Flags & ExceptionHandlerFlags.Untyped) == ExceptionHandlerFlags.None)
+				{
+					Label filterCondition = _il.DefineLabel();
+					
+					// Test the type of the exception.
+					_il.Emit(OpCodes.Isinst, GetSystemType(node.Declaration.Type));
+					
+					// Duplicate it.  If it is null, then it will be used to
+					// skip the filter.
+					_il.Emit(OpCodes.Dup);
+
+					// If the exception is of the right type, branch
+					// to test the filter condition.
+					_il.Emit(OpCodes.Brtrue, filterCondition);
+
+					// Otherwise, clean up the stack and prepare the stack
+					// to skip the filter.
+					EmitStoreOrPopException(node);
+					
+					_il.Emit(OpCodes.Ldc_I4_0);
+					_il.Emit(OpCodes.Br, endLabel);
+					_il.MarkLabel(filterCondition);
+
+				}
+				else if((node.Flags & ExceptionHandlerFlags.Anonymous) == ExceptionHandlerFlags.None)
+				{
+					// Cast the exception to the default except type
+					_il.Emit(OpCodes.Isinst, GetSystemType(node.Declaration.Type));
+				}
+				
+				EmitStoreOrPopException(node);
+				
+				// Test the condition and convert to boolean if needed.
+				node.FilterCondition.Accept(this);
+				PopType();
+				EmitToBoolIfNeeded(node.FilterCondition);
+				
+				// If the type is right and the condition is true,
+				// proceed with the handler.
+				_il.MarkLabel(endLabel);
+				_il.Emit(OpCodes.Ldc_I4_0);
+				_il.Emit(OpCodes.Cgt_Un);
+			
+				_il.BeginCatchBlock(null);
+			}
+			else
+			{
+				// Begin a normal catch block of the appropriate type.
+				_il.BeginCatchBlock(GetSystemType(node.Declaration.Type));
+				
+				// Clean up the stack or store the exception if not anonymous.
+				EmitStoreOrPopException(node);
+			}
+
 			Visit(node.Block);
 		}
 		
+		private void EmitStoreOrPopException(ExceptionHandler node)
+		{
+			if((node.Flags & ExceptionHandlerFlags.Anonymous) == ExceptionHandlerFlags.None)
+			{
+				_il.Emit(OpCodes.Stloc, GetLocalBuilder(node.Declaration));
+			}
+			else
+			{
+				_il.Emit(OpCodes.Pop);
+			}
+		}
+				
 		override public void OnUnpackStatement(UnpackStatement node)
 		{
 			NotImplemented("Unpacking");
@@ -781,7 +897,7 @@ namespace Boo.Lang.Compiler.Steps
 			// void we need to pop its return value to leave
 			// the stack sane
 			DiscardValueOnStack();
-			AssertStackIsEmpty("stack must be empty after a statement!");
+			AssertStackIsEmpty("stack must be empty after a statement! Offending statement: '" + node.ToCodeString() + "'");
 		}
 		
 		void DiscardValueOnStack()
@@ -1630,6 +1746,16 @@ namespace Boo.Lang.Compiler.Steps
 				_il.EmitCall(OpCodes.Call, RuntimeServices_ToBool_Decimal, null);
 				return true;
 			}
+			if (TypeSystemServices.SingleType == type)
+			{
+				_il.EmitCall(OpCodes.Call, RuntimeServices_ToBool_Single, null);
+				return true;
+			}
+			if (TypeSystemServices.DoubleType == type)
+			{
+				_il.EmitCall(OpCodes.Call, RuntimeServices_ToBool_Double, null);
+				return true;
+			}
 			return false;
 		}
 		
@@ -1931,33 +2057,86 @@ namespace Boo.Lang.Compiler.Steps
 			}
 			return false;
 		}
-		
+
 		void InvokeRegularMethod(IMethod method, MethodInfo mi, MethodInvocationExpression node)
 		{
+			// Do not emit call if conditional attributes (if any) do not match defined symbols
+			if (!CheckConditionalAttributes(method, mi))
+			{
+				EmitNop();
+				PushType(method.ReturnType); // keep a valid state
+				return;
+			}
+
 			IType targetType = null;
+			Expression target = GetTargetObject(node);
 			if (!mi.IsStatic)
 			{
-				targetType = GetTargetObject(node).ExpressionType;
+				targetType = target.ExpressionType;
 				PushTargetObject(node, mi);
 			}
-			
+
 			PushArguments(method, node.Arguments);
 
 			// Emit a constrained call if target is a generic parameter
 			if (targetType != null && targetType is IGenericParameter)
 			{
-				_il.Emit(OpCodes.Constrained, GetSystemType(targetType));  
+				_il.Emit(OpCodes.Constrained, GetSystemType(targetType));
 			}
-			_il.EmitCall(GetCallOpCode(node, method, mi), mi, null);
-			
+			_il.EmitCall(GetCallOpCode(target, method), mi, null);
+
 			PushType(method.ReturnType);
+		}
+
+		//returns true if no conditional attribute match the defined symbols
+		//else return false (which means the method won't get emitted)
+		private bool CheckConditionalAttributes(IMethod method, MethodInfo mi)
+		{
+			if (method.ReturnType != TypeSystemServices.VoidType
+				|| null != (method as GenericMappedMethod)) return true;
+
+			object[] attrs;
+
+			if (null != (method as InternalMethod) || null != (method as GenericConstructedMethod)) {
+
+				//internal methods
+				InternalMethod im = (method as InternalMethod) ?? ((method as GenericConstructedMethod).GenericDefinition as InternalMethod);
+				attrs = MetadataUtil.GetCustomAttributes(im.Method, TypeSystemServices.ConditionalAttribute);
+
+				if (0 == attrs.Length) return true;
+				foreach (Boo.Lang.Compiler.Ast.Attribute attr in attrs)
+				{
+					if (1 != attr.Arguments.Count || null == (attr.Arguments[0] as StringLiteralExpression)) continue;
+					string conditionString = (attr.Arguments[0] as StringLiteralExpression).Value;
+					if (!Parameters.Defines.ContainsKey(conditionString)) {
+						_context.TraceInfo("call to method '{0}' not emitted because the symbol '{1}' is not defined.", method.ToString(), conditionString);
+						return false;
+					}
+				}
+
+			} else {
+
+				//external methods
+				attrs = mi.GetCustomAttributes(typeof(System.Diagnostics.ConditionalAttribute), false);
+				if (0 == attrs.Length) return true;
+				foreach (System.Diagnostics.ConditionalAttribute attr in attrs)
+				{
+					if (!Parameters.Defines.ContainsKey(attr.ConditionString)) {
+						_context.TraceInfo("call to method '{0}' not emitted because the symbol '{1}' is not defined.", method.ToString(), attr.ConditionString);
+						return false;
+					}
+				}
+
+			}
+
+			return true;
 		}
 
 		private void PushTargetObject(MethodInvocationExpression node, MethodInfo mi)
 		{
 			Expression target = GetTargetObject(node);
 			IType targetType = target.ExpressionType;
-			
+
 			// If target is a generic parameter, its address must be loaded
 			// to allow a constrained method call
 			if (targetType is IGenericParameter)
@@ -1987,28 +2166,35 @@ namespace Boo.Lang.Compiler.Steps
 
 		private static Expression GetTargetObject(MethodInvocationExpression node)
 		{
-			MemberReferenceExpression memberRef = node.Target as MemberReferenceExpression;
+			Expression target = node.Target;
 			
-			// Target might be a generic reference expression rather than a member reference expression
-			if (memberRef == null) 
+			// Skip over generic reference expressions
+			GenericReferenceExpression genericRef = target as GenericReferenceExpression;
+			if (genericRef != null)
 			{
-				memberRef = ((GenericReferenceExpression)node.Target).Target as MemberReferenceExpression;
+				target = genericRef.Target;
 			}
 			
-			return memberRef.Target;
+			MemberReferenceExpression memberRef = target as MemberReferenceExpression;			
+			if (memberRef != null)
+			{
+				return memberRef.Target;
+			}
+			
+			return null;
 		}
 
-		private OpCode GetCallOpCode(MethodInvocationExpression node, IMethod method, MethodInfo mi)
+		private OpCode GetCallOpCode(Expression target, IMethod method)
 		{
 			if (method.IsStatic) return OpCodes.Call;
-			if (NodeType.SuperLiteralExpression == GetTargetObject(node).NodeType) return OpCodes.Call;
-			if (IsValueTypeMethodCall(node, method)) return OpCodes.Call;
+			if (NodeType.SuperLiteralExpression == target.NodeType) return OpCodes.Call;
+			if (IsValueTypeMethodCall(target, method)) return OpCodes.Call;
 			return OpCodes.Callvirt;
 		}
-
-		private bool IsValueTypeMethodCall(MethodInvocationExpression node, IMethod method)
+		
+		private bool IsValueTypeMethodCall(Expression target, IMethod method)
 		{
-			IType type = GetTargetObject(node).ExpressionType;
+			IType type = target.ExpressionType;
 			return type.IsValueType && method.DeclaringType == type;
 		}
 
@@ -2138,6 +2324,7 @@ namespace Boo.Lang.Compiler.Steps
 		override public void OnMethodInvocationExpression(MethodInvocationExpression node)
 		{
 			IEntity tag = TypeSystemServices.GetEntity(node.Target);
+			
 			switch (tag.EntityType)
 			{
 				case EntityType.BuiltinFunction:
@@ -2645,7 +2832,7 @@ namespace Boo.Lang.Compiler.Steps
 						node.Target.Accept(this);
 						break;
 					}
-					
+
 				default:
 					{
 						NotImplemented(node, tag.ToString());
@@ -2659,6 +2846,7 @@ namespace Boo.Lang.Compiler.Steps
 			IEntity tag = TypeSystem.TypeSystemServices.GetEntity(node);
 			switch (tag.EntityType)
 			{
+				case EntityType.Ambiguous:
 				case EntityType.Method:
 					{
 						node.Target.Accept(this);
@@ -2962,7 +3150,8 @@ namespace Boo.Lang.Compiler.Steps
 					}
 					else
 					{
-						callOpCode = OpCodes.Callvirt;
+						callOpCode = GetCallOpCode(target, property.GetSetMethod());
+						
 						target.Accept(this);
 						PopType();
 					}
@@ -3025,8 +3214,12 @@ namespace Boo.Lang.Compiler.Steps
 				Error(CompilerErrorFactory.InternalError(startNode, x));
 				return false;
 			}
-
 			return true;
+		}
+
+		private void EmitNop()
+		{
+			_il.Emit(OpCodes.Nop);
 		}
 
 		private ISymbolDocumentWriter GetDocumentWriter(string fname)
@@ -3357,7 +3550,15 @@ namespace Boo.Lang.Compiler.Steps
 					_il.EmitCall(OpCodes.Call, GetMethodInfo(method), null);
 					return;
 				}
-				if (expectedType.IsValueType)
+				
+				if (expectedType is IGenericParameter)
+				{
+					// Since expected type is a generic parameter, we don't know whether to emit 
+					// an unbox opcode or a castclass opcode; so we emit an unbox.any opcode which
+					// works as either of those at runtime
+					_il.Emit(OpCodes.Unbox_Any, GetSystemType(expectedType));
+				}
+				else if (expectedType.IsValueType)
 				{
 					if (actualType.IsValueType)
 					{
@@ -3377,13 +3578,15 @@ namespace Boo.Lang.Compiler.Steps
 					}
 					else
 					{
+						// To get a value type out of a reference type we emit an unbox opcode
 						EmitUnbox(expectedType);
 					}
 				}
 				else
 				{
-					EmitDuckImplicitCastIfNeeded(expectedType, actualType);
+					EmitRuntimeCoercionIfNeeded(expectedType, actualType);
 
+					// In order to cast to a reference type we emit a castclass opcode
 					_context.TraceInfo("castclass: expected type='{0}', type on stack='{1}'", expectedType, actualType);
 					_il.Emit(OpCodes.Castclass, GetSystemType(expectedType));
 				}
@@ -3394,21 +3597,23 @@ namespace Boo.Lang.Compiler.Steps
 			}
 		}
 
-		virtual protected void EmitDuckImplicitCastIfNeeded(IType expectedType, IType actualType)
+		private void EmitRuntimeCoercionIfNeeded(IType expectedType, IType actualType)
 		{
 			if (TypeSystemServices.IsDuckType(actualType))
 			{
-				EmitGetTypeFromHandle(GetSystemType(expectedType));
-				PopType();
-				_il.EmitCall(OpCodes.Call, RuntimeServices_DuckImplicitCast, null);
+				EmitGetTypeFromHandle(GetSystemType(expectedType)); PopType();
+				_il.EmitCall(OpCodes.Call, RuntimeServices_Coerce, null);
 			}
 		}
+
+		private MethodInfo _RuntimeServices_Coerce;
 		
-		virtual protected MethodInfo RuntimeServices_DuckImplicitCast
+		private MethodInfo RuntimeServices_Coerce
 		{
 			get
 			{
-				return Types.RuntimeServices.GetMethod("DuckImplicitCast", new Type[] { Types.Object, Types.Type });
+				if (_RuntimeServices_Coerce != null) return _RuntimeServices_Coerce;
+				return _RuntimeServices_Coerce = Types.RuntimeServices.GetMethod("Coerce", new Type[] { Types.Object, Types.Type });
 			}
 		}
 
@@ -3535,7 +3740,7 @@ namespace Boo.Lang.Compiler.Steps
 				_il.Emit(opcode);
 			}
 		}
-		
+
 		bool IsStobj(OpCode code)
 		{
 			return OpCodes.Stobj.Value == code.Value;
@@ -3554,6 +3759,13 @@ namespace Boo.Lang.Compiler.Steps
 			return new CustomAttributeBuilder(
 				DebuggableAttribute_Constructor,
 				new object[] { true, true });
+		}
+		
+		CustomAttributeBuilder CreateRuntimeCompatibilityAttribute()
+		{
+			return new CustomAttributeBuilder(
+					RuntimeCompatibilityAttribute_Constructor, new object[0],
+					RuntimeCompatibilityAttribute_Property, new object[] { true });
 		}
 		
 		void DefineEntryPoint()
@@ -3580,33 +3792,15 @@ namespace Boo.Lang.Compiler.Steps
 			}
 		}
 		
-		private static string GetReferenceTypeName(Type t)
-		{
-			//return t.FullName + "&";
-			string name = t.FullName;
-			return name.EndsWith("&")
-				? name
-				: name + "&";
-		}
-		
 		Type[] GetParameterTypes(ParameterDeclarationCollection parameters)
 		{
 			Type[] types = new Type[parameters.Count];
 			for (int i=0; i<types.Length; ++i)
 			{
 				types[i] = GetSystemType(parameters[i].Type);
-				if (parameters[i].IsByRef)
+				if (parameters[i].IsByRef && !types[i].IsByRef)
 				{
-					string typename = GetReferenceTypeName(types[i]);
-					Type byreftype = types[i].Assembly.GetType(typename);
-					
-					if (byreftype == null) //internal type
-					{
-						byreftype = _moduleBuilder.GetType(typename,true);
-						//TODO ? - test that nested types work too
-						//GetTypeBuilder(parameters[i].Type).GetNestedType(typename);
-					}
-					types[i] = byreftype;
+					types[i] = types[i].MakeByRefType();
 				}
 			}
 			return types;
@@ -3672,129 +3866,139 @@ namespace Boo.Lang.Compiler.Steps
 		{
 			// If field is mapped from a generic type, get its mapped FieldInfo
 			// on the constructed type
-			MixedGenericType.MappedField mapped = tag as MixedGenericType.MappedField;
-			if (null != mapped && mapped.FieldInfo.DeclaringType.IsGenericType)
-			{
-				return MapGenericField(mapped.DeclaringType, mapped.FieldInfo);
-			}
+            GenericMappedField mapped = tag as GenericMappedField;
+            if (mapped != null)
+            {
+                return GetMappedFieldInfo(mapped.DeclaringType, mapped.Source);
+            }
+
+            // If field is external, get its existing FieldInfo
 			ExternalField external = tag as ExternalField;
 			if (null != external)
 			{
 				return external.FieldInfo;
 			}
+
+            // If field is internal, get its FieldBuilder
 			return GetFieldBuilder(((InternalField)tag).Field);
 		}
 		
 		MethodInfo GetMethodInfo(IMethod entity)
 		{
-			// If method is mapped from a generic type, get its mapped MethodInfo
-			// on the constructed type
-			MixedGenericType.MappedMethod mapped = entity as MixedGenericType.MappedMethod;
-			if (null != mapped && mapped.MethodInfo.DeclaringType.IsGenericType)
-			{
-				return MapGenericMethod(mapped.DeclaringType, (MethodInfo)mapped.MethodInfo);
-			}
+			// If method is mapped from a generic type, get its MethodInfo on the constructed type
+            GenericMappedMethod mapped = entity as GenericMappedMethod;
+            if (mapped != null)
+            {
+                return GetMappedMethodInfo(mapped.DeclaringType, mapped.Source);
+            }
 			
-			// If method is a mixed or internal constructed generic method, 
-			// get its mapped MethodInfo
-			if (entity is MixedGenericMethod || entity is InternalGenericMethod)
+			// If method is a constructed generic method, get its MethodInfo from its definition
+			if (entity is GenericConstructedMethod)
 			{
-				return MapGenericMethod(entity.GenericMethodInfo);
+				return GetConstructedMethodInfo(entity.ConstructedInfo);
 			}			
-			ExternalMethod external = entity as ExternalMethod;
+
+            // If method is external, get its existing MethodInfo
+            ExternalMethod external = entity as ExternalMethod;
 			if (null != external)
 			{
 				return (MethodInfo)external.MethodInfo;
 			}
 			
+            // If method is internal, get its MethodBuilder
 			return GetMethodBuilder(((InternalMethod)entity).Method);
 		}
 
 		ConstructorInfo GetConstructorInfo(IConstructor entity)
 		{
-			// If constructor is mapped from a generic type, get its mapped ConstructorInfo
-			MixedGenericType.MappedConstructor mapped = entity as MixedGenericType.MappedConstructor;
-			if (null != mapped && mapped.ConstructorInfo.DeclaringType.IsGenericType)
-			{
-				return MapGenericConstructor(mapped.DeclaringType, mapped.ConstructorInfo);
-			}
-			ExternalConstructor external = entity as ExternalConstructor;
-			if (null != external)
-			{
-				return external.ConstructorInfo;
-			}
-			
+            // If constructor is external, get its existing ConstructorInfo
+            ExternalConstructor external = entity as ExternalConstructor;
+            if (null != external)
+            {
+                return external.ConstructorInfo;
+            }
+
+            // If constructor is mapped from a generic type, get its ConstructorInfo on the constructed type
+            GenericMappedConstructor mapped = entity as GenericMappedConstructor;
+            if (mapped != null)
+            {
+                return TypeBuilder.GetConstructor(GetSystemType(mapped.DeclaringType), GetConstructorInfo((IConstructor)mapped.Source));
+            }
+
+            // If constructor is internal, get its MethodBuilder
 			return GetConstructorBuilder(((InternalMethod)entity).Method);
 		}
 		
 		/// <summary>
-		/// Maps a method declared on a generic type definition or an open constructed type
-		/// to the corresponding method on a closed constructed type.
+		/// Retrieves the MethodInfo for a generic constructed method.
 		/// </summary>
-		private MethodInfo MapGenericMethod(IType targetType, MethodInfo method)
-		{
-			if (!method.DeclaringType.IsGenericTypeDefinition)
-			{
-				// HACK: .NET Reflection doesn't allow calling TypeBuilder.GetMethod(Type, MethodInfo)
-				// on types that aren't generic definitions, so we have to manually find the
-				// corresponding MethodInfo on the declaring type's definition before mapping it
-				Type definition = method.DeclaringType.GetGenericTypeDefinition();
-				method = Array.Find<MethodInfo>(
-					definition.GetMethods(),
-					delegate(MethodInfo mi) { return mi.MetadataToken == method.MetadataToken; });
-			}
-			
-			return TypeBuilder.GetMethod(GetSystemType(targetType), method);
-		}
-		
-		/// <summary>
-		/// Maps a generic method to its constructed version.
-		/// </summary>
-		private MethodInfo MapGenericMethod(IGenericMethodInfo genericMethodInfo)
+		private MethodInfo GetConstructedMethodInfo(IConstructedMethodInfo constructedInfo)
 		{
 			Type[] arguments = Array.ConvertAll<IType, Type>(
-				genericMethodInfo.GenericArguments,
+				constructedInfo.GenericArguments,
 				GetSystemType);
 				
-			return GetMethodInfo(genericMethodInfo.GenericDefinition).MakeGenericMethod(arguments);
+			return GetMethodInfo(constructedInfo.GenericDefinition).MakeGenericMethod(arguments);
 		}
 
 		/// <summary>
-		/// Maps a field declared on a generic type definition or an open constructed type
-		/// to the corresponding field on a closed constructed type.
+        /// Retrieves the FieldInfo for a field as mapped on a generic type.
 		/// </summary>
-		private FieldInfo MapGenericField(IType targetType, FieldInfo field)
+		private FieldInfo GetMappedFieldInfo(IType targetType, IField source)
 		{
-			if (!field.DeclaringType.IsGenericTypeDefinition)
+            FieldInfo fi = GetFieldInfo(source);
+			if (!fi.DeclaringType.IsGenericTypeDefinition)
 			{
-				// HACK: .NET Reflection doesn't allow calling TypeBuilder.GetMethod(Type, FieldInfo)
-				// on types that aren't generic definitions, so we have to manually find the
-				// corresponding FieldInfo on the declaring type's definition before mapping it
-				Type definition = field.DeclaringType.GetGenericTypeDefinition();
-				field = definition.GetField(field.Name);
+				// HACK: .NET Reflection doesn't allow calling TypeBuilder.GetField(Type, FieldInfo)
+				// on types that aren't generic definitions (like open constructed types), so we have 
+                // to manually find the corresponding FieldInfo on the declaring type's definition 
+                // before mapping it
+                Type definition = fi.DeclaringType.GetGenericTypeDefinition();
+                fi = definition.GetField(fi.Name);
 			}
-			return TypeBuilder.GetField(GetSystemType(targetType), field);
+            return TypeBuilder.GetField(GetSystemType(targetType), fi);
 		}
 
-		/// <summary>
-		/// Maps a constructor declared on a generic type definition or an open constructed type
-		/// to the corresponding constructor on a closed constructed type.
-		/// </summary>
-		private ConstructorInfo MapGenericConstructor(IType targetType, ConstructorInfo ctor)
+        /// <summary>
+        /// Retrieves the MethodInfo for a method as mapped on a generic type.
+        /// </summary>
+        private MethodInfo GetMappedMethodInfo(IType targetType, IMethod source)
+        {
+            MethodInfo mi = GetMethodInfo(source);
+            if (!mi.DeclaringType.IsGenericTypeDefinition)
+            {
+                // HACK: .NET Reflection doesn't allow calling TypeBuilder.GetMethod(Type, MethodInfo) 
+                // on types that aren't generic definitions (like open constructed types), so we have to 
+                // manually find the corresponding MethodInfo on the declaring type's definition before 
+                // mapping it
+                Type definition = mi.DeclaringType.GetGenericTypeDefinition();
+                mi = Array.Find<MethodInfo>(
+                    definition.GetMethods(),
+                    delegate(MethodInfo other) { return other.MetadataToken == mi.MetadataToken; });
+            }
+
+            return TypeBuilder.GetMethod(GetSystemType(targetType), mi);
+        }
+        
+        /// <summary>
+        /// Retrieves the ConstructorInfo for a constructor as mapped on a generic type.
+        /// </summary>
+		private ConstructorInfo GetMappedConstructorInfo(IType targetType, IConstructor source)
 		{
-			if (!ctor.DeclaringType.IsGenericTypeDefinition)
+            ConstructorInfo ci = GetConstructorInfo(source);
+			if (!ci.DeclaringType.IsGenericTypeDefinition)
 			{
 				// HACK: .NET Reflection doesn't allow calling
 				// TypeBuilder.GetConstructor(Type, ConstructorInfo) on types that aren't generic
 				// definitions, so we have to manually find the corresponding ConstructorInfo on the
 				// declaring type's definition before mapping it
-				Type definition = ctor.DeclaringType.GetGenericTypeDefinition();
-				ctor = Array.Find<ConstructorInfo>(
+				Type definition = ci.DeclaringType.GetGenericTypeDefinition();
+				ci = Array.Find<ConstructorInfo>(
 					definition.GetConstructors(),
-					delegate(ConstructorInfo ci) { return ci.MetadataToken == ctor.MetadataToken; });
+					delegate(ConstructorInfo other) { return other.MetadataToken == ci.MetadataToken; });
 			}
 
-			return TypeBuilder.GetConstructor(GetSystemType(targetType), ctor);
+			return TypeBuilder.GetConstructor(GetSystemType(targetType), ci);
 		}
 		
 		Type GetSystemType(Node node)
@@ -3809,26 +4013,13 @@ namespace Boo.Lang.Compiler.Steps
 			{
 				return type;
 			}
-			
+
 			ExternalType external = tag as ExternalType;
 			if (null != external)
 			{
-				MixedGenericType mixed = tag as MixedGenericType;
-				if (null != mixed)
-				{
-					Type[] arguments = new Type[mixed.GenericArguments.Length];
-					for (int i = 0; i < arguments.Length; i++)
-					{
-						arguments[i] = GetSystemType(mixed.GenericArguments[i]);
-					}
-					type = GetSystemType(mixed.GenericDefinition).MakeGenericType(arguments);
-				}
-				else
-				{
-					type = external.ActualType;
-				}
+				type = external.ActualType;
 			}
-			else if (tag.IsArray)
+    		else if (tag.IsArray)
 			{
 				IArrayType arrayType = (IArrayType)tag;
 				Type systemType = GetSystemType(arrayType.GetElementType());
@@ -3847,14 +4038,20 @@ namespace Boo.Lang.Compiler.Steps
 			{
 				type = Types.Object;
 			}
-			else if (tag is InternalGenericParameter)
-			{
-				return (Type)GetBuilder(((InternalGenericParameter)tag).Node);
-			}
-			else if (tag is AbstractInternalType)
-			{
-				type = (Type)GetBuilder(((AbstractInternalType)tag).TypeDefinition);
-			}
+            else if (tag.ConstructedInfo != null)
+            {
+                // Type is a constructed generic type - create it using its definition's system type
+                Type[] arguments = Array.ConvertAll<IType, Type>(tag.ConstructedInfo.GenericArguments, GetSystemType);
+                type = GetSystemType(tag.ConstructedInfo.GenericDefinition).MakeGenericType(arguments);
+            }
+            else if (tag is InternalGenericParameter)
+            {
+                return (Type)GetBuilder(((InternalGenericParameter)tag).Node);
+            }
+            else if (tag is AbstractInternalType)
+            {
+                type = (Type)GetBuilder(((AbstractInternalType)tag).TypeDefinition);
+            }
 
 			if (null == type)
 			{
@@ -4194,11 +4391,17 @@ namespace Boo.Lang.Compiler.Steps
 
 			if (method.GenericParameters.Count != 0)
 			{
-				DefineGenericParameters(builder, method.GenericParameters);
+				DefineGenericParameters(builder, method.GenericParameters.ToArray());
 			}
 			
 			builder.SetParameters(GetParameterTypes(parameters));
-			builder.SetReturnType(GetSystemType(method.ReturnType));			
+
+			IType returnType = GetType(method.ReturnType);
+			if (IsPInvoke(method) && returnType is TypeSystem.Unknown)
+			{
+				returnType = TypeSystemServices.VoidType;
+			}
+			builder.SetReturnType(GetSystemType(returnType));
 
 			builder.SetImplementationFlags(GetImplementationFlags(method));
 			
@@ -4214,27 +4417,45 @@ namespace Boo.Lang.Compiler.Steps
 			return builder;
 		}
 
-		void DefineGenericParameters(MethodBuilder builder, GenericParameterDeclarationCollection parameters)
+		/// <summary>
+		/// Defines the generic parameters of an internal generic type.
+		/// </summary>
+		void DefineGenericParameters(TypeBuilder builder, GenericParameterDeclaration[] parameters)
 		{
-			string[] names = new string[parameters.Count];
-			int i = 0;
-			
-			foreach (GenericParameterDeclaration gpd in parameters)
-			{
-				names[i] = gpd.Name;
-				i++;
-			}
-			
-			builder.DefineGenericParameters(names);
+			string[] names = Array.ConvertAll<GenericParameterDeclaration, string>(
+				parameters,
+				delegate(GenericParameterDeclaration gpd) { return gpd.Name; });
 
-			Type[] parameterBuilders = builder.GetGenericArguments();			
-			i = 0;
-			foreach (GenericParameterDeclaration gpd in parameters)
-			{
-				SetBuilder(gpd, parameterBuilders[i++]); 
-			}		
+			GenericTypeParameterBuilder[] builders = builder.DefineGenericParameters(names);
+
+			DefineGenericParameters(builders, parameters);
 		}
-		
+
+		/// <summary>
+		/// Defines the generic parameters of an internal generic method.
+		/// </summary>
+		void DefineGenericParameters(MethodBuilder builder, GenericParameterDeclaration[] parameters)
+		{
+			string[] names = Array.ConvertAll<GenericParameterDeclaration, string>(
+				parameters,
+				delegate(GenericParameterDeclaration gpd) { return gpd.Name; });
+
+			GenericTypeParameterBuilder[] builders = builder.DefineGenericParameters(names);
+
+			DefineGenericParameters(builders, parameters);
+		}
+
+		void DefineGenericParameters(GenericTypeParameterBuilder[] builders, GenericParameterDeclaration[] declarations)
+		{
+			// Set builders
+			for (int i = 0; i < builders.Length; i++)
+			{
+				SetBuilder(declarations[i], builders[i]);
+			}
+
+			// TODO: Set constraints
+		}
+
 		private CustomAttributeBuilder CreateDuckTypedCustomAttribute()
 		{
 			return new CustomAttributeBuilder(DuckTypedAttribute_Constructor, new object[0]);
@@ -4261,6 +4482,11 @@ namespace Boo.Lang.Compiler.Steps
 		{
 			TypeBuilder typeBuilder = CreateTypeBuilder(typeDefinition);
 			SetBuilder(typeDefinition, typeBuilder);
+
+			if (typeDefinition.GenericParameters.Count > 0)
+			{
+				DefineGenericParameters(typeBuilder, typeDefinition.GenericParameters.ToArray());
+			}
 		}
 		
 		bool IsValueType(TypeMember type)
@@ -4269,7 +4495,7 @@ namespace Boo.Lang.Compiler.Steps
 			return null != entity && entity.IsValueType;
 		}
 		
-		TypeBuilder CreateTypeBuilder(TypeMember type)
+		TypeBuilder CreateTypeBuilder(TypeDefinition type)
 		{
 			Type baseType = null;
 			if (IsEnumDefinition(type))
@@ -4282,20 +4508,48 @@ namespace Boo.Lang.Compiler.Steps
 			}
 
 			TypeBuilder typeBuilder = null;
-			ClassDefinition  enclosingType = type.ParentNode as ClassDefinition;
+			ClassDefinition enclosingType = type.ParentNode as ClassDefinition;
+
 			if (null == enclosingType)
 			{
-				typeBuilder = _moduleBuilder.DefineType(type.FullName,
-				                                        GetTypeAttributes(type),
-				                                        baseType);
+				typeBuilder = _moduleBuilder.DefineType(
+					AnnotateGenericTypeName(type, type.QualifiedName),
+					GetTypeAttributes(type), 
+					baseType); 
 			}
 			else
 			{
-				typeBuilder = GetTypeBuilder(enclosingType).DefineNestedType(type.Name,
-				                                                             GetNestedTypeAttributes(type),
-				                                                             baseType);
+				typeBuilder = GetTypeBuilder(enclosingType).DefineNestedType(
+					AnnotateGenericTypeName(type, type.Name), 
+					GetNestedTypeAttributes(type), 
+					baseType);
+			}
+			
+			if (IsEnumDefinition(type))
+			{
+				// Mono cant construct enum array types unless
+				// the fields is already defined
+				DefineEnumField(typeBuilder);
 			}
 			return typeBuilder;
+		}
+		
+		private string AnnotateGenericTypeName(TypeDefinition typeDef, string name)
+		{
+			if (typeDef.HasGenericParameters)
+			{
+				return name + "`" + typeDef.GenericParameters.Count;
+			}
+			return name;
+		}
+		
+		void DefineEnumField(TypeBuilder builder)
+		{
+			Type baseType = typeof(int);			
+			builder.DefineField("value__", baseType,
+			                    FieldAttributes.Public |
+			                    FieldAttributes.SpecialName |
+			                    FieldAttributes.RTSpecialName);
 		}
 		
 		void EmitBaseTypesAndAttributes(TypeDefinition typeDefinition, TypeBuilder typeBuilder)
@@ -4612,6 +4866,7 @@ namespace Boo.Lang.Compiler.Steps
 				// picks up the attribute when debugging dynamically generated code.
 				_asmBuilder.SetCustomAttribute(CreateDebuggableAttribute());
 			}
+			_asmBuilder.SetCustomAttribute(CreateRuntimeCompatibilityAttribute());
 			_moduleBuilder = _asmBuilder.DefineDynamicModule(asmName.Name, Path.GetFileName(outputFile), Parameters.Debug);
 			_sreResourceService = new SREResourceService (_asmBuilder, _moduleBuilder);
 			ContextAnnotations.SetAssemblyBuilder(Context, _asmBuilder);
@@ -4629,7 +4884,14 @@ namespace Boo.Lang.Compiler.Steps
 			AssemblyName assemblyName = new AssemblyName();
 			assemblyName.Name = GetAssemblySimpleName(outputFile);
 			assemblyName.Version = GetAssemblyVersion();
-			assemblyName.KeyPair = GetAssemblyKeyPair(outputFile);
+			if (Parameters.DelaySign)
+			{
+				assemblyName.SetPublicKey(GetAssemblyKeyPair(outputFile).PublicKey);
+			}
+			else
+			{
+				assemblyName.KeyPair = GetAssemblyKeyPair(outputFile);
+			}
 			return assemblyName;
 		}
 		

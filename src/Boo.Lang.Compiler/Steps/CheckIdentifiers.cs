@@ -30,7 +30,7 @@ namespace Boo.Lang.Compiler.Steps
 {
 	using Boo.Lang.Compiler;
 	using Boo.Lang.Compiler.Ast;
-	using System.Collections;
+
 	public class CheckIdentifiers : AbstractVisitorCompilerStep
 	{
 		override public void Run()
@@ -42,7 +42,7 @@ namespace Boo.Lang.Compiler.Steps
 		{
 			if (name == null || name == string.Empty) return false;
 			char c = name[0];
-			return char.IsLetter(c) || c=='(' || c=='_';
+			return char.IsLetter(c) || c=='(' || c=='_' || c == '$';
 		}
 		
 		private void CheckName(Node node, string name)
@@ -52,22 +52,27 @@ namespace Boo.Lang.Compiler.Steps
 				Errors.Add(CompilerErrorFactory.InvalidName(node, name));
 			}
 		}
+
 		private void CheckParameterUniqueness(Method method)
 		{
 			Boo.Lang.List parameters = new Boo.Lang.List();
-			foreach(ParameterDeclaration parameter in method.Parameters)
+			foreach (ParameterDeclaration parameter in method.Parameters)
 			{
-				if(parameters.Contains(parameter.Name))
+				if (parameters.Contains(parameter.Name))
 				{
-					Errors.Add(CompilerErrorFactory.DuplicateParameterName(parameter, parameter.Name, method.Name));
+					Errors.Add(
+						CompilerErrorFactory.DuplicateParameterName(
+							parameter, parameter.Name, GetEntity(method).ToString()));
 				}				
 				parameters.Add(parameter.Name);
 			}
 		}
+
 		override public void OnNamespaceDeclaration(NamespaceDeclaration node)
 		{
 			CheckName(node,node.Name);
 		}
+
 		override public void OnReferenceExpression(ReferenceExpression node)
 		{
 			CheckName(node,node.Name);
@@ -100,22 +105,36 @@ namespace Boo.Lang.Compiler.Steps
 		
 		override public void LeaveDeclaration(Declaration node)
 		{
-			CheckName(node,node.Name);
+			// Special exemption made for anonymous exception handlers
+			if(!(node.ParentNode is ExceptionHandler) ||
+			   ((node.ParentNode as ExceptionHandler).Flags 
+			    & ExceptionHandlerFlags.Anonymous) == ExceptionHandlerFlags.None)
+			{
+				CheckName(node,node.Name);
+			}
 		}
 		
 		override public void LeaveAttribute(Attribute node)
 		{
 			CheckName(node,node.Name);
 		}
+
+		public override void LeaveConstructor(Constructor node)
+		{
+			CheckParameterUniqueness(node);
+		}
+
 		override public void LeaveMethod(Method node)
 		{
 			CheckParameterUniqueness(node);
 			CheckName(node, node.Name);
 		}
+
 		override public void LeaveParameterDeclaration(ParameterDeclaration node)
 		{
 			CheckName(node,node.Name);
 		}
+
 		override public void LeaveImport(Import node)
 		{
 			if (null != node.Alias)

@@ -33,6 +33,13 @@ enum ParameterModifiers:
 	Val = 0
 	Ref = 1
 
+[Flags]
+enum ExceptionHandlerFlags:
+	None = 0
+	Anonymous = 1
+	Untyped = 2
+	Filter = 4
+
 abstract class TypeMember(Node, INodeWithAttributes):
 	Modifiers as TypeMemberModifiers
 	Name as string
@@ -78,6 +85,7 @@ class CallableDefinition(TypeMember, INodeWithParameters):
 abstract class TypeDefinition(TypeMember):
 	Members as TypeMemberCollection
 	BaseTypes as TypeReferenceCollection
+	GenericParameters as GenericParameterDeclarationCollection
 
 [collection(TypeDefinition)]
 class TypeDefinitionCollection:
@@ -145,7 +153,7 @@ class Local(Node):
 class LocalCollection:
 	pass
 	
-class CallableBlockExpression(Expression, INodeWithParameters):
+class BlockExpression(Expression, INodeWithParameters):
 	Parameters as ParameterDeclarationCollection
 	ReturnType as TypeReference
 	[auto]
@@ -239,10 +247,13 @@ class TryStatement(Statement):
 	[auto]
 	ProtectedBlock as Block
 	ExceptionHandlers as ExceptionHandlerCollection
+	FailureBlock as Block
 	EnsureBlock as Block
 	
 class ExceptionHandler(Node):
 	Declaration as Declaration
+	FilterCondition as Expression
+	Flags as ExceptionHandlerFlags
 	
 	[auto]
 	Block as Block
@@ -274,21 +285,6 @@ class WhileStatement(Statement):
 	
 	[auto]
 	Block as Block
-
-class GivenStatement(Statement):
-	Expression as Expression
-	WhenClauses as WhenClauseCollection
-	OtherwiseBlock as Block
-
-class WhenClause(Node):
-	Condition as Expression
-	
-	[auto]
-	Block as Block
-
-[collection(WhenClause)]
-class WhenClauseCollection:
-	pass
 
 class BreakStatement(Statement):
 	pass
@@ -414,7 +410,7 @@ class GenericReferenceExpression(Expression):
 abstract class LiteralExpression(Expression):
 	pass
 	
-class AstLiteralExpression(LiteralExpression):
+class QuasiquoteExpression(LiteralExpression):
 	Node as Node
 
 class StringLiteralExpression(LiteralExpression):
@@ -448,6 +444,24 @@ class BoolLiteralExpression(LiteralExpression):
 
 class RELiteralExpression(LiteralExpression):
 	Value as string
+	
+class SpliceExpression(Expression):
+	Expression as Expression
+	
+class SpliceTypeReference(TypeReference):
+	Expression as Expression
+	
+class SpliceMemberReferenceExpression(Expression):
+	Target as Expression
+	NameExpression as Expression
+	
+class SpliceTypeMember(TypeMember):
+	TypeMember as TypeMember
+	NameExpression as Expression
+	
+class SpliceParameterDeclaration(ParameterDeclaration):
+	ParameterDeclaration as ParameterDeclaration
+	NameExpression as Expression
 
 class ExpressionInterpolationExpression(Expression):
 	Expressions as ExpressionCollection
@@ -497,4 +511,5 @@ class CastExpression(Expression):
 	
 class TypeofExpression(Expression):
 	Type as TypeReference
+
 

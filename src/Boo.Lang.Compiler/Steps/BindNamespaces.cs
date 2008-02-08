@@ -54,7 +54,25 @@ namespace Boo.Lang.Compiler.Steps
 		
 		public override void OnImport(Boo.Lang.Compiler.Ast.Import import)
 		{
-			IEntity entity = NameResolutionService.ResolveQualifiedName(import.Namespace);
+			INamespace oldns = NameResolutionService.CurrentNamespace;
+			IEntity entity = null;
+			try
+			{
+				if(NameResolutionService.CurrentNamespace.ParentNamespace != null)
+				{
+					NameResolutionService.EnterNamespace(NameResolutionService.CurrentNamespace.ParentNamespace);
+					entity = NameResolutionService.ResolveQualifiedName(import.Namespace);
+				}
+			}
+			finally
+			{
+				NameResolutionService.EnterNamespace(oldns);
+			}
+			
+			if(null == entity)
+			{
+				entity = NameResolutionService.ResolveQualifiedName(import.Namespace);
+			}
 			
 			//if 'import X', try 'import X from X'
 			//comment out next if block if this is not wanted
@@ -117,7 +135,7 @@ namespace Boo.Lang.Compiler.Steps
 				}
 			}
 			
-			_context.TraceInfo("{1}: import reference '{0}' bound to {2}.", import, import.LexicalInfo, entity.Name);
+			_context.TraceInfo("{1}: import reference '{0}' bound to {2}.", import, import.LexicalInfo, entity.FullName);
 			import.Entity = entity;
 		}
 		
@@ -127,7 +145,24 @@ namespace Boo.Lang.Compiler.Steps
 			if (asm != null) return false; //name resolution already failed earlier, don't try twice
 			
 			asm = Parameters.LoadAssembly(import.Namespace, false);
-			if (asm == null) return false;
+			if (asm == null) {
+				//try generalized namespaces
+				string[] namespaces = import.Namespace.Split(new char[]{'.',});
+				if (namespaces.Length == 1) {
+					return false;
+				} else {
+					string ns;
+					int level = namespaces.Length - 1;
+					while (level > 0) {
+						ns = string.Join(".", namespaces, 0, level);
+						asm = Parameters.FindAssembly(ns);
+						if (asm != null) return false; //name resolution already failed earlier, don't try twice
+						asm = Parameters.LoadAssembly(ns, false);
+						if (asm != null) break;
+						level--;
+					}
+				}
+			}
 			
 			if (asm != null)
 			{

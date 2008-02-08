@@ -1,18 +1,18 @@
-#region license
-// Copyright (c) 2004, 2007 Rodrigo B. de Oliveira (rbo@acm.org)
+﻿#region license
+// Copyright (c) 2003, 2004, 2005 Rodrigo B. de Oliveira (rbo@acm.org)
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without modification,
 // are permitted provided that the following conditions are met:
 //
-//	 * Redistributions of source code must retain the above copyright notice,
-//	 this list of conditions and the following disclaimer.
-//	 * Redistributions in binary form must reproduce the above copyright notice,
-//	 this list of conditions and the following disclaimer in the documentation
-//	 and/or other materials provided with the distribution.
-//	 * Neither the name of Rodrigo B. de Oliveira nor the names of its
-//	 contributors may be used to endorse or promote products derived from this
-//	 software without specific prior written permission.
+//	   * Redistributions of source code must retain the above copyright notice,
+//	   this list of conditions and the following disclaimer.
+//	   * Redistributions in binary form must reproduce the above copyright notice,
+//	   this list of conditions and the following disclaimer in the documentation
+//	   and/or other materials provided with the distribution.
+//	   * Neither the name of Rodrigo B. de Oliveira nor the names of its
+//	   contributors may be used to endorse or promote products derived from this
+//	   software without specific prior written permission.
 //
 // THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
 // ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
@@ -26,75 +26,60 @@
 // THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #endregion
 
+
 using System;
-using System.Reflection;
 using System.Collections.Generic;
+using System.Reflection;
 
 namespace Boo.Lang.Runtime
 {
-	internal class MethodResolver
+	public class MethodResolver
 	{
-		private object _target;
-		private Type _type;
-		private string _methodName;
-		private object[] _arguments;
-
-		private static Dictionary<MethodDispatcherKey, MethodDispatcher> _cache =
-			new Dictionary<MethodDispatcherKey, MethodDispatcher>(MethodDispatcherKey.EqualityComparer);
-
-		public MethodResolver(object target, Type type, string methodName, object[] arguments)
+		public static Type[] GetArgumentTypes(object[] arguments)
 		{
-			_target = target;
-			_type = type;
-			_methodName = methodName;
-			_arguments = arguments;
-		}
+			if (arguments.Length == 0) return DispatcherKey.NoArguments;
 
-		public object InvokeResolvedMethod()
-		{
-			Type[] argumentTypes = GetArgumentTypes();
-			MethodDispatcherKey key = new MethodDispatcherKey(_type, _methodName, argumentTypes);
-			MethodDispatcher dispatcher;
-			if (!_cache.TryGetValue(key, out dispatcher))
-			{
-				CandidateMethod found = ResolveMethod();
-				dispatcher = EmitMethodDispatcher(found, argumentTypes);
-				_cache.Add(key, dispatcher);
-			}
-			return dispatcher(_target, _arguments);
-		}
-
-		private static Type[] NoArguments = new Type[0];
-
-		private Type[] GetArgumentTypes()
-		{
-			if (_arguments.Length == 0) return NoArguments;
-
-			Type[] types = new Type[_arguments.Length];
+			Type[] types = new Type[arguments.Length];
 			for (int i = 0; i < types.Length; ++i)
 			{
-				types[i] = GetArgumentType(i);
+				types[i] = GetObjectTypeOrNull(arguments[i]);
 			}
 			return types;
 		}
 
-		private MethodDispatcher EmitMethodDispatcher(CandidateMethod found, Type[] argumentTypes)
+		private static Type GetObjectTypeOrNull(object arg)
 		{
-			return new MethodDispatcherEmitter(_type, found, argumentTypes).Emit();
+			if (null == arg) return null;
+			return arg.GetType();
 		}
 
-		private CandidateMethod ResolveMethod()
+		private readonly Type[] _arguments;
+
+		public MethodResolver(params Type[] argumentTypes)
 		{
-			List applicable = FindApplicableMethods();
-			if (applicable.Count == 1) return ((CandidateMethod)applicable[0]);
-			if (applicable.Count == 0) throw new System.MissingMethodException(_type.FullName, _methodName);
+			_arguments = argumentTypes;
+		}
+
+		public CandidateMethod ResolveMethod(IEnumerable<MethodInfo> candidates)
+		{
+			List<CandidateMethod> applicable = FindApplicableMethods(candidates);
+			if (applicable.Count == 0) return null;
+			if (applicable.Count == 1) return applicable[0];
+			
+			List<CandidateMethod> dataPreserving = applicable.FindAll(DoesNotRequireConversions);
+			if (dataPreserving.Count > 0) return BestMethod(dataPreserving);
 			return BestMethod(applicable);
 		}
 
-		private CandidateMethod BestMethod(List applicable)
+		private static bool DoesNotRequireConversions(CandidateMethod candidate)
 		{
-			applicable.Sort(new Comparer(BetterCandidate));
-			return ((CandidateMethod)applicable[-1]);
+			return candidate.DoesNotRequireConversions;
+		}
+
+		private CandidateMethod BestMethod(List<CandidateMethod> applicable)
+		{
+			applicable.Sort(BetterCandidate);
+			return applicable[applicable.Count - 1];
 		}
 
 		private int TotalScore(CandidateMethod c1)
@@ -107,11 +92,6 @@ namespace Boo.Lang.Runtime
 			return total;
 		}
 
-		private int BetterCandidate(object lhs, object rhs)
-		{
-			return BetterCandidate((CandidateMethod)lhs, (CandidateMethod)rhs);
-		}
-
 		private int BetterCandidate(CandidateMethod c1, CandidateMethod c2)
 		{
 			int result = Math.Sign(TotalScore(c1) - TotalScore(c2));
@@ -121,12 +101,11 @@ namespace Boo.Lang.Runtime
 			return c2.VarArgs ? 1 : 0;
 		}
 
-		private List FindApplicableMethods()
+		private List<CandidateMethod> FindApplicableMethods(IEnumerable<MethodInfo> candidates)
 		{
-			List applicable = new List();
-			foreach (MethodInfo method in _type.GetMethods(RuntimeServices.DefaultBindingFlags))
+			List<CandidateMethod> applicable = new List<CandidateMethod>();
+			foreach (MethodInfo method in candidates)
 			{
-				if (_methodName != method.Name) continue;
 				CandidateMethod candidateMethod = IsApplicableMethod(method);
 				if (null == candidateMethod) continue;
 				applicable.Add(candidateMethod);
@@ -196,87 +175,11 @@ namespace Boo.Lang.Runtime
 
 		private bool CalculateCandidateArgumentScore(CandidateMethod candidateMethod, int argumentIndex, Type paramType)
 		{
-			int score = CalculateArgumentScore(candidateMethod, argumentIndex, paramType, GetArgumentType(argumentIndex));
+			int score = CandidateMethod.CalculateArgumentScore(paramType, _arguments[argumentIndex]);
 			if (score < 0) return false;
 
 			candidateMethod.ArgumentScores[argumentIndex] = score;
 			return true;
-		}
-
-		private int CalculateArgumentScore(CandidateMethod candidateMethod, int argumentIndex, Type paramType, Type argType)
-		{
-			if (null == argType)
-			{
-				if (paramType.IsValueType) return -1;
-				return CandidateMethod.ExactMatchScore;
-			}
-			else
-			{
-				if (paramType == argType) return CandidateMethod.ExactMatchScore;
-
-				if (paramType.IsAssignableFrom(argType)) return CandidateMethod.UpCastScore;
-
-				if (argType.IsAssignableFrom(paramType)) return CandidateMethod.DowncastScore;
-
-				if (IsNumericPromotion(paramType, argType)) return CandidateMethod.PromotionScore;
-
-				MethodInfo conversion = RuntimeServices.FindImplicitConversionOperator(argType, paramType);
-				if (null != conversion)
-				{
-					candidateMethod.RememberArgumentConversion(argumentIndex, conversion);
-					return CandidateMethod.ImplicitConversionScore;
-				}
-			}
-			return -1;
-		}
-
-		private bool IsNumericPromotion(Type paramType, Type argType)
-		{
-			return RuntimeServices.IsPromotableNumeric(Type.GetTypeCode(paramType))
-				&& RuntimeServices.IsPromotableNumeric(Type.GetTypeCode(argType));
-		}
-
-		private Type GetArgumentType(int i)
-		{
-			object arg = _arguments[i];
-			if (null == arg) return null;
-			return arg.GetType();
-		}
-
-		class MethodDispatcherKey
-		{
-			public static readonly IEqualityComparer<MethodDispatcherKey> EqualityComparer = new _EqualityComparer();
-
-			private Type _type;
-			private string _methodName;
-			private Type[] _arguments;
-
-			public MethodDispatcherKey(Type type, string methodName, Type[] arguments)
-			{
-				_type = type;
-				_methodName = methodName;
-				_arguments = arguments;
-			}
-
-			class _EqualityComparer : IEqualityComparer<MethodDispatcherKey>
-			{
-				public int GetHashCode(MethodDispatcherKey key)
-				{
-					return key._type.GetHashCode() ^ key._methodName.GetHashCode() ^ key._arguments.Length;
-				}
-
-				public bool Equals(MethodDispatcherKey x, MethodDispatcherKey y)
-				{
-					if (x._type != y._type) return false;
-					if (x._arguments.Length != y._arguments.Length) return false;
-					if (x._methodName != y._methodName) return false;
-					for (int i = 0; i < x._arguments.Length; ++i)
-					{
-						if (x._arguments[i] != y._arguments[i]) return false;
-					}
-					return true;
-				}
-			}
 		}
 	}
 }

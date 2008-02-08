@@ -1,9 +1,9 @@
 #!/bin/sh
-# prerm script for test
+# prerm script for boo
 #
 # see: dh_installdeb(1)
 
-set -e
+#set -e #we want to ignore gacutil errors if user manually removed the libs
 
 # summary of how this script can be called:
 #        * <prerm> `remove'
@@ -31,6 +31,7 @@ case "$1" in
     env $GACUTIL -u Boo.Lang.Interpreter
     env $GACUTIL -u Boo.Lang.Parser
     env $GACUTIL -u Boo.Lang.Useful
+    env $GACUTIL -u Boo.Lang.Extensions
     ;;
 
     upgrade)
@@ -46,5 +47,3 @@ case "$1" in
 esac
 
 exit 0
-
-

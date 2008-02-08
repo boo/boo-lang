@@ -29,13 +29,10 @@
 namespace Boo.NAnt
 
 import System
-import System.Globalization
 import System.IO
 import System.Text.RegularExpressions
-import NAnt.Core
 import NAnt.Core.Attributes
 import NAnt.Core.Types
-import NAnt.Core.Util
 import NAnt.DotNet.Types
 
 import NAnt.DotNet.Tasks
@@ -52,6 +49,8 @@ public class BoocTask(CompilerBase):
 	private _nostdlib = false
 	private _wsa = false
 	private _ducky = false
+	private _defineSymbols as string = null
+	
 	private _pipeline as string
 	
 	#endregion Private Instance Fields
@@ -141,7 +140,14 @@ public class BoocTask(CompilerBase):
 			return _ducky
 		set:
 			_ducky = value
-	
+
+	[TaskAttribute('define')]
+	public DefineSymbols as string:
+		get:
+			return _defineSymbols
+		set:
+			_defineSymbols = value
+
 	private def FindBooc() as string:
 		path as string
 		dir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location)
@@ -183,6 +189,8 @@ public class BoocTask(CompilerBase):
 			WriteOption(writer, "wsa")
 		if Ducky:
 			WriteOption(writer, "ducky")
+		if DefineSymbols is not null:
+			WriteOption(writer, "define", DefineSymbols)
 		if Pipeline:
 			WriteOption(writer, "p", _pipeline)
 	
@@ -190,8 +198,6 @@ public class BoocTask(CompilerBase):
 		writer.WriteLine("-{0}", name)
 		
 	protected override def WriteOption(writer as TextWriter, name as string, value as string):
-		if name == "resource": name = "embedres"
-		
 		if " " in value and not IsQuoted(value):
 			writer.WriteLine("-{0}:\"{1}\"", name, value)
 		else:

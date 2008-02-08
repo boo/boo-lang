@@ -43,8 +43,9 @@ namespace Boo.Lang.Compiler.Steps
 			Visit(CompileUnit);
 		}
 
-		override public void OnAstLiteralExpression(AstLiteralExpression node)
+		override public void OnQuasiquoteExpression(QuasiquoteExpression node)
 		{
+			Visit(node.Node);
 			CodeSerializer serializer = new CodeSerializer();
 			ReplaceCurrentNode(serializer.Serialize(node));
 		}

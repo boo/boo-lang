@@ -30,7 +30,6 @@ namespace Boo.NAnt
 
 import System
 import System.Text
-import System.Diagnostics
 import System.IO
 import NAnt.Core
 import NAnt.Core.Attributes
@@ -89,7 +88,7 @@ abstract class AbstractBooTask(Task):
 				path = Path.Combine(baseDir, reference)
 				if not File.Exists(path):
 					print("${path} doesn't exist.")
-					asm = Reflection.Assembly.LoadWithPartialName(Path.GetFileNameWithoutExtension(reference))
+					asm = Reflection.Assembly.Load(Path.GetFileNameWithoutExtension(reference))
 				else:
 					asm = Reflection.Assembly.LoadFrom(path)
 			else:
@@ -150,10 +149,16 @@ abstract class AbstractBooTask(Task):
 		self.Log(Level.Error, "${message}")
 		
 def read(fname as string):
-	using reader=File.OpenText(fname):
+	try:
+		reader=File.OpenText(fname)
 		return reader.ReadToEnd()
+	ensure:
+		reader.Dispose() unless reader is null
 	
 def write(fname as string, contents as string):
-	using writer=StreamWriter(fname, false, System.Text.Encoding.UTF8):
+	try:
+		writer=StreamWriter(fname, false, System.Text.Encoding.UTF8)
 		writer.Write(contents)
+	ensure:
+		writer.Dispose() unless writer is null
 

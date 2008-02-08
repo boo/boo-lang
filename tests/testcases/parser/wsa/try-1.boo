@@ -6,7 +6,6 @@ except ex:
 """
 try:
 	raise System.Exception('throw')
-end
 except ex:
 	Console.WriteLine('catch')
 end

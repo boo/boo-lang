@@ -97,13 +97,18 @@ namespace Boo.Lang.Compiler.Steps
 		
 		void LeaveTypeDefinition(TypeDefinition node)
 		{
-			string fullName = node.FullName;
-			if (_types.Contains(fullName))
+			string qualifiedName = node.QualifiedName;
+			if (node.HasGenericParameters)
+			{
+				qualifiedName += "`" + node.GenericParameters.Count;
+			}
+
+			if (_types.Contains(qualifiedName))
 			{
 				Errors.Add(CompilerErrorFactory.NamespaceAlreadyContainsMember(node, GetNamespace(node), node.Name));
 				return;
 			}
-			_types.Add(fullName, node); 
+			_types.Add(qualifiedName, node); 
 		}
 		
 		string GetNamespace(TypeDefinition node)
@@ -128,7 +133,9 @@ namespace Boo.Lang.Compiler.Steps
 		{
 			Visit(node.ProtectedBlock);
 			Visit(node.ExceptionHandlers);
+
 			EnterEnsureBlock();
+			Visit(node.FailureBlock);
 			Visit(node.EnsureBlock);
 			LeaveEnsureBlock();
 		}
@@ -302,7 +309,7 @@ namespace Boo.Lang.Compiler.Steps
 			IEntity entity = NameResolutionService.Resolve(extendedType, method.Name, EntityType.Method);
 			if (null == entity) return;
 			IMethod conflicting = FindConflictingMember(method, entity);
-			if (null == conflicting) return;
+			if (null == conflicting || !conflicting.IsPublic) return;
 
 			Error(CompilerErrorFactory.MemberNameConflict(node, extendedType.ToString(), TypeSystemServices.GetSignature(conflicting, false)));
 		}

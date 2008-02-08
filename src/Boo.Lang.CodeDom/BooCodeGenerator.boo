@@ -36,10 +36,8 @@
 
 namespace Boo.Lang.CodeDom
 
-import System
 import System.CodeDom
 import System.CodeDom.Compiler
-import System.IO
 import System.Reflection
 import System.Collections
 import System.Text.RegularExpressions
@@ -471,7 +469,8 @@ class BooCodeGenerator(CodeGenerator):
 		elif typeRef.BaseType in primitives:
 			out = primitives[typeRef.BaseType]
 		else:
-			out = typeRef.BaseType
+			// BaseType uses .NET syntax for inner classes, so we have to replace '+' with '.'
+			out = typeRef.BaseType.Replace('+', '.')
 		
 		if typeRef.ArrayRank == 0:
 			return out

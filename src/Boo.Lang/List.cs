@@ -45,8 +45,6 @@ namespace Boo.Lang
 	{
 		private const int DefaultCapacity = 16;
 
-		static readonly object[] EmptyObjectArray = new object[0];
-
 		protected object[] _items;
 
 		protected int _count;
@@ -322,21 +320,11 @@ namespace Boo.Lang
 
 		override public bool Equals(object other)
 		{
-			if (other == this)
-			{
-				return true;
-			}
+			if (other == this) return true;
 
 			List rhs = other as List;
-			if (null == rhs)
-			{
-				return false;
-			}
-
-			if (_count != rhs.Count)
-			{
-				return false;
-			}
+			if (null == rhs) return false;
+			if (_count != rhs.Count) return false;
 
 			for (int i=0; i<_count; ++i)
 			{

@@ -57,14 +57,10 @@ namespace Boo.Lang.Compiler.TypeSystem
 			{
 				if (null == _method.ReturnType)
 				{
-					if (_method.DeclaringType.NodeType == NodeType.ClassDefinition)
-					{
-						_method.ReturnType = _typeSystemServices.CodeBuilder.CreateTypeReference(Unknown.Default);
-					}
-					else
-					{
-						_method.ReturnType = _typeSystemServices.CodeBuilder.CreateTypeReference(_typeSystemServices.VoidType);
-					}
+					IType returnType = _method.DeclaringType.NodeType == NodeType.ClassDefinition
+						? Unknown.Default
+						: (IType)_typeSystemServices.VoidType;
+					_method.ReturnType = _typeSystemServices.CodeBuilder.CreateTypeReference(method.LexicalInfo, returnType);
 				}
 			}
 		}
@@ -73,7 +69,12 @@ namespace Boo.Lang.Compiler.TypeSystem
 		{
 			get
 			{
-				return IsAttributeDefined(Types.ExtensionAttribute);
+				bool defined = IsAttributeDefined(Types.BooExtensionAttribute);
+				if( defined == false && Types.ClrExtensionAttribute != null )
+				{
+					defined = IsAttributeDefined(Types.ClrExtensionAttribute);
+				}
+				return defined;
 			}
 		}
 
@@ -411,12 +412,12 @@ namespace Boo.Lang.Compiler.TypeSystem
 			return _typeSystemServices.GetSignature(this);
 		}
 		
-		public virtual IGenericMethodInfo GenericMethodInfo
+		public virtual IConstructedMethodInfo ConstructedInfo
 		{
 			get { return null; }
 		}
 
-		public virtual IGenericMethodDefinitionInfo GenericMethodDefinitionInfo
+		public virtual IGenericMethodInfo GenericInfo
 		{
 			get { return null; }
 		}

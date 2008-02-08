@@ -32,7 +32,6 @@ import System.Threading
 import Boo.Lang.Compiler
 import Boo.Lang.Compiler.Ast
 import Boo.Lang.Compiler.Steps
-import Boo.Lang.Compiler.TypeSystem
 
 class OnceAttribute(AbstractAstAttribute):
 """
@@ -118,6 +117,7 @@ Usage
 	Creates the field that stores the return value of the cached method.
 	"""
 		template = self.CodeBuilder.CreateField('field', TypeSystemServices.GetEntity(_method.ReturnType))
+		template.Modifiers = TypeMemberModifiers.Private
 		_returnValue = AddField(template, "___${_method.Name}_returnValue")
 
 	def CreateCachedField():
@@ -127,8 +127,9 @@ Usage
 	Remarks:
 		The flag is used to check whether the method has been cached.
 	"""
-		template = ast:
-			private field as bool			 	
+		template = [|
+			private field as bool
+		|]
 		_cached = AddField(template, "___${_method.Name}_cached")
 		
 	def CreateMethodLockField():
@@ -138,14 +139,14 @@ Usage
 	Remarks:
 		The field is used to lock on when the operatation is thread safe.
 	"""
-		template = ast:
-			private field as object = object()			
+		template = [|
+			private field as object = object()
+		|]			
 		_methodLock = AddField(template, "___${_method.Name}_lock")
 		
 	def AddField(template as Field, name as string):
 		template.LexicalInfo = self.LexicalInfo
 		template.Name = name
-		template.Modifiers = TypeMemberModifiers.Private
 		template.Modifiers |= TypeMemberModifiers.Static if IsStaticMethod()
 		_method.DeclaringType.Members.Add(template)
 		return template
@@ -154,29 +155,21 @@ Usage
 		return _method.IsStatic or _method.ParentNode isa Module
 		
 	def PrepareMethodBody():
-		newMethodBodyTemplate = ast:
-			if not cached:
-				System.Threading.Monitor.Enter(methodLock)
+		
+		cached = ReferenceExpression(_cached.Name)
+		methodLock = ReferenceExpression(_methodLock.Name)
+		
+		_method.Body = [|
+			if not $cached:
+				System.Threading.Monitor.Enter($methodLock)
 				try:
-					if not cached:
-						oldMethodBody
-						cached = true
+					if not $cached:
+						$(_method.Body)
+						$cached = true
 				ensure:
-					System.Threading.Monitor.Exit(methodLock)
-		
-		ReplaceReferences(newMethodBodyTemplate, 'cached', _cached.Name)
-		ReplaceReferences(newMethodBodyTemplate, 'methodLock', _methodLock.Name)
-		newMethodBodyTemplate.ReplaceNodes(
-			MacroStatement(Name: 'oldMethodBody'),
-			_method.Body)
-			
-		_method.Body = Block()
-		_method.Body.Add(newMethodBodyTemplate)
-		
-	def ReplaceReferences(node as Node, what as string, value as string):
-		node.ReplaceNodes(
-			ReferenceExpression(what),
-			ReferenceExpression(value))
+					System.Threading.Monitor.Exit($methodLock)
+		|].ToBlock()
+	
 	
 	def PostProcessMethod():
 	"""

@@ -32,6 +32,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 	using System.Collections;
 	using Boo.Lang.Compiler.Ast;
 	using System.Reflection;
+	using System.Collections.Generic;
 	
 	public class NameResolutionService
 	{
@@ -49,19 +50,13 @@ namespace Boo.Lang.Compiler.TypeSystem
 		
 		public NameResolutionService(CompilerContext context)
 		{
-			if (null == context)
-			{
-				throw new ArgumentNullException("context");
-			}
+			if (null == context) throw new ArgumentNullException("context");
 			_context = context;
 		}
 		
 		public INamespace GlobalNamespace
 		{
-			get
-			{
-				return _global;
-			}
+			get { return _global; }
 			
 			set
 			{
@@ -75,20 +70,14 @@ namespace Boo.Lang.Compiler.TypeSystem
 		
 		public void EnterNamespace(INamespace ns)
 		{
-			if (null == ns)
-			{
-				throw new ArgumentNullException("ns");
-			}
+			if (null == ns) throw new ArgumentNullException("ns");
 			_current = ns;
 		}
 		
 		public INamespace CurrentNamespace
 		{
-			get
-			{
-				return _current;
+			get { return _current; }
 			}
-		}
 		
 		public void Reset()
 		{
@@ -97,10 +86,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 		
 		public void Restore(INamespace saved)
 		{
-			if (null == saved)
-			{
-				throw new ArgumentNullException("saved");
-			}
+			if (null == saved) throw new ArgumentNullException("saved");
 			_current = saved;
 		}
 		
@@ -127,17 +113,17 @@ namespace Boo.Lang.Compiler.TypeSystem
 		}
 		
 		public bool Resolve(List targetList, string name, EntityType flags)
-		{			
+		{
 			IEntity entity = _context.TypeSystemServices.ResolvePrimitive(name);
 			if (null != entity)
-			{ 
+			{
 				targetList.Add(entity);
 				return true;
 			}
 
 			INamespace ns = _current;
 			while (null != ns)
-			{					
+			{
 				if (ns.Resolve(targetList, name, flags))
 				{
 					return true;
@@ -191,7 +177,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 		}
 		
 		public IEntity ResolveQualifiedName(string name)
-		{			
+		{
 			_buffer.Clear();
 			ResolveQualifiedName(_buffer, name);
 			return GetEntityFromBuffer();
@@ -272,39 +258,16 @@ namespace Boo.Lang.Compiler.TypeSystem
 			}
 		}
 		
-		private IEntity MakeGenericType(GenericTypeReference node, IType entity)
+		private void ResolveTypeReferenceCollection(TypeReferenceCollection collection)
 		{
-			if (entity.GenericTypeDefinitionInfo == null)
+			foreach (TypeReference tr in collection)
 			{
-				_context.Errors.Add(CompilerErrorFactory.NotAGenericDefinition(node, node.Name));
-				return TypeSystemServices.ErrorEntity;
+				ResolveTypeReference(tr);
 			}
-			
-			if (entity.GenericTypeDefinitionInfo.GenericParameters.Length != node.GenericArguments.Count)
-			{
-				return GenericArgumentsCountMismatch(node, entity);
-			}
-
-			IType[] arguments = ResolveGenericArguments(node);
-			return entity.GenericTypeDefinitionInfo.MakeGenericType(arguments);
-		}
-
-		private IType[] ResolveGenericArguments(GenericTypeReference node)
-		{
-			IType[] arguments = new IType[node.GenericArguments.Count];
-			
-			for (int i = 0; i < arguments.Length; ++i)
-			{
-				ResolveTypeReference(node.GenericArguments[i]);
-				arguments[i] = (IType)node.GenericArguments[i].Entity;
-			}
-			
-			return arguments;
 		}
 		
 		public void ResolveSimpleTypeReference(SimpleTypeReference node)
 		{
-			
 			if (null != node.Entity) return;
 			
 			IEntity entity = ResolveTypeName(node);
@@ -329,14 +292,15 @@ namespace Boo.Lang.Compiler.TypeSystem
 				GenericTypeReference gtr = node as GenericTypeReference;
 				if (null != gtr)
 				{
-					entity = MakeGenericType(gtr, (IType)entity);
+					ResolveTypeReferenceCollection(gtr.GenericArguments);
+					entity = ResolveGenericTypeReference(gtr, entity);
 				}
 				
 				GenericTypeDefinitionReference gtdr = node as GenericTypeDefinitionReference;
 				if (null != gtdr)
 				{
 					IType type = (IType)entity;
-					if (gtdr.GenericPlaceholders != type.GenericTypeDefinitionInfo.GenericParameters.Length)
+					if (gtdr.GenericPlaceholders != type.GenericInfo.GenericParameters.Length)
 					{
 						entity = GenericArgumentsCountMismatch(gtdr, type);
 					}
@@ -366,6 +330,19 @@ namespace Boo.Lang.Compiler.TypeSystem
 			return GetEntityFromBuffer();
 		}
 
+		public IType ResolveGenericTypeReference(GenericTypeReference gtr, IEntity definition)
+		{
+			ResolveTypeReferenceCollection(gtr.GenericArguments);
+
+			return (IType)_context.TypeSystemServices.GenericsServices.ConstructEntity(definition, gtr, gtr.GenericArguments);
+		}
+
+		public IEntity ResolveGenericReferenceExpression(GenericReferenceExpression gre, IEntity definition)
+		{
+			ResolveTypeReferenceCollection(gre.GenericArguments);
+			return _context.TypeSystemServices.GenericsServices.ConstructEntity(definition, gre, gre.GenericArguments);
+		}
+
 		private void FilterGenericTypes(List types, SimpleTypeReference node)		
 		{			
 			bool genericRequested = (node is GenericTypeReference || node is GenericTypeDefinitionReference);
@@ -376,20 +353,21 @@ namespace Boo.Lang.Compiler.TypeSystem
 				if (type == null) continue;
 				
 				// Remove type from list of matches if it doesn't match requested generity
-				if (type.GenericTypeDefinitionInfo != null ^ genericRequested)
+				if (type.GenericInfo != null ^ genericRequested)
 				{
 					types.RemoveAt(i);
 					i--;
 				}
-			}			
+			}
 		}
 
 		private IEntity NameNotType(SimpleTypeReference node)
 		{
-			_context.Errors.Add(CompilerErrorFactory.NameNotType(node, node.ToCodeString()));
+			string suggestion = GetMostSimilarTypeName(node.Name);
+			_context.Errors.Add(CompilerErrorFactory.NameNotType(node, node.ToCodeString(), suggestion));
 			return TypeSystemServices.ErrorEntity;
 		}
-		
+
 		private IEntity AmbiguousReference(SimpleTypeReference node, Ambiguous entity)
 		{
 			_context.Errors.Add(CompilerErrorFactory.AmbiguousReference(node, node.Name, entity.Entities));
@@ -398,26 +376,26 @@ namespace Boo.Lang.Compiler.TypeSystem
 		
 		private IEntity GenericArgumentsCountMismatch(TypeReference node, IType type)
 		{
-			_context.Errors.Add(CompilerErrorFactory.GenericDefinitionArgumentCount(node, type.FullName, type.GenericTypeDefinitionInfo.GenericParameters.Length));
+			_context.Errors.Add(CompilerErrorFactory.GenericDefinitionArgumentCount(node, type.FullName, type.GenericInfo.GenericParameters.Length));
 			return TypeSystemServices.ErrorEntity; 
 		}
 		
-		public IField ResolveField(IType type, string name)
+		public static IField ResolveField(IType type, string name)
 		{
 			return (IField)ResolveMember(type, name, EntityType.Field);
 		}
 		
-		public IMethod ResolveMethod(IType type, string name)
+		public static IMethod ResolveMethod(IType type, string name)
 		{
 			return (IMethod)ResolveMember(type, name, EntityType.Method);
 		}
 		
-		public IProperty ResolveProperty(IType type, string name)
+		public static IProperty ResolveProperty(IType type, string name)
 		{
 			return (IProperty)ResolveMember(type, name, EntityType.Property);
 		}
 		
-		public IEntity ResolveMember(IType type, string name, EntityType elementType)
+		public static IEntity ResolveMember(IType type, string name, EntityType elementType)
 		{
 			foreach (IEntity member in type.GetMembers())
 			{				
@@ -440,7 +418,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 		{
 			return Resolve(ns, name, EntityType.Any);
 		}
-		
+
 		IEntity GetEntityFromBuffer()
 		{
 			return GetEntityFromList(_buffer);
@@ -481,18 +459,30 @@ namespace Boo.Lang.Compiler.TypeSystem
 
 		private void CatalogPublicTypes(Type[] types)
 		{
+			string lastNs = "!!not a namespace!!";
+			NamespaceEntity lastNsEntity = null;
+			string ns;
+
 			foreach (Type type in types)
 			{
-				if (type.IsPublic) CatalogType(type);
+				if (!type.IsPublic) continue;
+
+				ns = type.Namespace ?? string.Empty;
+				//retrieve the namespace only if we don't have it handy already
+				//usually we'll have it since GetExportedTypes() seems to export
+				//types in a sorted fashion.
+				if (ns != lastNs)
+				{
+					lastNs = ns;
+					lastNsEntity = GetNamespace(ns);
+					lastNsEntity.Add(type);
+				}
+				else
+				{
+					lastNsEntity.Add(type);
+				}
 			}
-		}
-
-		private void CatalogType(Type type)
-		{
-			string ns = type.Namespace ?? string.Empty;
-			GetNamespace(ns).Add(type);
-		}
-
+		}
 		public NamespaceEntity GetNamespace(string ns)
 		{
 			string[] namespaceHierarchy = ns.Split('.');
@@ -531,6 +521,109 @@ namespace Boo.Lang.Compiler.TypeSystem
 			}
 			return globals;
 		}
+
+		private static void FlattenChildNamespaces(List<INamespace> list, INamespace ns)
+		{
+			foreach (IEntity ent in ns.GetMembers())
+			{
+				if (EntityType.Namespace != ent.EntityType) continue;
+				list.Add((INamespace) ent);
+				FlattenChildNamespaces(list, (INamespace) ent);
+			}
+		}
+
+		public string GetMostSimilarTypeName(string name)
+		{
+			string[] nsHierarchy = name.Split('.');
+			int nshLen = nsHierarchy.Length;
+			string suggestion = null;
+
+			if (nshLen > 1)
+			{
+				INamespace ns = null;
+				INamespace prevNs = null;
+				for (int i = 1; i < nshLen; i++)
+				{
+					string currentNsName = string.Join(".", nsHierarchy, 0, i);
+					ns = ResolveQualifiedName(currentNsName) as INamespace;
+					if (null == ns)
+					{
+						nsHierarchy[i-1] = GetMostSimilarMemberName(prevNs, nsHierarchy[i-1], EntityType.Namespace);
+						if (null == nsHierarchy[i-1]) break;
+						i--; continue; //reloop to resolve step
+					}
+					prevNs = ns;
+				}
+				suggestion = GetMostSimilarMemberName(ns, nsHierarchy[nshLen-1], EntityType.Type);
+				if (null != suggestion)
+				{
+					nsHierarchy[nshLen-1] = suggestion;
+					return string.Join(".", nsHierarchy);
+				}
+			}
 		
+			List<INamespace> nsList = new List<INamespace>();
+			FlattenChildNamespaces(nsList, GetGlobalNamespace());
+			nsList.Reverse();//most recently added namespaces first
+			foreach (INamespace nse in nsList)
+			{
+				suggestion = GetMostSimilarMemberName(nse, nsHierarchy[nshLen-1], EntityType.Type);
+				if (null != suggestion) return nse.ToString()+"."+suggestion;
+			}
+			return GetMostSimilarMemberName(GetGlobalNamespace(), nsHierarchy[nshLen-1], EntityType.Type);
+		}
+
+		public string GetMostSimilarMemberName(INamespace ns, string name, EntityType elementType)
+		{
+			if (null == ns) return null;
+
+			string expectedSoundex = ToSoundex(name);
+			string lastMemberName = null;
+			foreach (IEntity member in ns.GetMembers())
+			{
+				if (EntityType.Any != elementType && elementType != member.EntityType)
+					continue;
+				if (lastMemberName == member.Name)
+					continue;//no need to check this name again
+				//TODO: try Levenshtein distance or Metaphone instead of Soundex.
+				if (expectedSoundex == ToSoundex(member.Name))
+				{
+					return member.Name;
+				}
+				lastMemberName = member.Name;
+			}
+			return null;
+		}
+
+		private static string ToSoundex(string s)
+		{
+			if (s.Length < 2) return null;
+			char[] code = "?0000".ToCharArray();
+			string ws = s.ToLowerInvariant();
+			int wsLen = ws.Length;
+			char lastChar = ' ';
+			int lastCharPos = 1;
+
+			code[0] = ws[0];
+			for (int i = 1; i < wsLen; i++)
+			{
+				char wsc = ws[i];
+				char c = ' ';
+				if (wsc == 'b' || wsc == 'f' || wsc == 'p' || wsc == 'v') c = '1';
+				if (wsc == 'c' || wsc == 'g' || wsc == 'j' || wsc == 'k' || wsc == 'q' || wsc == 's' || wsc == 'x' || wsc == 'z') c = '2';
+				if (wsc == 'd' || wsc == 't') c = '3';
+				if (wsc == 'l') c = '4';
+				if (wsc == 'm' || wsc == 'n') c = '5';
+				if (wsc == 'r') c = '6';
+				if (c == lastChar) continue;
+				lastChar = c;
+				if (c == ' ') continue;
+				code[lastCharPos] = c;
+				lastCharPos++;
+				if (lastCharPos > 4) break;
+			}
+			return new string(code);
+        }
+
 	}
 }

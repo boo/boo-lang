@@ -30,26 +30,10 @@ using System;
 using System.Reflection;
 
 namespace Boo.Lang.Compiler.TypeSystem
-{	
-    class CachedMethod
-    {
-        public readonly IMethod Value;
-
-        public CachedMethod(IMethod value)
-        {
-            Value = value;
-        }
-    }
-
-	public class ExternalProperty : IProperty
+{
+	public class ExternalProperty : ExternalEntity<System.Reflection.PropertyInfo>, IProperty
 	{
-		protected TypeSystemServices _typeSystemServices;
-		
-		private System.Reflection.PropertyInfo _property;
-		
 		private IParameter[] _parameters;
-
-		private int _isDuckTyped = -1;
 		
 		private int _isExtension = -1;
 
@@ -59,10 +43,8 @@ namespace Boo.Lang.Compiler.TypeSystem
 
 	    private CachedMethod _setter = null;
 		
-		public ExternalProperty(TypeSystemServices tagManager, System.Reflection.PropertyInfo property)
+		public ExternalProperty(TypeSystemServices typeSystemServices, System.Reflection.PropertyInfo property) : base(typeSystemServices, property)
 		{
-			_typeSystemServices = tagManager;
-			_property = property;
 		}
 		
 		public bool IsExtension
@@ -71,7 +53,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 			{
 				if (-1 == _isExtension)
 				{
-					_isExtension = IsStatic && MetadataUtil.IsAttributeDefined(_property,  Types.ExtensionAttribute)
+					_isExtension = IsStatic && MetadataUtil.IsAttributeDefined(_memberInfo,  Types.BooExtensionAttribute)
 						? 1
 						: 0;
 				}
@@ -83,7 +65,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 		{
 			get
 			{
-				return _typeSystemServices.Map(_property.DeclaringType);
+				return _typeSystemServices.Map(_memberInfo.DeclaringType);
 			}
 		}
 		
@@ -92,20 +74,6 @@ namespace Boo.Lang.Compiler.TypeSystem
 			get
 			{
 				return GetAccessor().IsStatic;
-			}
-		}
-		public bool IsDuckTyped
-		{
-			get
-			{
-				if (-1 == _isDuckTyped)
-				{
-					_isDuckTyped =
-						!_property.PropertyType.IsValueType && MetadataUtil.IsAttributeDefined(_property, Types.DuckTypedAttribute)
-						? 1
-						: 0;
-				}
-				return 1 == _isDuckTyped;
 			}
 		}
 		
@@ -142,23 +110,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 			}
 		}
 		
-		public string Name
-		{
-			get
-			{
-				return _property.Name;
-			}
-		}
-		
-		public string FullName
-		{
-			get
-			{
-				return DeclaringType.FullName + "." + Name;
-			}
-		}
-		
-		public EntityType EntityType
+		override public EntityType EntityType
 		{
 			get
 			{
@@ -170,7 +122,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 		{
 			get
 			{
-				return _typeSystemServices.Map(_property.PropertyType);
+				return _typeSystemServices.Map(_memberInfo.PropertyType);
 			}
 		}
 		
@@ -178,7 +130,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 		{
 			get
 			{
-				return _property;
+				return _memberInfo;
 			}
 		}
 
@@ -189,12 +141,17 @@ namespace Boo.Lang.Compiler.TypeSystem
 				return false;
 			}
 		}
+
+		protected override Type MemberType
+		{
+			get { return _memberInfo.PropertyType; }
+		}
 		
 		public virtual IParameter[] GetParameters()
 		{
             if (null != _parameters) return _parameters;
 
-            return _parameters = _typeSystemServices.Map(_property.GetIndexParameters());
+            return _parameters = _typeSystemServices.Map(_memberInfo.GetIndexParameters());
 		}
 		
 		public virtual IMethod GetGetMethod()
@@ -205,7 +162,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 
 	    private IMethod FindGetMethod()
 	    {
-	        System.Reflection.MethodInfo getter = _property.GetGetMethod(true);
+	        System.Reflection.MethodInfo getter = _memberInfo.GetGetMethod(true);
             if (null == getter)
             {
                 PropertyInfo baseProperty = FindBaseProperty();
@@ -219,10 +176,10 @@ namespace Boo.Lang.Compiler.TypeSystem
 
 	    private PropertyInfo FindBaseProperty()
 	    {
-	        return _property.DeclaringType.BaseType.GetProperty(
-                                                        _property.Name,
-                                                        _property.PropertyType,
-                                                        GetParameterTypes(_property.GetIndexParameters()));
+	        return _memberInfo.DeclaringType.BaseType.GetProperty(
+                                                        _memberInfo.Name,
+                                                        _memberInfo.PropertyType,
+                                                        GetParameterTypes(_memberInfo.GetIndexParameters()));
 	    }
 
 	    private static Type[] GetParameterTypes(ParameterInfo[] parameters)
@@ -243,15 +200,10 @@ namespace Boo.Lang.Compiler.TypeSystem
 
 	    private IMethod FindSetMethod()
 	    {
-	        System.Reflection.MethodInfo setter = _property.GetSetMethod(true);
+	        System.Reflection.MethodInfo setter = _memberInfo.GetSetMethod(true);
 	        if (null == setter) return null;
 	        return _typeSystemServices.Map(setter);
 	    }
-
-	    override public string ToString()
-		{
-			return _property.ToString();
-		}
 		
 		private System.Reflection.MethodInfo GetAccessor()
 		{
@@ -262,9 +214,9 @@ namespace Boo.Lang.Compiler.TypeSystem
 
 	    private System.Reflection.MethodInfo FindAccessor()
 	    {
-	        System.Reflection.MethodInfo getter = _property.GetGetMethod(true);
+	        System.Reflection.MethodInfo getter = _memberInfo.GetGetMethod(true);
 	        if (null != getter) return getter;
-	        return _property.GetSetMethod(true);
+	        return _memberInfo.GetSetMethod(true);
 	    }
 	}
 }

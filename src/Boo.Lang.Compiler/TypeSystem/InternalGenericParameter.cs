@@ -21,7 +21,7 @@
 // FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
 // DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
 // SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
-// CAUSED AND TODON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+// CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 // OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 // THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #endregion
@@ -33,71 +33,101 @@ using Boo.Lang.Compiler.Ast;
 
 namespace Boo.Lang.Compiler.TypeSystem
 {
+    /// <summary>
+    /// A generic type parameter of an internal generic type or method.
+    /// </summary>
 	public class InternalGenericParameter : IType, IInternalEntity, IGenericParameter
 	{
 		TypeSystemServices _tss;
-		int _position;
-		string _name;
-		IType _declaringType = null;
-		IMethod _declaringMethod = null;
+		int _position = -1;
+		TypeDefinition _declaringType;
+		Method _declaringMethod;
 		GenericParameterDeclaration _declaration;
+
+		IType[] _emptyTypeArray = new IType[0];
 		
-		private InternalGenericParameter(TypeSystemServices tss, GenericParameterDeclaration declaration, int position)
+		public InternalGenericParameter(TypeSystemServices tss, GenericParameterDeclaration declaration)
 		{
 			_tss = tss;
 			_declaration = declaration;
-			_name = declaration.Name;
-			_position = position;
+
+			// Determine and remember declaring type and declaring method (if applicable)
+			_declaringMethod = declaration.ParentNode as Method;
+			_declaringType = (
+				_declaringMethod == null ? 
+				declaration.ParentNode as TypeDefinition : _declaringMethod.DeclaringType);
 		}
 
-		public InternalGenericParameter(TypeSystemServices tss, GenericParameterDeclaration declaration, AbstractInternalType declaringType, int position)
-			: this(tss, declaration, position)
-		{			
-			_declaringType = declaringType;
-		}
-
-		public InternalGenericParameter(TypeSystemServices tss, GenericParameterDeclaration declaration, InternalMethod declaringMethod, int position) 
-			: this(tss, declaration, position)
-		{
-			_declaringMethod = declaringMethod;
-		}
-				
 		public int GenericParameterPosition
 		{
-			get { return _position; }
+			get 
+			{
+				if (_position == -1)
+				{
+					IGenericParameter[] parameters = 
+						DeclaringMethod == null ? DeclaringMethod.GenericInfo.GenericParameters : DeclaringType.GenericInfo.GenericParameters;
+					
+					_position = Array.IndexOf(parameters, this);
+				}
+
+				return _position;
+			}
 		}
-		
+
+		public bool MustHaveDefaultConstructor
+		{
+			get
+			{
+				// TODO
+				return false;
+			}
+		}
+
+		public Variance Variance
+		{
+			// TODO
+			get { return Variance.Invariant; }
+		}
+
+		public IType[] GetBaseTypeConstraints()
+		{
+			// TODO
+			return null;
+		}
+
+		public bool IsValueType
+		{
+			// TODO: reflect value-type constraint
+			get { return false; }
+		}
+
+		public bool IsClass
+		{
+			// TODO: reflect reference-type constraint
+			get { return false; }
+		}
+
 		public IType DeclaringType
 		{
 		 	get 
 		 	{ 
-		 		if (_declaringType == null)
-		 		{
-		 			_declaringType = _declaringMethod.DeclaringType;
-		 		}
-		 		return _declaringType; 
+		 		return (IType)_declaringType.Entity; 
 		 	}
 		}
 		
 		public IMethod DeclaringMethod
 		{
-			get { return _declaringMethod; }
+			get { return DeclaringEntity as IMethod; } 
 		}
 		
 		public IEntity DeclaringEntity
 		{
 			get 
-			{ 
-				return _declaringMethod == null ? 
-					(IEntity)_declaringType : (IEntity)_declaringMethod;
+			{
+				return ((Node)_declaringMethod ?? (Node)_declaringType).Entity;
 			}
 		}
-		
-		public bool IsClass
-		{
-			get { return false; }
-		}
-		
+
 		bool IType.IsAbstract
 		{
 			get { return false; }
@@ -114,11 +144,6 @@ namespace Boo.Lang.Compiler.TypeSystem
 		}
 		
 		public bool IsByRef
-		{
-			get { return false; }
-		}
-		
-		public bool IsValueType
 		{
 			get { return false; }
 		}
@@ -162,7 +187,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 		public IType[] GetInterfaces()
 		{
 			// TODO: return interface constraints and inherited interfaces
-			return null;
+			return _emptyTypeArray;
 		}
 		
 		public bool IsSubclassOf(IType other)
@@ -175,26 +200,26 @@ namespace Boo.Lang.Compiler.TypeSystem
 			return (other == this);
 		}
 		
-		IGenericTypeDefinitionInfo IType.GenericTypeDefinitionInfo 
+		IGenericTypeInfo IType.GenericInfo 
 		{ 
 			get { return null; } 
 		}
 		
-		IGenericTypeInfo IType.GenericTypeInfo 
+		IConstructedTypeInfo IType.ConstructedInfo 
 		{ 
 			get { return null; } 
 		}
 
 		public string Name
 		{
-			get { return _name; }
+			get { return _declaration.Name; }
 		}
 
 		public string FullName 
 		{
 			get 
 			{
-				return string.Format("{0}.{1}", DeclaringEntity.FullName, _name);
+				return string.Format("{0}.{1}", DeclaringEntity.FullName, Name);
 			}
 		}
 		

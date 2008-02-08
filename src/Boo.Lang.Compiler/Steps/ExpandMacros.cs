@@ -56,34 +56,44 @@ namespace Boo.Lang.Compiler.Steps
 			Visit(node.Block);
 			Visit(node.Arguments);
 
-			IEntity entity = ResolveMacroName(node);
-			if (null == entity)
+			IType entity = ResolveMacroName(node) as IType;
+			if (null != entity)
 			{
-				TreatMacroAsMethodInvocation(node);
+				ProcessMacro(entity, node);
 				return;
 			}
-			
-			if (EntityType.Type != entity.EntityType)
-			{
-				if (EntityType.Method == entity.EntityType)
-				{
-					TreatMacroAsMethodInvocation(node);
-					return;
-				}
-				Errors.Add(CompilerErrorFactory.InvalidMacro(node, node.Name));
-				return;
-			}
-			
-			IType macroType = (IType)entity;
+			TreatMacroAsMethodInvocation(node);
+		}
+
+		private void ProcessMacro(IType macroType, MacroStatement node)
+		{
 			ExternalType type = macroType as ExternalType;
 			if (null == type)
 			{
-				Errors.Add(CompilerErrorFactory.AstMacroMustBeExternal(node, macroType.FullName));
+				InternalClass klass = (InternalClass) macroType;
+				ProcessInternalMacro(klass, node);
 				return;
 			}
 
-			Type actualType = type.ActualType;
-			if (!typeof(IAstMacro).IsAssignableFrom(actualType))
+			ProcessMacro(type.ActualType, node);
+		}
+
+		private void ProcessInternalMacro(InternalClass klass, MacroStatement node)
+		{
+			Type macroType = new MacroCompiler(Context).Compile(klass);
+			if (null == macroType)
+			{
+				Errors.Add(CompilerErrorFactory.AstMacroMustBeExternal(node, klass.FullName));
+				return;
+			}
+			ProcessMacro(macroType, node);
+		}
+
+		private void ProcessMacro(Type actualType, MacroStatement node)
+		{
+            // HACK: workaround for mono
+			if (-1 == Array.IndexOf(actualType.GetInterfaces(), typeof(IAstMacro)))
+//			if (!typeof(IAstMacro).IsAssignableFrom(actualType))
 			{
 				Errors.Add(CompilerErrorFactory.InvalidMacro(node, actualType.FullName));
 				return;
@@ -112,7 +122,7 @@ namespace Boo.Lang.Compiler.Steps
 			invocation.Arguments = node.Arguments;
 			if (node.Block != null && node.Block.Statements.Count > 0)
 			{
-				invocation.Arguments.Add(new CallableBlockExpression(node.Block));
+				invocation.Arguments.Add(new BlockExpression(node.Block));
 			}
 
 			ReplaceCurrentNode(new ExpressionStatement(invocation));
@@ -137,7 +147,7 @@ namespace Boo.Lang.Compiler.Steps
 		string BuildMacroTypeName(string name)
 		{
 			_buffer.Length = 0;
-			if (!Char.IsUpper(name[0]))
+			if (!char.IsUpper(name[0]))
 			{
 				_buffer.Append(char.ToUpper(name[0]));
 				_buffer.Append(name.Substring(1));

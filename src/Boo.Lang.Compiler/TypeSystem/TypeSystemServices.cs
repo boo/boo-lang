@@ -100,7 +100,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 		
 		public ExternalType TimeSpanType;
 		
-		public ExternalType DateTimeType;
+		protected ExternalType DateTimeType;
 		
 		public ExternalType RuntimeServicesType;
 		
@@ -128,27 +128,31 @@ namespace Boo.Lang.Compiler.TypeSystem
 		
 		public ExternalType SystemAttribute;
 		
+		public ExternalType ConditionalAttribute;
+		
 		protected Hashtable _primitives = new Hashtable();
 		
 		protected Hashtable _entityCache = new Hashtable();
 		
 		protected Hashtable _arrayCache = new Hashtable();
 		
-		protected Hashtable _anonymousCallableTypes = new Hashtable();
-		
 		public static readonly IType ErrorEntity = Error.Default;
 		
 		public readonly BooCodeBuilder CodeBuilder;
 		
-		StringBuilder _buffer = new StringBuilder();
+		private StringBuilder _buffer = new StringBuilder();
 		
-		Module _compilerGeneratedTypesModule;
+		private Module _compilerGeneratedTypesModule;
 
-		Module _compilerGeneratedExtensionsModule;
+		private Module _compilerGeneratedExtensionsModule;
 
-		ClassDefinition _compilerGeneratedExtensionsClass;
+		private ClassDefinition _compilerGeneratedExtensionsClass;
 		
-		CompilerContext _context;
+		protected readonly CompilerContext _context;
+
+		private readonly AnonymousCallablesManager _anonymousCallablesManager;
+
+		private readonly GenericsServices _genericsServices;
 		
 		public TypeSystemServices() : this(new CompilerContext())
 		{
@@ -156,12 +160,11 @@ namespace Boo.Lang.Compiler.TypeSystem
 		
 		public TypeSystemServices(CompilerContext context)
 		{
-			if (null == context)
-			{
-				throw new ArgumentNullException("context");
-			}
+			if (null == context) throw new ArgumentNullException("context");
 			
 			_context = context;
+			_anonymousCallablesManager = new AnonymousCallablesManager(this);
+			_genericsServices = new GenericsServices(context);
 
 			CodeBuilder = new BooCodeBuilder(this);
 			
@@ -206,7 +209,8 @@ namespace Boo.Lang.Compiler.TypeSystem
 			Cache(UIntPtrType = new ExternalType(this, Types.UIntPtr));
 			Cache(MulticastDelegateType = new ExternalType(this, Types.MulticastDelegate));
 			Cache(DelegateType = new ExternalType(this, Types.Delegate));
-			Cache(SystemAttribute = new ExternalType(this, typeof(System.Attribute)));			
+			Cache(SystemAttribute = new ExternalType(this, typeof(System.Attribute)));
+			Cache(ConditionalAttribute = new ExternalType(this, typeof(System.Diagnostics.ConditionalAttribute)));
 			Cache(IEnumerableGenericType = new ExternalType(this, typeof(System.Collections.Generic.IEnumerable<>)));
 			Cache(IEnumeratorGenericType = new ExternalType(this, typeof(System.Collections.Generic.IEnumerator<>)));
 
@@ -214,14 +218,17 @@ namespace Boo.Lang.Compiler.TypeSystem
 
 			PreparePrimitives();
 			PrepareBuiltinFunctions();
+
 		}
 		
 		public CompilerContext Context
 		{
-			get
-			{
-				return _context;
+			get { return _context; }
 			}
+
+		public GenericsServices GenericsServices
+		{
+			get { return _genericsServices; }
 		}
 		
 		public IType GetMostGenericType(IType current, IType candidate)
@@ -423,8 +430,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 
 		bool IsCallableType(IType type)
 		{
-			return (ICallableType.IsAssignableFrom(type)) ||
-				(type is ICallableType);
+			return (ICallableType.IsAssignableFrom(type)) || (type is ICallableType);
 		}
 		
 		public AnonymousCallableType GetCallableType(IMethod method)
@@ -435,40 +441,39 @@ namespace Boo.Lang.Compiler.TypeSystem
 		
 		public AnonymousCallableType GetCallableType(CallableSignature signature)
 		{
-			AnonymousCallableType type = (AnonymousCallableType)_anonymousCallableTypes[signature];
-			if (null == type)
-			{
-				type = new AnonymousCallableType(this, signature);
-				_anonymousCallableTypes.Add(signature, type);
-			}
-			return type;
+			return _anonymousCallablesManager.GetCallableType(signature);
 		}
-		
-		public IType GetConcreteCallableType(Node sourceNode, CallableSignature signature)
+
+		public virtual IType GetConcreteCallableType(Node sourceNode, CallableSignature signature)
 		{
-			AnonymousCallableType type = GetCallableType(signature);
-			return GetConcreteCallableType(sourceNode, type);
+			return _anonymousCallablesManager.GetConcreteCallableType(sourceNode, signature);
+		}
+
+		public virtual IType GetConcreteCallableType(Node sourceNode, AnonymousCallableType anonymousType)
+		{
+			return _anonymousCallablesManager.GetConcreteCallableType(sourceNode, anonymousType);
 		}
 		
 		public IType GetEnumeratorItemType(IType iteratorType)
 		{
-			if (iteratorType.IsArray) return ((IArrayType)iteratorType).GetElementType();
+			// Arrays are enumerators of their element type
+			if (iteratorType.IsArray) return iteratorType.GetElementType();
+
+			// String are enumerators of char
 			if (StringType == iteratorType) return CharType;
 			
+			// Try to use an EnumerableItemType attribute 
 			if (iteratorType.IsClass)
 			{
 				IType enumeratorItemType = GetEnumeratorItemTypeFromAttribute(iteratorType);
-				if (null != enumeratorItemType)
-				{
-					return enumeratorItemType;
-				}
+				if (null != enumeratorItemType) return enumeratorItemType;
 			}
 
+			// Try to use a generic IEnumerable interface
 			IType genericItemType = GetGenericEnumerableItemType(iteratorType);
-			if (null != genericItemType)
-			{
-				return genericItemType;
-			}
+			if (null != genericItemType) return genericItemType;
+
+			// If none of these work, the type is an enumerator of object
 			return ObjectType;
 		}
 		
@@ -677,53 +682,41 @@ namespace Boo.Lang.Compiler.TypeSystem
 		
 		public bool IsCallableTypeAssignableFrom(ICallableType lhs, IType rhs)
 		{
-			if (lhs == rhs || Null.Default == rhs)
-			{
-				return true;
-			}
+			if (lhs == rhs) return true;
+			if (Null.Default == rhs) return true;
 			
 			ICallableType other = rhs as ICallableType;
-			if (null != other)
-			{
+			if (null == other) return false;
+
 				CallableSignature lvalue = lhs.GetSignature();
 				CallableSignature rvalue = other.GetSignature();
-				if (lvalue == rvalue)
-				{
-					return true;
-				}
+			if (lvalue == rvalue) return true;
 				
 				IParameter[] lparams = lvalue.Parameters;
 				IParameter[] rparams = rvalue.Parameters;
-				if (lparams.Length >= rparams.Length)
-				{
+			if (lparams.Length < rparams.Length) return false;
+
 					for (int i=0; i<rparams.Length; ++i)
 					{
-						IType lparamType = lparams[i].Type;
-						IType rparamType = rparams[i].Type;
-						if (!AreTypesRelated(lparamType, rparamType))
-						{	
-							return false;
+				if (!AreTypesRelated(lparams[i].Type, rparams[i].Type)) return false;
 						}
+
+			return CompatibleReturnTypes(lvalue, rvalue);
 					}
 					
-					if (VoidType != lvalue.ReturnType &&
-						VoidType != rvalue.ReturnType)
+		private bool CompatibleReturnTypes(CallableSignature lvalue, CallableSignature rvalue)
 					{
+			if (VoidType != lvalue.ReturnType && VoidType != rvalue.ReturnType)
+			{
 						return AreTypesRelated(lvalue.ReturnType, rvalue.ReturnType);
 					}
 					
 					return true;
 				}
-			}
 			
-			return false;
-		}
-		
 		public static bool CheckOverrideSignature(IMethod impl, IMethod baseMethod)
 		{
-			IParameter[] implParameters = impl.GetParameters();
-			IParameter[] baseParameters = baseMethod.GetParameters();
-			return CheckOverrideSignature(implParameters, baseParameters);
+			return CheckOverrideSignature(impl.GetParameters(), baseMethod.GetParameters());
 		}
 
 		public static bool CheckOverrideSignature(IParameter[] implParameters, IParameter[] baseParameters)
@@ -893,10 +886,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 		
 		private static void GetAllMembers(List members, INamespace entity)
 		{
-			if (null == entity)
-			{
-				return;
-			}
+			if (null == entity) return;
 			
 			IType type = entity as IType;
 			if (null != type)
@@ -1247,100 +1237,6 @@ namespace Boo.Lang.Compiler.TypeSystem
 			_entityCache[key] = tag;
 		}
 		
-		Method CreateBeginInvokeMethod(ICallableType anonymousType)
-		{
-			Method method = CodeBuilder.CreateRuntimeMethod("BeginInvoke", Map(typeof(IAsyncResult)),
-			                                                anonymousType.GetSignature().Parameters, false);
-												
-			int delta=method.Parameters.Count;
-			method.Parameters.Add(
-					CodeBuilder.CreateParameterDeclaration(delta+1, "callback", Map(typeof(AsyncCallback))));
-			method.Parameters.Add(
-					CodeBuilder.CreateParameterDeclaration(delta+1, "asyncState", ObjectType));
-			return method;
-		}
-		
-		Method CreateBeginInvokeExtension(ICallableType anonymousType, Method beginInvoke, out MethodInvocationExpression mie)
-		{
-			InternalMethod beginInvokeEntity = (InternalMethod)beginInvoke.Entity;
-			
-			Method extension = CodeBuilder.CreateMethod("BeginInvoke", Map(typeof(IAsyncResult)),
-										TypeMemberModifiers.Public|TypeMemberModifiers.Static);
-			extension.Attributes.Add(CodeBuilder.CreateAttribute(Types.ExtensionAttribute));
-
-			ParameterDeclaration self = CodeBuilder.CreateParameterDeclaration(0, "self", beginInvokeEntity.DeclaringType);
-			
-			extension.Parameters.Add(self);
-			CodeBuilder.DeclareParameters(extension, 1, anonymousType.GetSignature().Parameters);
-			
-			mie = CodeBuilder.CreateMethodInvocation(
-						CodeBuilder.CreateReference(self),
-						beginInvokeEntity);
-
-			ParameterDeclarationCollection parameters = extension.Parameters;
-			for (int i=1; i<parameters.Count; ++i)
-			{
-				mie.Arguments.Add(CodeBuilder.CreateReference(parameters[i]));
-			}
-			extension.Body.Add(new ReturnStatement(mie));
-			return extension;
-		}
-		
-		Method CreateBeginInvokeSimplerExtension(ICallableType anonymousType, Method beginInvoke)
-		{
-			MethodInvocationExpression mie;
-			Method overload = CreateBeginInvokeExtension(anonymousType, beginInvoke, out mie);
-			
-			mie.Arguments.Add(CodeBuilder.CreateNullLiteral());
-			mie.Arguments.Add(CodeBuilder.CreateNullLiteral());
-			
-			return overload;
-		}
-		
-		Method CreateBeginInvokeCallbackOnlyExtension(ICallableType anonymousType, Method beginInvoke)
-		{
-			MethodInvocationExpression mie;
-			
-			Method overload = CreateBeginInvokeExtension(anonymousType, beginInvoke, out mie);
-			ParameterDeclaration callback = CodeBuilder.CreateParameterDeclaration(overload.Parameters.Count,
-										"callback", Map(typeof(AsyncCallback)));
-			overload.Parameters.Add(callback);
-
-			mie.Arguments.Add(CodeBuilder.CreateReference(callback));
-			mie.Arguments.Add(CodeBuilder.CreateNullLiteral());
-			
-			return overload;
-		}
-	
-		public Method CreateEndInvokeMethod(ICallableType anonymousType)
-		{
-			CallableSignature signature = anonymousType.GetSignature();
-			Method method = CodeBuilder.CreateRuntimeMethod("EndInvoke", signature.ReturnType);
-			
-			int delta=1;
-			foreach(IParameter p in signature.Parameters)
-			{
-				if (p.IsByRef)
-				{
-					method.Parameters.Add(
-						CodeBuilder.CreateParameterDeclaration(++delta,
-								p.Name,
-								p.Type,
-								true));
-				}			
-			}
-			delta=method.Parameters.Count;
-			method.Parameters.Add(
-				CodeBuilder.CreateParameterDeclaration(delta+1, "result", Map(typeof(IAsyncResult))));
-			return method;
-		}
-		
-		Method CreateInvokeMethod(AnonymousCallableType anonymousType)
-		{
-			CallableSignature signature = anonymousType.GetSignature();
-			return CodeBuilder.CreateRuntimeMethod("Invoke", signature.ReturnType, signature.Parameters, signature.AcceptVarArgs);
-		}
-		
 		public IConstructor GetDefaultConstructor(IType type)
 		{
 			IConstructor[] constructors = type.GetConstructors();
@@ -1368,13 +1264,23 @@ namespace Boo.Lang.Compiler.TypeSystem
 		
 		IType GetEnumeratorItemTypeFromAttribute(IType iteratorType)
 		{
-			AbstractInternalType internalType = iteratorType as AbstractInternalType;
-			if (null == internalType)
-			{
-				return GetExternalEnumeratorItemType(iteratorType);
-			}
-			
-			IType enumeratorItemTypeAttribute = Map(typeof(EnumeratorItemTypeAttribute));
+            // If iterator type is external get its attributes via reflection
+            if (iteratorType is ExternalType)
+            {
+                return GetExternalEnumeratorItemType(iteratorType);
+            }
+
+            // If iterator type is a generic constructed type, map its attribute from its definition
+            GenericConstructedType constructedType = iteratorType as GenericConstructedType;
+            if (constructedType != null)
+            {
+                return constructedType.GenericMapping.Map(
+                    GetEnumeratorItemTypeFromAttribute(constructedType.GenericDefinition));
+            }
+
+            // If iterator type is internal get its attributes from its type definition
+			AbstractInternalType internalType = (AbstractInternalType)iteratorType;
+            IType enumeratorItemTypeAttribute = Map(typeof(EnumeratorItemTypeAttribute));
 			foreach (Attribute attribute in internalType.TypeDefinition.Attributes)
 			{
 				IConstructor constructor = GetEntity(attribute) as IConstructor;
@@ -1388,20 +1294,17 @@ namespace Boo.Lang.Compiler.TypeSystem
 			}
 			return null;
 		}
-		
 
 		public IType GetGenericEnumerableItemType(IType iteratorType)		
 		{
-			// Arrays implicitly implement IEnumerable<elementType>
+			// Arrays implicitly implement IEnumerable[of element type]
 			if (iteratorType is ArrayType) return iteratorType.GetElementType();
 			
-			// If type is not an array, try to find IEnumerable<T> in its interfaces
-			IType genericEnumerable = IEnumerableGenericType;			
-
+			// If type is not an array, try to find IEnumerable[of some type] in its interfaces
 			IType itemType = null;
-			foreach (IType type in FindConstructedTypes(iteratorType, genericEnumerable))
+			foreach (IType type in GenericsServices.FindConstructedTypes(iteratorType, IEnumerableGenericType))
 			{
-				IType candidateItemType = type.GenericTypeInfo.GenericArguments[0];				
+				IType candidateItemType = type.ConstructedInfo.GenericArguments[0];				
 				
 				if (itemType != null)
 				{
@@ -1415,62 +1318,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 			
 			return itemType;
 		}
-		
-		public System.Collections.Generic.IEnumerable<IType> FindConstructedTypes(IType type, IType definition)
-		{	
-			while (type != null)
-			{			
-				if (type.GenericTypeInfo != null && 
-				    type.GenericTypeInfo.GenericDefinition == definition)
-				{
-					yield return type;
-				}
-
-				IType[] interfaces = type.GetInterfaces();
-				if (interfaces != null)
-				{
-					foreach (IType interfaceType in interfaces)
-					{
-						foreach (IType match in FindConstructedTypes(interfaceType, definition))
-						{
-							yield return match;
-						}
-					}
-				}
-								
-				type = type.BaseType;
-			}
-		}
-		
-		public static bool IsOpenGenericType(IType type)
-		{
-			if (type is IGenericParameter)
-			{
-				return true;
-			}
-			
-			if (type.GenericTypeInfo != null)
-			{
-				return !type.GenericTypeInfo.FullyConstructed;
-			}
-			
-			if (type.IsByRef || type.IsArray)
-			{
-				return IsOpenGenericType(type.GetElementType());
-			}
-			
-			return false;
-		}
 						                                         
-		public virtual IType GetConcreteCallableType(Node sourceNode, AnonymousCallableType anonymousType)
-		{
-			if (null == anonymousType.ConcreteType)
-			{
-				anonymousType.ConcreteType = CreateConcreteCallableType(sourceNode, anonymousType);
-			}
-			return anonymousType.ConcreteType;
-		}
-
 		public IEntity GetMemberEntity(TypeMember member)
 		{
 			if (null == member.Entity)
@@ -1503,35 +1351,6 @@ namespace Boo.Lang.Compiler.TypeSystem
 		}
 
 		
-		protected virtual IType CreateConcreteCallableType(Node sourceNode, AnonymousCallableType anonymousType)
-		{
-			Module module = GetCompilerGeneratedTypesModule();
-			
-			string name = string.Format("___callable{0}", module.Members.Count);
-			ClassDefinition cd = CreateCallableDefinition(name);
-			cd.Modifiers |= TypeMemberModifiers.Public;
-			cd.LexicalInfo = sourceNode.LexicalInfo;
-			
-			cd.Members.Add(CreateInvokeMethod(anonymousType));
-			
-			Method beginInvoke = CreateBeginInvokeMethod(anonymousType);
-			cd.Members.Add(beginInvoke);
-			
-			cd.Members.Add(CreateEndInvokeMethod(anonymousType));
-			_compilerGeneratedTypesModule.Members.Add(cd);
-
-			CreateCallableTypeBeginInvokeExtensions(anonymousType, beginInvoke);
-
-			return (IType)cd.Entity;
-		}
-
-		private void CreateCallableTypeBeginInvokeExtensions(AnonymousCallableType anonymousType, Method beginInvoke)
-		{
-			ClassDefinition extensions = GetCompilerGeneratedExtensionsClass();
-			extensions.Members.Add(CreateBeginInvokeCallbackOnlyExtension(anonymousType, beginInvoke));
-			extensions.Members.Add(CreateBeginInvokeSimplerExtension(anonymousType, beginInvoke));
-		}
-
 		private static void InvalidNode(Node node)
 		{
 			throw CompilerErrorFactory.InvalidNode(node);

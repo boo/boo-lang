@@ -33,7 +33,6 @@ import System.IO
 import System.Reflection
 import Boo.Lang.Compiler
 import Boo.Lang.Compiler.IO
-import Boo.Lang.Compiler.Steps
 import Boo.Lang.Compiler.Pipelines
 import NUnit.Framework
 
@@ -96,7 +95,7 @@ class CompilerTestFixture:
 		Assert.IsTrue(references.Contains(typeof(string).Assembly), "(ms)corlib.dll must be referenced by default!")
 		Assert.IsTrue(references.Contains(Assembly.LoadWithPartialName("System")), "System.dll must be referenced by default!")
 		Assert.IsTrue(references.Contains(typeof(Boo.Lang.Builtins).Assembly), "Boo.dll must referenced by default!")
-		Assert.IsTrue(references.Contains(typeof(Boo.Lang.Compiler.BooCompiler).Assembly), "Boo.Lang.Compiler.dll must be referenced by default!")
+		Assert.IsTrue(references.Contains(typeof(Boo.Lang.Extensions.PrintMacro).Assembly), "Boo.Lang.Extensions.dll must be referenced by default!")
 		
 	[Test]
 	def DefaultGenerateInMemory():

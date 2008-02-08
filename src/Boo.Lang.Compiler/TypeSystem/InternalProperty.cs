@@ -50,7 +50,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 		{
 			get
 			{
-				return MetadataUtil.IsAttributeDefined(_property, _typeSystemServices.Map(Types.ExtensionAttribute));
+				return MetadataUtil.IsAttributeDefined(_property, _typeSystemServices.Map(Types.BooExtensionAttribute));
 			}
 		}
 		
@@ -83,8 +83,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 		{
 			get
 			{
-				return _property.Setter != null &&
-					_property.Setter.IsProtected;
+				return _property.IsProtected;
 			}
 		}
 		
@@ -92,8 +91,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 		{
 			get
 			{
-				return _property.Setter != null &&
-					_property.Setter.IsInternal;
+				return _property.IsInternal;
 			}
 		}
 		
@@ -101,8 +99,7 @@ namespace Boo.Lang.Compiler.TypeSystem
 		{
 			get
 			{
-				return _property.Setter != null &&
-					_property.Setter.IsPrivate;
+				return _property.IsPrivate;
 			}
 		}
 		
@@ -221,7 +218,8 @@ namespace Boo.Lang.Compiler.TypeSystem
 		{
 			get
 			{
-				return this.Type == _typeSystemServices.DuckType;
+				return this.Type == _typeSystemServices.DuckType 
+				|| _property.Attributes.Contains("Boo.Lang.DuckTypedAttribute");
 			}
 		}
 	}

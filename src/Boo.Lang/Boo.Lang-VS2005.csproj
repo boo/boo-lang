@@ -66,15 +66,36 @@
     <Compile Include="Hash.cs" />
     <Compile Include="ICallable.cs" />
     <Compile Include="IQuackFu.cs" />
+    <Compile Include="IQuackFuMember.cs" />
+    <Compile Include="IReflectiveQuackFu.cs" />
     <Compile Include="List.cs" />
+    <Compile Include="MetaAttribute.cs" />
     <Compile Include="ModuleAttribute.cs" />
+    <Compile Include="QuackFuMember.cs" />
     <Compile Include="ResourceManager.cs" />
+    <Compile Include="Runtime\AbstractDispatcherFactory.cs" />
     <Compile Include="Runtime\AssertionFailedException.cs" />
     <Compile Include="Runtime\CandidateMethod.cs" />
+    <Compile Include="Runtime\DispatcherCache.cs" />
+    <Compile Include="Runtime\DispatcherEmitter.cs" />
+    <Compile Include="Runtime\DispatcherKey.cs" />
+    <Compile Include="Runtime\ExtensionMethodDispatcherEmitter.cs" />
+    <Compile Include="Runtime\ExtensionRegistry.cs" />
+    <Compile Include="Runtime\GetFieldEmitter.cs" />
+    <Compile Include="Runtime\ICoercible.cs" />
+    <Compile Include="Runtime\ImplicitConversionEmitter.cs" />
     <Compile Include="Runtime\MethodDispatcherEmitter.cs" />
+    <Compile Include="Runtime\MethodDispatcherFactory.cs" />
     <Compile Include="Runtime\MethodResolver.cs" />
+    <Compile Include="Runtime\NumericTypes.cs" />
+    <Compile Include="Runtime\PromotionEmitter.cs" />
+    <Compile Include="Runtime\PropertyDispatcherFactory.cs" />
     <Compile Include="Runtime\RuntimeException.cs" />
     <Compile Include="Runtime\RuntimeServices.cs" />
+    <Compile Include="Runtime\SetFieldEmitter.cs" />
+    <Compile Include="Runtime\SetOrGet.cs" />
+    <Compile Include="Runtime\SetPropertyEmitter.cs" />
+    <Compile Include="Runtime\SliceDispatcherFactory.cs" />
     <Compile Include="Runtime\TextReaderEnumerator.cs" />
   </ItemGroup>
   <ItemGroup>

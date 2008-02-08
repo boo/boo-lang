@@ -43,9 +43,29 @@ namespace Boo.Lang.Compiler.Ast
 	[System.Xml.Serialization.XmlInclude(typeof(TryCastExpression))]
 	[System.Xml.Serialization.XmlInclude(typeof(TypeofExpression))]
 	[System.Xml.Serialization.XmlInclude(typeof(CastExpression))]
-	[System.Xml.Serialization.XmlInclude(typeof(CallableBlockExpression))]
+	[System.Xml.Serialization.XmlInclude(typeof(BlockExpression))]
 	public abstract partial class Expression
 	{
+		public static Expression Lift(string s)
+		{
+			return new StringLiteralExpression(s);
+		}
+		
+		public static Expression Lift(int i)
+		{
+			return new IntegerLiteralExpression(i);
+		}
+		
+		public static Expression Lift(Expression e)
+		{
+			return e.CloneNode();
+		}
+
+		public static Expression Lift(ParameterDeclaration p)
+		{
+			return new ReferenceExpression(p.LexicalInfo, p.Name);
+		}
+		
 		protected Boo.Lang.Compiler.TypeSystem.IType _expressionType;
 		
 		public Expression()

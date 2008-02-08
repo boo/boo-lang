@@ -30,6 +30,50 @@ namespace BooCompiler.Tests
 {
 	using System;
 	
+	public class ObsoleteClass
+	{
+		[Obsolete("It is." )]
+		public static int Bar = 42;
+		
+		[Obsolete("Indeed it is." )]
+		public static void Foo()
+		{
+		}
+
+		[Obsolete("We said so.")]
+		public static int Baz
+		{
+			get { return 42; }
+		}
+	}
+
+	public class ConditionalClass
+	{
+		[System.Diagnostics.Conditional("BOO_COMPILER_TESTS_NOT_DEFINED_CONDITIONAL")]
+		public static void PrintNothing(int i)
+		{
+			Console.WriteLine(i);
+		}
+
+		[System.Diagnostics.Conditional("BOO_COMPILER_TESTS_DEFINED_CONDITIONAL")]
+		public static void PrintSomething(string s)
+		{
+			Console.WriteLine(s);
+		}
+
+		[System.Diagnostics.Conditional("BOO_COMPILER_TESTS_NOT_DEFINED_CONDITIONAL")]
+		public static void PrintNoT<T>(T s)
+		{
+			Console.WriteLine(s);
+		}
+
+		[System.Diagnostics.Conditional("BOO_COMPILER_TESTS_DEFINED_CONDITIONAL")]
+		public static void PrintSomeT<T>(T s)
+		{
+			Console.WriteLine(s);
+		}
+	}
+	
 	public class ReturnDucks
 	{
 		public class DuckBase {}

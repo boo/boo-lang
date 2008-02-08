@@ -44,7 +44,9 @@ namespace Boo.Lang.Compiler.Pipelines
 			Add(new InitializeNameResolutionService());
 			Add(new IntroduceGlobalNamespaces());
 			Add(new TransformCallableDefinitions());
-			Add(new BindTypeDefinitions());			
+
+			Add(new BindTypeDefinitions());
+			Add(new BindGenericParameters());
 			Add(new BindNamespaces());
 			Add(new BindBaseTypes());
 			Add(new BindAndApplyAttributes());
@@ -55,9 +57,10 @@ namespace Boo.Lang.Compiler.Pipelines
 			Add(new NormalizeTypeAndMemberDefinitions());
 			
 			Add(new BindTypeDefinitions());
+			Add(new BindGenericParameters());
 			Add(new BindEnumMembers());
 			Add(new BindBaseTypes());
-			
+
 			Add(new BindMethods());
 			Add(new ResolveTypeReferences());
 			Add(new BindTypeMembers());

@@ -32,18 +32,45 @@ using System.Reflection;
 
 namespace Boo.Lang.Runtime
 {
-	internal class CandidateMethod
+	public class CandidateMethod
 	{
 		public const int ExactMatchScore = 7;
 		public const int UpCastScore = 6;
-		public const int ImplicitConversionScore = 5;
-		public const int PromotionScore = 4;
-		public const int DowncastScore = 3;
+		public const int WideningPromotion = 5;
+		public const int ImplicitConversionScore = 4;
+		public const int NarrowingPromotion = 3;
+		public const int DowncastScore = 2;
 
-		private MethodInfo _method;
-		private int[] _argumentScores;
-		private MethodInfo[] _argumentConversions;
-		private bool _varArgs;
+		public static int CalculateArgumentScore(Type paramType, Type argType)
+		{
+			if (null == argType)
+			{
+				if (paramType.IsValueType) return -1;
+				return CandidateMethod.ExactMatchScore;
+			}
+			else
+			{
+				if (paramType == argType) return CandidateMethod.ExactMatchScore;
+
+				if (paramType.IsAssignableFrom(argType)) return CandidateMethod.UpCastScore;
+
+				if (argType.IsAssignableFrom(paramType)) return CandidateMethod.DowncastScore;
+
+				if (IsNumericPromotion(paramType, argType))
+				{
+					if (NumericTypes.IsWideningPromotion(paramType, argType)) return WideningPromotion;
+					return CandidateMethod.NarrowingPromotion;
+				}
+
+				MethodInfo conversion = RuntimeServices.FindImplicitConversionOperator(argType, paramType);
+				if (null != conversion) return CandidateMethod.ImplicitConversionScore;
+			}
+			return -1;
+		}
+
+		private readonly MethodInfo _method;
+		private readonly int[] _argumentScores;
+		private readonly bool _varArgs;
 
 		public CandidateMethod(MethodInfo method, int argumentCount, bool varArgs)
 		{
@@ -69,10 +96,7 @@ namespace Boo.Lang.Runtime
 
 		public int MinimumArgumentCount
 		{
-			get
-			{
-				return _varArgs ? Parameters.Length - 1 : Parameters.Length;
-			}
+			get { return _varArgs ? Parameters.Length - 1 : Parameters.Length; }
 		}
 
 		public ParameterInfo[] Parameters
@@ -85,23 +109,25 @@ namespace Boo.Lang.Runtime
 			get { return GetParameterType(Parameters.Length-1).GetElementType(); }
 		}
 
+		public bool DoesNotRequireConversions
+		{
+			get { return !Array.Exists(_argumentScores, RequiresConversion); }
+		}
+
+		private static bool RequiresConversion(int score)
+		{
+			return score < WideningPromotion;
+		}
+
 		public Type GetParameterType(int i)
 		{
 			return Parameters[i].ParameterType;
 		}
 
-		public void RememberArgumentConversion(int argumentIndex, MethodInfo conversion)
+		public static bool IsNumericPromotion(Type paramType, Type argType)
 		{
-			if (null == _argumentConversions)
-			{
-				_argumentConversions = new MethodInfo[_argumentScores.Length];
-			}
-			_argumentConversions[argumentIndex] = conversion;
-		}
-
-		public MethodInfo GetArgumentConversion(int argumentIndex)
-		{
-			return _argumentConversions[argumentIndex];
+			return RuntimeServices.IsPromotableNumeric(Type.GetTypeCode(paramType))
+			       && RuntimeServices.IsPromotableNumeric(Type.GetTypeCode(argType));
 		}
 	}
 }

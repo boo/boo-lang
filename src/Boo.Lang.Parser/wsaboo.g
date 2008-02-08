@@ -51,7 +51,6 @@ tokens
 	ABSTRACT="abstract";
 	AND="and";
 	AS="as";
-	AST="ast";
 	BREAK="break";
 	CONTINUE="continue";
 	CALLABLE="callable";
@@ -69,12 +68,12 @@ tokens
 	ENUM="enum";
 	EVENT="event";
 	EXCEPT="except";
+	FAILURE="failure";
 	FINAL="final";	
 	FROM="from";	
 	FOR="for";
 	FALSE="false";
 	GET="get";
-	GIVEN="given";
 	GOTO="goto";
 	IMPORT="import";
 	INTERFACE="interface";	
@@ -87,7 +86,6 @@ tokens
 	NULL="null";
 	OF="of";
 	OR="or";
-	OTHERWISE="otherwise";
 	OVERRIDE="override";	
 	NAMESPACE="namespace";
 	PUBLIC="public";
@@ -108,7 +106,6 @@ tokens
 	UNLESS="unless";
 	VIRTUAL="virtual";
 	PARTIAL="partial";
-	WHEN="when";
 	WHILE="while";
 	YIELD="yield";
 }
@@ -132,193 +129,47 @@ tokens
 		target.Extend(_attributes);
 		_attributes.Clear();
 	}
-
-	protected LexicalInfo ToLexicalInfo(antlr.IToken token)
-	{
-		return new LexicalInfo(token.getFilename(),
-								token.getLine(),
-								token.getColumn());
-	}
-	
-	protected SourceLocation ToSourceLocation(antlr.IToken token)
-	{
-		return new SourceLocation(token.getLine(), token.getColumn()+token.getText().Length-1);
-	}
-
-	protected BinaryOperatorType ParseCmpOperator(string op)
-	{
-		switch (op)
-		{		
-			case "<=": return BinaryOperatorType.LessThanOrEqual;		
-			case ">=": return BinaryOperatorType.GreaterThanOrEqual;
-			case "==": return BinaryOperatorType.Equality;
-			case "!=": return BinaryOperatorType.Inequality;
-			case "=~": return BinaryOperatorType.Match;
-			case "!~": return BinaryOperatorType.NotMatch;
-		}
-		throw new ArgumentException("op");
-	}
-
-	protected BinaryOperatorType ParseAssignOperator(string op)
-	{
-		switch (op)
-		{
-			case "=": return BinaryOperatorType.Assign;
-			case "+=": return BinaryOperatorType.InPlaceAddition;
-			case "-=": return BinaryOperatorType.InPlaceSubtraction;
-			case "/=": return BinaryOperatorType.InPlaceDivision;
-			case "*=": return BinaryOperatorType.InPlaceMultiply;
-			case "^=": return BinaryOperatorType.InPlaceExclusiveOr;
-		}
-		throw new ArgumentException(op, "op");
-	}
 	
 	static bool IsMethodInvocationExpression(Expression e)
 	{
 		return NodeType.MethodInvocationExpression == e.NodeType;
 	}
 
-	protected TimeSpan ParseTimeSpan(string text)
-	{
-		if (text.EndsWith("ms"))
-		{
-			return TimeSpan.FromMilliseconds(ParseDouble(text.Substring(0, text.Length-2)));
-		}
-	
-		char last = text[text.Length-1];		
-		double value = ParseDouble(text.Substring(0, text.Length-1));
-		switch (last)
-		{
-			case 's':
-			{
-				return TimeSpan.FromSeconds(value);
-			}
-	
-			case 'h':
-			{
-				return TimeSpan.FromHours(value);
-			}
-			
-			case 'm':
-			{
-				return TimeSpan.FromMinutes(value);
-			}			
-		}
-		return TimeSpan.FromDays(value); 
-	}
-
-	// every new line is transformed to '\n'
-	// trailing and leading newlines are removed
-	protected string MassageDocString(string s)
-	{			
-		if (s.Length != 0)
-		{						
-			s = s.Replace("\r\n", "\n");
-			
-			int length = s.Length;
-			int startIndex = 0;			
-			if ('\n' == s[0])
-			{			
-				// assumes '\n'
-				startIndex++;
-				length--;
-			}						
-			if ('\n' == s[s.Length-1])
-			{
-				length--;
-			}
-			
-			if (length > 0)
-			{
-				return s.Substring(startIndex, length);
-			}
-			return string.Empty;
-		}
-		return s;
-	}
-
 	protected bool IsValidMacroArgument(int token)
 	{
 		return LPAREN != token && LBRACK != token;
-	}
-	
-	static double ParseDouble(string s)
-	{
-		return ParseDouble(s,false);
-	}
-	
-	static double ParseDouble(string s, bool isSingle)
-	{
-		double val;
-		if (isSingle)
-		{
-			val = float.Parse(s, NumberStyles.Float, CultureInfo.InvariantCulture);
-		}
-		else
-		{
-			val = double.Parse(s, NumberStyles.Float, CultureInfo.InvariantCulture);
-		}
-		return val;
-	}
-	
-	protected IntegerLiteralExpression ParseIntegerLiteralExpression(
-		antlr.IToken token, string s, bool isLong)
-	{
-		const string HEX_PREFIX = "0x";
-		
-		long value;
-		NumberStyles style = NumberStyles.Integer | NumberStyles.AllowExponent;
-		int hex_start = s.IndexOf(HEX_PREFIX);
-		bool negative = false;
-
-		if (hex_start >=0)
-		{
-			if (s.StartsWith("-"))
-			{
-				negative = true;
-			}
-			s = s.Substring(hex_start+HEX_PREFIX.Length);
-			style = NumberStyles.HexNumber;
-		}
-		if (isLong)
-		{
-			value = long.Parse(s, style, CultureInfo.InvariantCulture);
-		}
-		else
-		{
-			value = int.Parse(s, style, CultureInfo.InvariantCulture);
-		}
-		if (negative) //negative hex number
-		{
-			value *= -1;
-		}
-		return new IntegerLiteralExpression(ToLexicalInfo(token), value, isLong);
-	}
-	
+	} 
 }
 
 protected
 start[CompileUnit cu] returns [Module module]
-	{
-		module = new Module();		
-		module.LexicalInfo = new LexicalInfo(getFilename(), 1, 1);
-		
-		cu.Modules.Add(module);
-	}:
+{
+	module = new Module();		
+	module.LexicalInfo = new LexicalInfo(getFilename(), 1, 1);
+	
+	cu.Modules.Add(module);
+}:
+	parse_module[module]
+	(EOF)?
+;
+	
+protected
+parse_module[Module module]
+{
+}:
 	(eos)?
 	docstring[module]
-	(eos)?		 
+	(eos)?
 	(namespace_directive[module])?
 	(import_directive[module])*
 	(type_member[module.Members])*	
 	globals[module]
 	(assembly_attribute[module] eos)*
-	(EOF)?
-	;
+;
 			
 protected docstring[Node node]:
 	(
-		doc:TRIPLE_QUOTED_STRING { node.Documentation = MassageDocString(doc.getText()); }
+		doc:TRIPLE_QUOTED_STRING { node.Documentation = DocStringFormatter.Format(doc.getText()); }
 		(eos)?
 	)?
 	;
@@ -334,7 +185,7 @@ import_directive[Module container]
 	}: 
 	IMPORT id=identifier
 	{
-		usingNode = new Import(ToLexicalInfo(id));
+		usingNode = new Import(SourceLocationFactory.ToLexicalInfo(id));
 		usingNode.Namespace = id.getText();
 		container.Imports.Add(usingNode);
 	}
@@ -346,14 +197,14 @@ import_directive[Module container]
 					sqs:SINGLE_QUOTED_STRING { id=sqs; }
 			)
 		{
-			usingNode.AssemblyReference = new ReferenceExpression(ToLexicalInfo(id));
+			usingNode.AssemblyReference = new ReferenceExpression(SourceLocationFactory.ToLexicalInfo(id));
 			usingNode.AssemblyReference.Name = id.getText();
 		}				
 	)?
 	(
 		AS alias:ID
 		{
-			usingNode.Alias = new ReferenceExpression(ToLexicalInfo(alias));
+			usingNode.Alias = new ReferenceExpression(SourceLocationFactory.ToLexicalInfo(alias));
 			usingNode.Alias.Name = alias.getText();
 		}
 	)?
@@ -368,7 +219,7 @@ namespace_directive[Module container]
 	}:
 	t:NAMESPACE id=identifier
 	{
-		p = new NamespaceDeclaration(ToLexicalInfo(t));
+		p = new NamespaceDeclaration(SourceLocationFactory.ToLexicalInfo(t));
 		p.Name = id.getText();
 		container.Namespace = p; 
 	}
@@ -401,15 +252,21 @@ callable_definition [TypeMemberCollection container]
 	{
 		CallableDefinition cd = null;
 		TypeReference returnType = null;
+		GenericParameterDeclarationCollection genericParameters = null;
 	}:
 	CALLABLE id:ID
 	{
-		cd = new CallableDefinition(ToLexicalInfo(id));
+		cd = new CallableDefinition(SourceLocationFactory.ToLexicalInfo(id));
 		cd.Name = id.getText();
 		cd.Modifiers = _modifiers;
 		AddAttributes(cd.Attributes);
 		container.Add(cd);
+		genericParameters = cd.GenericParameters;
 	}
+	(
+		(LBRACK (OF)? generic_parameter_declaration_list[genericParameters] RBRACK) |
+		(OF generic_parameter_declaration[genericParameters])
+	)?
 	LPAREN parameter_declaration_list[cd.Parameters] RPAREN
 	(AS returnType=type_reference { cd.ReturnType=returnType; })?			
 	eos
@@ -421,7 +278,7 @@ enum_definition [TypeMemberCollection container]
 	{
 		EnumDefinition ed = null;
 	}:
-	ENUM id:ID { ed = new EnumDefinition(ToLexicalInfo(id)); }
+	ENUM id:ID { ed = new EnumDefinition(SourceLocationFactory.ToLexicalInfo(id)); }
 	begin_with_doc[ed]
 	{
 		ed.Name = id.getText();
@@ -445,7 +302,7 @@ enum_member [EnumDefinition container]
 	attributes
 	id:ID (ASSIGN (SUBTRACT { negative = true; })? initializer=integer_literal)?
 	{
-		em = new EnumMember(ToLexicalInfo(id));
+		em = new EnumMember(SourceLocationFactory.ToLexicalInfo(id));
 		em.Name = id.getText();
 		em.Initializer = initializer;
 		if (negative && null != initializer)
@@ -486,7 +343,7 @@ attribute
 	}:	
 	id=identifier
 	{
-		attr = new Boo.Lang.Compiler.Ast.Attribute(ToLexicalInfo(id), id.getText());
+		attr = new Boo.Lang.Compiler.Ast.Attribute(SourceLocationFactory.ToLexicalInfo(id), id.getText());
 		_attributes.Add(attr);
 	} 
 	(
@@ -503,7 +360,7 @@ assembly_attribute[Module module]
 		Boo.Lang.Compiler.Ast.Attribute attr = null;
 	}:
 	ASSEMBLY_ATTRIBUTE_BEGIN
-	id=identifier { attr = new Boo.Lang.Compiler.Ast.Attribute(ToLexicalInfo(id), id.getText()); }
+	id=identifier { attr = new Boo.Lang.Compiler.Ast.Attribute(SourceLocationFactory.ToLexicalInfo(id), id.getText()); }
 	(
 		LPAREN
 		argument_list[attr]
@@ -519,6 +376,7 @@ class_definition [TypeMemberCollection container]
 		TypeDefinition td = null;
 		TypeReferenceCollection baseTypes = null;
 		TypeMemberCollection members = null;
+		GenericParameterDeclarationCollection genericParameters = null;
 	}:
 	(
 		CLASS { td = new ClassDefinition(); } |
@@ -526,14 +384,19 @@ class_definition [TypeMemberCollection container]
 	)
 	id:ID
 	{		
-		td.LexicalInfo = ToLexicalInfo(id);
+		td.LexicalInfo = SourceLocationFactory.ToLexicalInfo(id);
 		td.Name = id.getText();
 		td.Modifiers = _modifiers;
 		AddAttributes(td.Attributes);
 		container.Add(td);
 		baseTypes = td.BaseTypes;
 		members = td.Members;
+		genericParameters = td.GenericParameters;
 	}
+	(
+		(LBRACK (OF)? generic_parameter_declaration_list[genericParameters] RBRACK) |
+		(OF generic_parameter_declaration[genericParameters])
+	)?
 	(base_types[baseTypes])?
 	begin_with_doc[td]					
 	(type_definition_member[members])*
@@ -558,16 +421,22 @@ interface_definition [TypeMemberCollection container]
 	{
 		InterfaceDefinition itf = null;
 		TypeMemberCollection members = null;
+		GenericParameterDeclarationCollection genericParameters = null;
 	} :
 	INTERFACE id:ID
 	{
-		itf = new InterfaceDefinition(ToLexicalInfo(id));
+		itf = new InterfaceDefinition(SourceLocationFactory.ToLexicalInfo(id));
 		itf.Name = id.getText();
 		itf.Modifiers = _modifiers;
 		AddAttributes(itf.Attributes);
 		container.Add(itf);
 		members = itf.Members;
+		genericParameters = itf.GenericParameters;
 	}
+	(
+		(LBRACK (OF)? generic_parameter_declaration_list[genericParameters] RBRACK) |
+		(OF generic_parameter_declaration[genericParameters])
+	)?
 	(base_types[itf.BaseTypes])?
 	begin_with_doc[itf]
 	(
@@ -602,7 +471,7 @@ interface_method [TypeMemberCollection container]
 	}: 
 	DEF id:ID
 	{
-		m = new Method(ToLexicalInfo(id));
+		m = new Method(SourceLocationFactory.ToLexicalInfo(id));
 		m.Name = id.getText();
 		AddAttributes(m.Attributes);
 		container.Add(m);
@@ -624,7 +493,7 @@ interface_property [TypeMemberCollection container]
         }:
         (id1:ID {id=id1;} | s:SELF {id=s;})
         {
-                p = new Property(ToLexicalInfo(id));
+                p = new Property(SourceLocationFactory.ToLexicalInfo(id));
                 p.Name = id.getText();
                 AddAttributes(p.Attributes);
                 container.Add(p);
@@ -650,12 +519,12 @@ interface_property_accessor[Property p]
 	(
 		{ null == p.Getter }?
 		(
-			gt:GET { m = p.Getter = new Method(ToLexicalInfo(gt)); m.Name = "get"; }
+			gt:GET { m = p.Getter = new Method(SourceLocationFactory.ToLexicalInfo(gt)); m.Name = "get"; }
 		)
 		|
 		{ null == p.Setter }?
 		(
-			st:SET { m = p.Setter = new Method(ToLexicalInfo(st)); m.Name = "set"; }
+			st:SET { m = p.Setter = new Method(SourceLocationFactory.ToLexicalInfo(st)); m.Name = "set"; }
 		)				
 	)
 	(
@@ -682,7 +551,7 @@ event_declaration [TypeMemberCollection container]
 	t:EVENT
 	id:ID AS tr=type_reference eos
 	{
-		e = new Event(ToLexicalInfo(id), id.getText(), tr);
+		e = new Event(SourceLocationFactory.ToLexicalInfo(id), id.getText(), tr);
 		e.Modifiers = _modifiers;
 		AddAttributes(e.Attributes);
 		container.Add(e);
@@ -699,7 +568,7 @@ explicit_member_info returns [ExplicitMemberInfo emi]
 		(
 			(id:ID DOT)
 			{
-				emi = new ExplicitMemberInfo(ToLexicalInfo(id));
+				emi = new ExplicitMemberInfo(SourceLocationFactory.ToLexicalInfo(id));
 				_sbuilder.Append(id.getText());
 			}
 			(
@@ -741,14 +610,14 @@ method [TypeMemberCollection container]
 			}
 			else
 			{
-				m = new Method(ToLexicalInfo(id));
+				m = new Method(SourceLocationFactory.ToLexicalInfo(id));
 			}
 			m.Name = id.getText();
 			m.ExplicitInfo  = emi;
 		}
 		|
-		c:CONSTRUCTOR { m = new Constructor(ToLexicalInfo(c)); } |
-		d:DESTRUCTOR { m = new Destructor(ToLexicalInfo(d)); }
+		c:CONSTRUCTOR { m = new Constructor(SourceLocationFactory.ToLexicalInfo(c)); } |
+		d:DESTRUCTOR { m = new Destructor(SourceLocationFactory.ToLexicalInfo(d)); }
 	)	
 	{
 		m.Modifiers = _modifiers;
@@ -760,7 +629,7 @@ method [TypeMemberCollection container]
 	}
 	(
 		(
-			LBRACK OF generic_parameter_declaration_list[genericParameters] RBRACK
+			LBRACK (OF)? generic_parameter_declaration_list[genericParameters] RBRACK
 		)
 		|
 		(
@@ -768,8 +637,8 @@ method [TypeMemberCollection container]
 		)
 	)?
 	LPAREN parameter_declaration_list[parameters] RPAREN
-			(AS rt=type_reference { m.ReturnType = rt; })?
 			attributes { AddAttributes(m.ReturnTypeAttributes); }
+			(AS rt=type_reference { m.ReturnType = rt; })?
 			begin_block_with_doc[m, body]
 				block[statements]
 			end[body]
@@ -808,7 +677,7 @@ field_or_property [TypeMemberCollection container]
 				if (emi != null)
 					p = new Property(emi.LexicalInfo);
 				else
-					p = new Property(ToLexicalInfo(id));
+					p = new Property(SourceLocationFactory.ToLexicalInfo(id));
 				p.Name = id.getText();
 				p.ExplicitInfo = emi;
 				AddAttributes(p.Attributes);
@@ -831,7 +700,7 @@ field_or_property [TypeMemberCollection container]
 	(
 		id2:ID
 		{
-			tm = field = new Field(ToLexicalInfo(id2));
+			tm = field = new Field(SourceLocationFactory.ToLexicalInfo(id2));
 			field.Name = id2.getText();
 			field.Modifiers = _modifiers;
 			AddAttributes(field.Attributes);
@@ -855,10 +724,9 @@ declaration_initializer returns [Expression e]
 {
 	e = null;
 }:
-	(slicing_expression (DO|DEF))=>(e=slicing_expression method_invocation_block[e]) |
+	(slicing_expression (COLON|DO|DEF))=>(e=slicing_expression e=method_invocation_block[e]) |
 	(e=array_or_expression eos) |
-	(e=callable_expression) |
-	(e=ast_literal)
+	(e=callable_expression)
 ;
 
 protected
@@ -874,7 +742,7 @@ property_accessor[Property p]
 		(
 			gt:GET
 			{
-				p.Getter = m = new Method(ToLexicalInfo(gt));		
+				p.Getter = m = new Method(SourceLocationFactory.ToLexicalInfo(gt));		
 				m.Name = "get";
 			}
 		)
@@ -883,7 +751,7 @@ property_accessor[Property p]
 		(
 			st:SET
 			{
-				p.Setter = m = new Method(ToLexicalInfo(st));
+				p.Setter = m = new Method(SourceLocationFactory.ToLexicalInfo(st));
 				m.Name = "set";
 			}
 		)
@@ -974,7 +842,7 @@ parameter_declaration[ParameterDeclarationCollection c]
 		)
 	)
 	{
-		ParameterDeclaration pd = new ParameterDeclaration(ToLexicalInfo(id));
+		ParameterDeclaration pd = new ParameterDeclaration(SourceLocationFactory.ToLexicalInfo(id));
 		pd.Name = id.getText();
 		pd.Type = tr;
 		pd.Modifiers = pm;
@@ -1020,7 +888,7 @@ protected
 generic_parameter_declaration[GenericParameterDeclarationCollection c]:
 	id:ID 
 	{
-		GenericParameterDeclaration gpd = new GenericParameterDeclaration(ToLexicalInfo(id));
+		GenericParameterDeclaration gpd = new GenericParameterDeclaration(SourceLocationFactory.ToLexicalInfo(id));
 		gpd.Name = id.getText();
 		c.Add(gpd);
 	}
@@ -1035,7 +903,7 @@ callable_type_reference returns [CallableTypeReference ctr]
 	}:	
 	c:CALLABLE LPAREN
 	{
-		ctr = new CallableTypeReference(ToLexicalInfo(c));
+		ctr = new CallableTypeReference(SourceLocationFactory.ToLexicalInfo(c));
 		parameters = ctr.Parameters;
 	}
 	callable_parameter_declaration_list[parameters]
@@ -1055,7 +923,7 @@ array_type_reference returns [ArrayTypeReference atr]
 	}:
 	lparen:LPAREN
 	{
-		atr = new ArrayTypeReference(ToLexicalInfo(lparen));
+		atr = new ArrayTypeReference(SourceLocationFactory.ToLexicalInfo(lparen));
 	}
 	(
 		tr=type_reference { atr.ElementType = tr; }
@@ -1076,6 +944,18 @@ type_reference_list [TypeReferenceCollection container]
 ;
 
 protected
+splice_type_reference returns [SpliceTypeReference tr]
+{
+	tr = null;
+	Expression e = null;
+}:
+	begin:SPLICE_BEGIN e=atom
+	{
+		tr = new SpliceTypeReference(SourceLocationFactory.ToLexicalInfo(begin), e);
+	}
+;
+
+protected
 type_reference returns [TypeReference tr]
 	{
 		tr = null;
@@ -1083,6 +963,8 @@ type_reference returns [TypeReference tr]
 		TypeReferenceCollection arguments = null;
 		GenericTypeDefinitionReference gtdr = null;
 	}: 
+	tr=splice_type_reference
+	|
 	tr=array_type_reference
 	|
 	(CALLABLE LPAREN)=>(tr=callable_type_reference)
@@ -1091,12 +973,12 @@ type_reference returns [TypeReference tr]
 		id=type_name
 		(
 			(
-				LBRACK OF 
+				LBRACK (OF)? 
 				(
 					(
 						MULTIPLY
 						{
-							gtdr = new GenericTypeDefinitionReference(ToLexicalInfo(id));
+							gtdr = new GenericTypeDefinitionReference(SourceLocationFactory.ToLexicalInfo(id));
 							gtdr.Name = id.getText();
 							gtdr.GenericPlaceholders = 1;
 							tr = gtdr;										
@@ -1112,7 +994,7 @@ type_reference returns [TypeReference tr]
 					|
 					(
 						{
-							GenericTypeReference gtr = new GenericTypeReference(ToLexicalInfo(id), id.getText());
+							GenericTypeReference gtr = new GenericTypeReference(SourceLocationFactory.ToLexicalInfo(id), id.getText());
 							arguments = gtr.GenericArguments;
 							tr = gtr;
 						}
@@ -1125,7 +1007,7 @@ type_reference returns [TypeReference tr]
 			(
 				OF MULTIPLY
 				{
-					gtdr = new GenericTypeDefinitionReference(ToLexicalInfo(id));
+					gtdr = new GenericTypeDefinitionReference(SourceLocationFactory.ToLexicalInfo(id));
 					gtdr.Name = id.getText();
 					gtdr.GenericPlaceholders = 1;
 					tr = gtdr;
@@ -1135,14 +1017,14 @@ type_reference returns [TypeReference tr]
 			(
 				OF tr=type_reference
 				{
-					GenericTypeReference gtr = new GenericTypeReference(ToLexicalInfo(id), id.getText());
+					GenericTypeReference gtr = new GenericTypeReference(SourceLocationFactory.ToLexicalInfo(id), id.getText());
 					gtr.GenericArguments.Add(tr);
 					tr = gtr;
 				}
 			)
 			|
 			{
-				SimpleTypeReference str = new SimpleTypeReference(ToLexicalInfo(id));
+				SimpleTypeReference str = new SimpleTypeReference(SourceLocationFactory.ToLexicalInfo(id));
 				str.Name = id.getText();
 				tr = str;
 			}
@@ -1169,13 +1051,13 @@ protected
 begin_block_with_doc[Node node, Block block]:
 	begin:COLON (eos docstring[node])?
 	{
-		block.LexicalInfo = ToLexicalInfo(begin);
+		block.LexicalInfo = SourceLocationFactory.ToLexicalInfo(begin);
 	}
 	;
 
 protected
 end[Node node] :
-	t:END { node.EndSourceLocation = ToSourceLocation(t); }
+	t:END { node.EndSourceLocation = SourceLocationFactory.ToSourceLocation(t); }
 	(eos)?
 	;
 
@@ -1186,7 +1068,7 @@ compound_stmt[Block b]
 }:
 		begin:COLON
 		{
-			b.LexicalInfo = ToLexicalInfo(begin);
+			b.LexicalInfo = SourceLocationFactory.ToLexicalInfo(begin);
 			statements = b.Statements;
 		}
 			block[statements]
@@ -1202,7 +1084,7 @@ closure_macro_stmt returns [MacroStatement returnValue]
 	id:ID expression_list[macro.Arguments]
 	{
 		macro.Name = id.getText();
-		macro.LexicalInfo = ToLexicalInfo(id);		
+		macro.LexicalInfo = SourceLocationFactory.ToLexicalInfo(id);		
 		returnValue = macro;
 	}
 ;
@@ -1223,7 +1105,7 @@ macro_stmt returns [MacroStatement returnValue]
 	)
 	{
 		macro.Name = id.getText();
-		macro.LexicalInfo = ToLexicalInfo(id);
+		macro.LexicalInfo = SourceLocationFactory.ToLexicalInfo(id);
 		
 		returnValue = macro;
 	}
@@ -1236,8 +1118,8 @@ goto_stmt returns [GotoStatement stmt]
 	}:
 	token:GOTO label:ID
 	{
-		stmt = new GotoStatement(ToLexicalInfo(token),
-					new ReferenceExpression(ToLexicalInfo(label), label.getText()));
+		stmt = new GotoStatement(SourceLocationFactory.ToLexicalInfo(token),
+					new ReferenceExpression(SourceLocationFactory.ToLexicalInfo(label), label.getText()));
 	}
 	;
 	
@@ -1248,7 +1130,7 @@ label_stmt returns [LabelStatement stmt]
 	}:
 	token:COLON label:ID
 	{
-		stmt = new LabelStatement(ToLexicalInfo(token), label.getText());
+		stmt = new LabelStatement(SourceLocationFactory.ToLexicalInfo(token), label.getText());
 	}
 	;
 
@@ -1264,10 +1146,9 @@ stmt [StatementCollection container]
 		s=if_stmt |
 		s=unless_stmt |
 		s=try_stmt |
-		s=given_stmt |
 		(atom (NEWLINE)+ DOT)=>(s=expression_stmt eos) |
 		(ID (expression)?)=>{IsValidMacroArgument(LA(2))}? s=macro_stmt |
-		(slicing_expression (ASSIGN|(DO|DEF)))=> s=assignment_or_method_invocation_with_block_stmt |
+		(slicing_expression (ASSIGN|(COLON|DO|DEF)))=> s=assignment_or_method_invocation_with_block_stmt |
 		s=return_stmt |
 		(declaration COMMA)=> s=unpack_stmt |
 		s=declaration_stmt |
@@ -1310,7 +1191,7 @@ stmt_modifier returns [StatementModifier m]
 	)
 	e=boolean_expression
 	{
-		m = new StatementModifier(ToLexicalInfo(t));
+		m = new StatementModifier(SourceLocationFactory.ToLexicalInfo(t));
 		m.Type = type;
 		m.Condition = e;
 	}
@@ -1346,7 +1227,7 @@ internal_closure_stmt[Block block]
 			(
 				(declaration COMMA)=>stmt=unpack |
 				{IsValidMacroArgument(LA(2))}? stmt=closure_macro_stmt | 
-				stmt=expression_stmt |
+				stmt=closure_expression_stmt |
 				stmt=raise_stmt |
 				stmt=yield_stmt			
 			)
@@ -1360,18 +1241,28 @@ internal_closure_stmt[Block block]
 		}
 	}
 	;
-	
+
+protected
+closure_expression_stmt returns [Statement s]
+{
+	s = null;
+	Expression e = null;
+}:
+	e=array_or_expression
+	{ s = new ExpressionStatement(e); }
+;	
+
 protected
 closure_expression returns [Expression e]
 	{
 		e = null;
-		CallableBlockExpression cbe = null;
+		BlockExpression cbe = null;
 		ParameterDeclarationCollection parameters = null;
 		Block body = null;
 	}:
 	anchorBegin:LBRACE
 		{
-			e = cbe = new CallableBlockExpression(ToLexicalInfo(anchorBegin));
+			e = cbe = new BlockExpression(SourceLocationFactory.ToLexicalInfo(anchorBegin));
 			cbe.Annotate("inline");
 			parameters = cbe.Parameters;
 			body = cbe.Body;
@@ -1395,64 +1286,115 @@ closure_expression returns [Expression e]
 	
 protected
 callable_expression returns [Expression e]
-	{
-		e = null;
-		CallableBlockExpression cbe = null;
-		TypeReference rt = null;
-		IToken anchor = null;
-	}:
-	(
-		(doAnchor:DO { anchor = doAnchor; }) |
-		(defAnchor:DEF { anchor = defAnchor; })
+{
+	e = null;
+	Block body = null;
+	BlockExpression cbe = null;
+	TypeReference rt = null;
+	IToken anchor = null;
+}:
+	(COLON)=>(
+		{ body = new Block(); }
+		compound_stmt[body]
+		{ e = new BlockExpression(body.LexicalInfo, body); }
 	)
-	{
-		e = cbe = new CallableBlockExpression(ToLexicalInfo(anchor));
-	}
-	(
-		LPAREN parameter_declaration_list[cbe.Parameters] RPAREN
-		(AS rt=type_reference { cbe.ReturnType = rt; })?
-	)?
-		compound_stmt[cbe.Body]
-	;
+	|(
+		(
+			(doAnchor:DO { anchor = doAnchor; }) |
+			(defAnchor:DEF { anchor = defAnchor; })
+		)
+		{
+			e = cbe = new BlockExpression(SourceLocationFactory.ToLexicalInfo(anchor));
+			body = cbe.Body;
+		}
+		(
+			LPAREN parameter_declaration_list[cbe.Parameters] RPAREN
+			(AS rt=type_reference { cbe.ReturnType = rt; })?
+		)?
+			compound_stmt[body]
+	)
+;
 	
 protected
 try_stmt returns [TryStatement s]
 	{
 		s = null;		
-		Block sblock = null;
 		Block eblock = null;
+		Block lastBlock = null;
 	}:
-	t:TRY { s = new TryStatement(ToLexicalInfo(t)); }
-		compound_stmt[s.ProtectedBlock]
+	t:TRY { s = new TryStatement(SourceLocationFactory.ToLexicalInfo(t)); } begin
+		{s.ProtectedBlock = new Block();} block[s.ProtectedBlock.Statements] { lastBlock = s.ProtectedBlock; }
+	(EXCEPT|FAILURE|ENSURE)=>
 	(
-		exception_handler[s]
+		lastBlock = exception_handler[s]
 	)*
 	(
-		etoken:ENSURE { eblock = new Block(ToLexicalInfo(etoken)); }
-			compound_stmt[eblock]
-		{ s.EnsureBlock = eblock; }
+		ftoken:FAILURE { eblock = new Block(SourceLocationFactory.ToLexicalInfo(ftoken)); } begin
+			block[eblock.Statements]
+		{ s.FailureBlock = lastBlock = eblock; }
 	)?
+	(
+		etoken:ENSURE { eblock = new Block(SourceLocationFactory.ToLexicalInfo(etoken)); } begin
+			block[eblock.Statements]
+		{ s.EnsureBlock = lastBlock = eblock; }
+	)?
+	end[lastBlock]
 	;
 	
 protected
-exception_handler [TryStatement t]
+exception_handler [TryStatement t] returns [Block lastBlock]
 	{
 		ExceptionHandler eh = null;		
 		TypeReference tr = null;
+		Expression e = null;
+		lastBlock = null;
 	}:
-	c:EXCEPT (x:ID (AS tr=type_reference)?)?
+	c:EXCEPT (x:ID)? (AS tr=type_reference)? ((IF|u:UNLESS) e=expression)? begin
 	{
-		eh = new ExceptionHandler(ToLexicalInfo(c));
+		eh = new ExceptionHandler(SourceLocationFactory.ToLexicalInfo(c));
+		
+		eh.Declaration = new Declaration();
+		eh.Declaration.Type = tr;
 		
 		if (x != null)
 		{
-			eh.Declaration = new Declaration(ToLexicalInfo(x));
+			eh.Declaration.LexicalInfo = SourceLocationFactory.ToLexicalInfo(x);
 			eh.Declaration.Name = x.getText();		
-			eh.Declaration.Type = tr;
 		}
+		else
+		{
+			eh.Declaration.Name = null;
+			eh.Flags |= ExceptionHandlerFlags.Anonymous;
+		}
+		if (tr != null)
+		{
+			eh.Declaration.LexicalInfo = tr.LexicalInfo;
+		}
+		else if (x != null)
+		{
+			eh.Declaration.LexicalInfo = eh.LexicalInfo;
+		}
+		if(tr == null)
+		{
+			eh.Flags |= ExceptionHandlerFlags.Untyped;
+		}
+		if (e != null)
+		{
+			if(u != null)
+			{
+				UnaryExpression not = new UnaryExpression(SourceLocationFactory.ToLexicalInfo(u));
+				not.Operator = UnaryOperatorType.LogicalNot;
+				not.Operand = e;
+				e = not;
+			}
+			eh.FilterCondition = e;
+			eh.Flags |= ExceptionHandlerFlags.Filter;
+		}
+		eh.Block = new Block(SourceLocationFactory.ToLexicalInfo(c));
 	}		
-	compound_stmt[eh.Block]
+	block[eh.Block.Statements]
 	{
+		lastBlock = eh.Block;
 		t.ExceptionHandlers.Add(eh);
 	}
 	;
@@ -1465,7 +1407,7 @@ raise_stmt returns [RaiseStatement s]
 	}:
 	t:RAISE (e=expression)?
 	{
-		s = new RaiseStatement(ToLexicalInfo(t));
+		s = new RaiseStatement(SourceLocationFactory.ToLexicalInfo(t));
 		s.Exception = e;
 	}
 	;
@@ -1484,7 +1426,7 @@ declaration_stmt returns [DeclarationStatement s]
 		((m=stmt_modifier)? eos)
 	)
 	{
-		Declaration d = new Declaration(ToLexicalInfo(id));
+		Declaration d = new Declaration(SourceLocationFactory.ToLexicalInfo(id));
 		d.Name = id.getText();
 		d.Type = tr;
 		
@@ -1516,7 +1458,7 @@ return_expression_stmt returns [ReturnStatement s]
 	r:RETURN (e=array_or_expression)?
 	(modifier=stmt_modifier)?
 	{
-		s = new ReturnStatement(ToLexicalInfo(r));
+		s = new ReturnStatement(SourceLocationFactory.ToLexicalInfo(r));
 		s.Modifier = modifier;
 		s.Expression = e;
 	}
@@ -1534,15 +1476,12 @@ return_stmt returns [ReturnStatement s]
 			(
 				e=array_or_expression
 				(
-					(DO)=>method_invocation_block[e] |
+					(COLON|DO)=>e=method_invocation_block[e] |
 					((modifier=stmt_modifier)? eos)
 				)
 			) |
 			(
 				e=callable_expression
-			) |
-			(AST)=>(
-				e=ast_literal
 			) |
 			(
 				(modifier=stmt_modifier)?
@@ -1550,7 +1489,7 @@ return_stmt returns [ReturnStatement s]
 			)
 		)
 	{
-		s = new ReturnStatement(ToLexicalInfo(r));
+		s = new ReturnStatement(SourceLocationFactory.ToLexicalInfo(r));
 		s.Modifier = modifier;
 		s.Expression = e;
 	}
@@ -1564,7 +1503,7 @@ yield_stmt returns [YieldStatement s]
 	}:
 	yt:YIELD (e=array_or_expression)?
 	{
-		s = new YieldStatement(ToLexicalInfo(yt));
+		s = new YieldStatement(SourceLocationFactory.ToLexicalInfo(yt));
 		s.Expression = e;
 	}
 	;
@@ -1573,14 +1512,14 @@ protected
 break_stmt returns [BreakStatement s]
 	{ s = null; }:
 	b:BREAK
-	{ s = new BreakStatement(ToLexicalInfo(b)); }
+	{ s = new BreakStatement(SourceLocationFactory.ToLexicalInfo(b)); }
 	;
 
 protected
 continue_stmt returns [Statement s]
 	{ s = null; }:
 	c:CONTINUE
-	{ s = new ContinueStatement(ToLexicalInfo(c)); }
+	{ s = new ContinueStatement(SourceLocationFactory.ToLexicalInfo(c)); }
 	;
 	
 protected
@@ -1591,7 +1530,7 @@ unless_stmt returns [UnlessStatement us]
 	}:
 	u:UNLESS condition=expression
 	{
-		us = new UnlessStatement(ToLexicalInfo(u));
+		us = new UnlessStatement(SourceLocationFactory.ToLexicalInfo(u));
 		us.Condition = condition;
 	}
 	compound_stmt[us.Block]
@@ -1607,7 +1546,7 @@ for_stmt returns [ForStatement fs]
 	}:
 	f:FOR
 	{
-		fs = new ForStatement(ToLexicalInfo(f));
+		fs = new ForStatement(SourceLocationFactory.ToLexicalInfo(f));
 		declarations = fs.Declarations;
 		body = fs.Block;
 	}
@@ -1624,42 +1563,10 @@ while_stmt returns [WhileStatement ws]
 	}:
 	w:WHILE e=expression
 	{
-		ws = new WhileStatement(ToLexicalInfo(w));
+		ws = new WhileStatement(SourceLocationFactory.ToLexicalInfo(w));
 		ws.Condition = e;
 	}
 	compound_stmt[ws.Block]
-	;
-		
-protected
-given_stmt returns [GivenStatement gs]
-	{
-		gs = null;		
-		Expression e = null;
-		WhenClause wc = null;
-	}:
-	given:GIVEN e=expression
-	{
-		gs = new GivenStatement(ToLexicalInfo(given));
-		gs.Expression = e;
-	}
-	begin
-		(
-			when:WHEN e=array_or_expression
-			{
-				wc = new WhenClause(ToLexicalInfo(when));
-				wc.Condition = e;
-				gs.WhenClauses.Add(wc);
-			}				
-				compound_stmt[wc.Block]
-		)+
-		(
-			otherwise:OTHERWISE
-			{
-				gs.OtherwiseBlock = new Block(ToLexicalInfo(otherwise));
-			}
-			compound_stmt[gs.OtherwiseBlock]
-		)?
-	end[gs]
 	;
 		
 protected
@@ -1673,7 +1580,7 @@ if_stmt returns [IfStatement returnValue]
 	}:
 	it:IF e=expression
 	{
-		returnValue = s = new IfStatement(ToLexicalInfo(it));
+		returnValue = s = new IfStatement(SourceLocationFactory.ToLexicalInfo(it));
 		s.Condition = e;
 		lastBlock = s.TrueBlock = new Block();
 	}
@@ -1683,7 +1590,7 @@ if_stmt returns [IfStatement returnValue]
 		{
 			s.FalseBlock = new Block();
 			
-			IfStatement elif = new IfStatement(ToLexicalInfo(ei));
+			IfStatement elif = new IfStatement(SourceLocationFactory.ToLexicalInfo(ei));
 			lastBlock = elif.TrueBlock = new Block();
 			elif.Condition = e;
 			
@@ -1693,7 +1600,7 @@ if_stmt returns [IfStatement returnValue]
 		begin block[s.TrueBlock.Statements]
 	)*
 	(
-		et:ELSE { lastBlock = s.FalseBlock = new Block(ToLexicalInfo(et)); }
+		et:ELSE { lastBlock = s.FalseBlock = new Block(SourceLocationFactory.ToLexicalInfo(et)); }
 		begin block[s.FalseBlock.Statements]
 	)?
 	end[lastBlock]
@@ -1723,7 +1630,7 @@ unpack returns [UnpackStatement s]
 	t:ASSIGN e=array_or_expression
 	{
 		s.Expression = e;
-		s.LexicalInfo = ToLexicalInfo(t);
+		s.LexicalInfo = SourceLocationFactory.ToLexicalInfo(t);
 	}
 ;
 	
@@ -1746,7 +1653,7 @@ declaration returns [Declaration d]
 	}:
 	id:ID (AS tr=type_reference)?
 	{
-		d = new Declaration(ToLexicalInfo(id));
+		d = new Declaration(SourceLocationFactory.ToLexicalInfo(id));
 		d.Name = id.getText();
 		d.Type = tr;
 	}
@@ -1760,7 +1667,7 @@ array_or_expression returns [Expression e]
 	} :
 		(
 			// tupla vazia: , ou (,)
-			c:COMMA { e = new ArrayLiteralExpression(ToLexicalInfo(c)); }
+			c:COMMA { e = new ArrayLiteralExpression(SourceLocationFactory.ToLexicalInfo(c)); }
 		) |
 		(
 			e=expression
@@ -1798,7 +1705,7 @@ expression returns [Expression e]
 	( options { greedy = true; } :
 		f:FOR
 		{
-			ge = new GeneratorExpression(ToLexicalInfo(f));
+			ge = new GeneratorExpression(SourceLocationFactory.ToLexicalInfo(f));
 			ge.Expression = e;
 			e = ge;
 		}
@@ -1808,12 +1715,12 @@ expression returns [Expression e]
 			{
 				if (null == mge)
 				{
-					mge = new ExtendedGeneratorExpression(ToLexicalInfo(f));
+					mge = new ExtendedGeneratorExpression(SourceLocationFactory.ToLexicalInfo(f));
 					mge.Items.Add(ge);
 					e = mge;
 				}
 				
-				ge = new GeneratorExpression(ToLexicalInfo(f2));
+				ge = new GeneratorExpression(SourceLocationFactory.ToLexicalInfo(f2));
 				mge.Items.Add(ge);
 			}
 			generator_expression_body[ge]
@@ -1848,7 +1755,7 @@ boolean_expression returns [Expression e]
 			ot:OR
 			r=boolean_term
 			{
-				BinaryExpression be = new BinaryExpression(ToLexicalInfo(ot));
+				BinaryExpression be = new BinaryExpression(SourceLocationFactory.ToLexicalInfo(ot));
 				be.Operator = BinaryOperatorType.Or;
 				be.Left = e;
 				be.Right = r;
@@ -1870,7 +1777,7 @@ boolean_term returns [Expression e]
 		at:AND
 		r=not_expression
 		{
-			BinaryExpression be = new BinaryExpression(ToLexicalInfo(at));
+			BinaryExpression be = new BinaryExpression(SourceLocationFactory.ToLexicalInfo(at));
 			be.Operator = BinaryOperatorType.And;
 			be.Left = e;
 			be.Right = r; 
@@ -1880,31 +1787,35 @@ boolean_term returns [Expression e]
 	;
 	
 protected
-method_invocation_block[Expression mi]
-	{
-		Expression block = null;
-	}:
-	{IsMethodInvocationExpression(mi)}?
+method_invocation_block[Expression e] returns [MethodInvocationExpression mi]
+{
+	Expression block = null;
+	mi = null;
+}:
 	block=callable_expression
 	{
-		((MethodInvocationExpression)mi).Arguments.Add(block);
+		mi = e as MethodInvocationExpression;
+		if (null == mi) 
+		{
+			mi = new MethodInvocationExpression(e.LexicalInfo, e);
+		}
+		mi.Arguments.Add(block);
 	}
-	;
-	
-ast_literal_expression returns [AstLiteralExpression e]
-{
-	e = null;
-}:
-	t:AST { e = new AstLiteralExpression(ToLexicalInfo(t)); }
-	ast_literal_closure[e]
 ;
 	
-ast_literal returns [AstLiteralExpression e]
+ast_literal_expression returns [QuasiquoteExpression e]
 {
+	Node node = null;
 	e = null;
 }:
-	t:AST { e = new AstLiteralExpression(ToLexicalInfo(t)); }
-	(ast_literal_block[e] | (ast_literal_closure[e] eos))
+	begin:QQ_BEGIN
+	{ e = new QuasiquoteExpression(SourceLocationFactory.ToLexicalInfo(begin)); }
+	(
+		(expression QQ_END)=>node=expression { e.Node = node; }
+		| ((eos)? ast_literal_block[e])
+	)
+	end:QQ_END
+	{ e.EndSourceLocation = SourceLocationFactory.ToSourceLocation(end); }
 ;
 
 type_definition_member_prediction:
@@ -1913,52 +1824,29 @@ type_definition_member_prediction:
 	(CLASS|INTERFACE|STRUCT|DEF|EVENT|(ID (AS|ASSIGN)))
 ;
 
-ast_literal_block[AstLiteralExpression e]
+ast_literal_block[QuasiquoteExpression e]
 {
 	// TODO: either cache or construct these objects on demand
 	TypeMemberCollection collection = new TypeMemberCollection();
 	Block block = new Block();
 	StatementCollection statements = block.Statements;
 	Node node = null;
-	//System.Console.WriteLine("ast_literal_block");
-}:
-	begin (eos)?
-	(
-		(type_definition_member_prediction)=>(type_definition_member[collection] { e.Node = collection[0]; })
-		|
-		((stmt[statements])* { e.Node = block.Statements.Count > 1 ? block : block.Statements[0]; })
+}: 
+	(type_definition_member_prediction)=>(
+		type_definition_member[collection]
+		{ e.Node = collection[0]; }
 	)
-	end[e]
+	| (
+		(stmt[statements])+
+		{
+			if (block.Statements.Count > 0)
+			{
+				e.Node = block.Statements.Count > 1 ? block : block.Statements[0];
+			}
+		}
+	)
 ;
 
-ast_literal_closure[AstLiteralExpression e]
-{
-	Node node = null;
-}:
-	LBRACE
-	(
-		(expression)=>node=expression { e.Node = node; } |
-		node=ast_literal_closure_stmt { e.Node = node; }
-	)
-	RBRACE
-;
-
-ast_literal_closure_stmt returns [Statement s]
-{
-	s = null;
-	StatementModifier modifier;
-}:
-	s=return_expression_stmt |
-	(
-		(
-			(declaration COMMA)=>s=unpack |
-			{IsValidMacroArgument(LA(2))}? s=closure_macro_stmt |
-			s=raise_stmt |
-			s=yield_stmt			
-		)
-		(modifier=stmt_modifier { s.Modifier = modifier; })?		
-	)
-;
 
 protected
 assignment_or_method_invocation_with_block_stmt returns [Statement stmt]
@@ -1972,29 +1860,28 @@ assignment_or_method_invocation_with_block_stmt returns [Statement stmt]
 	}:
 	lhs=slicing_expression
 	(
-		(DO)=>(
-			method_invocation_block[lhs]
+		(COLON|DO)=>(
+			lhs=method_invocation_block[lhs]
 			{ stmt = new ExpressionStatement(lhs); }
 		) |
 		(
 			(
-			op:ASSIGN { token = op; binaryOperator = ParseAssignOperator(op.getText()); }
+			op:ASSIGN { token = op; binaryOperator = OperatorParser.ParseAssignment(op.getText()); }
 				(
-					(DEF|DO)=>rhs=callable_expression |
+					(COLON|DEF|DO)=>rhs=callable_expression |
 					(
 						rhs=array_or_expression
 						(		
-							(DO)=>method_invocation_block[rhs] |
+							(COLON|DO)=>rhs=method_invocation_block[rhs] |
 							(modifier=stmt_modifier eos) |
 							eos
 						)					
-					) |
-					rhs=ast_literal
+					)
 				)
 			)
 			{
 				stmt = new ExpressionStatement(
-						new BinaryExpression(ToLexicalInfo(token),
+						new BinaryExpression(SourceLocationFactory.ToLexicalInfo(token),
 							binaryOperator,
 							lhs, rhs));
 				stmt.Modifier = modifier;
@@ -2016,7 +1903,7 @@ not_expression returns [Expression e]
 	{
 		if (nt != null)
 		{
-			UnaryExpression ue = new UnaryExpression(ToLexicalInfo(nt));
+			UnaryExpression ue = new UnaryExpression(SourceLocationFactory.ToLexicalInfo(nt));
 			ue.Operator = UnaryOperatorType.LogicalNot;
 			ue.Operand = e;
 			e = ue;
@@ -2040,7 +1927,7 @@ assignment_expression returns [Expression e]
 			(
 				op:ASSIGN {
 					token = op;
-					binaryOperator = ParseAssignOperator(op.getText());
+					binaryOperator = OperatorParser.ParseAssignment(op.getText());
 				}
 			) |
 			(
@@ -2070,7 +1957,7 @@ assignment_expression returns [Expression e]
 		)
 		r=assignment_expression
 		{
-			BinaryExpression be = new BinaryExpression(ToLexicalInfo(token));
+			BinaryExpression be = new BinaryExpression(SourceLocationFactory.ToLexicalInfo(token));
 			be.Operator = binaryOperator;
 			be.Left = e;
 			be.Right = r;
@@ -2093,7 +1980,7 @@ conditional_expression returns [Expression e]
 	 (
 	  (
 		 (
-			(t:CMP_OPERATOR { op = ParseCmpOperator(t.getText()); token = t; } ) |
+			(t:CMP_OPERATOR { op = OperatorParser.ParseComparison(t.getText()); token = t; } ) |
 			(tgt:GREATER_THAN { op = BinaryOperatorType.GreaterThan; token = tgt; } ) |
 			(tlt:LESS_THAN { op = BinaryOperatorType.LessThan; token = tlt; }) |
 			(tnot:IS NOT { op = BinaryOperatorType.ReferenceInequality; token = tnot; }) |
@@ -2114,7 +2001,7 @@ conditional_expression returns [Expression e]
 	  )
 	)
 	{
-		BinaryExpression be = new BinaryExpression(ToLexicalInfo(token));
+		BinaryExpression be = new BinaryExpression(SourceLocationFactory.ToLexicalInfo(token));
 		be.Operator = op;
 		be.Left = e;
 		be.Right = r;
@@ -2141,7 +2028,7 @@ sum returns [Expression e]
 		)
 		r=term
 		{
-			BinaryExpression be = new BinaryExpression(ToLexicalInfo(op));
+			BinaryExpression be = new BinaryExpression(SourceLocationFactory.ToLexicalInfo(op));
 			be.Operator = bOperator;
 			be.Left = e;
 			be.Right = r;
@@ -2168,7 +2055,7 @@ term returns [Expression e]
 		 )
 		r=factor
 		{
-			BinaryExpression be = new BinaryExpression(ToLexicalInfo(token));
+			BinaryExpression be = new BinaryExpression(SourceLocationFactory.ToLexicalInfo(token));
 			be.Operator = op;
 			be.Left = e;
 			be.Right = r;
@@ -2193,7 +2080,7 @@ factor returns [Expression e]
 		)
 		r=exponentiation
 		{
-			BinaryExpression be = new BinaryExpression(ToLexicalInfo(token));
+			BinaryExpression be = new BinaryExpression(SourceLocationFactory.ToLexicalInfo(token));
 			be.Operator = op;
 			be.Left = e;
 			be.Right = r;
@@ -2214,7 +2101,7 @@ exponentiation returns [Expression e]
 		t:AS
 		tr=type_reference
 		{
-			TryCastExpression ae = new TryCastExpression(ToLexicalInfo(t));
+			TryCastExpression ae = new TryCastExpression(SourceLocationFactory.ToLexicalInfo(t));
 			ae.Target = e;
 			ae.Type = tr;
 			e = ae; 
@@ -2225,7 +2112,7 @@ exponentiation returns [Expression e]
 	 	token:EXPONENTIATION
 		r=exponentiation
 		{
-			BinaryExpression be = new BinaryExpression(ToLexicalInfo(token));
+			BinaryExpression be = new BinaryExpression(SourceLocationFactory.ToLexicalInfo(token));
 			be.Operator = BinaryOperatorType.Exponentiation;
 			be.Left = e;
 			be.Right = r;
@@ -2263,7 +2150,7 @@ unary_expression returns [Expression e]
 	{
 		if (null != op)
 		{
-			UnaryExpression ue = new UnaryExpression(ToLexicalInfo(op));
+			UnaryExpression ue = new UnaryExpression(SourceLocationFactory.ToLexicalInfo(op));
 			ue.Operator = uOperator;
 			ue.Operand = e;
 			e = ue; 
@@ -2282,19 +2169,40 @@ atom returns [Expression e]
 		e=reference_expression |
 		e=paren_expression |
 		e=cast_expression |
-		e=typeof_expression
+		e=typeof_expression |
+		e=splice_expression
 	)
-	;
+;
+
+protected
+splice_expression returns [Expression e]
+{
+	e = null;
+}:
+	begin:SPLICE_BEGIN e=atom
+	{
+		e = new SpliceExpression(SourceLocationFactory.ToLexicalInfo(begin), e);
+	}
+;
 	
 protected
 char_literal returns [Expression e]
 {
 	e = null;
 }:
-	CHAR LPAREN t:SINGLE_QUOTED_STRING RPAREN
-	{
-		e = new CharLiteralExpression(ToLexicalInfo(t), t.getText());
-	}
+	CHAR LPAREN
+	( 
+		t:SINGLE_QUOTED_STRING 
+		{
+			e = new CharLiteralExpression(SourceLocationFactory.ToLexicalInfo(t), t.getText());
+		}
+		|
+		i:INT
+		{
+			e = new CharLiteralExpression(SourceLocationFactory.ToLexicalInfo(i), (char) PrimitiveParser.ParseInt(i));
+		}
+	)
+	RPAREN
 ;
 	
 protected
@@ -2306,7 +2214,7 @@ cast_expression returns [Expression e]
 	}:
 	t:CAST LPAREN tr=type_reference COMMA target=expression RPAREN
 	{
-		e = new CastExpression(ToLexicalInfo(t), target, tr);
+		e = new CastExpression(SourceLocationFactory.ToLexicalInfo(t), target, tr);
 	}
 	;
 	
@@ -2318,7 +2226,7 @@ typeof_expression returns [Expression e]
 	}:
 	t:TYPEOF LPAREN tr=type_reference RPAREN
 	{
-		e = new TypeofExpression(ToLexicalInfo(t), tr);
+		e = new TypeofExpression(SourceLocationFactory.ToLexicalInfo(t), tr);
 	}
 	;
 	
@@ -2334,7 +2242,7 @@ reference_expression returns [ReferenceExpression e]
 		ch:CHAR { t = ch; }
 	)
 	{
-		e = new ReferenceExpression(ToLexicalInfo(t));
+		e = new ReferenceExpression(SourceLocationFactory.ToLexicalInfo(t));
 		e.Name = t.getText();
 	}	
 ;
@@ -2355,7 +2263,7 @@ paren_expression returns [Expression e]
 			IF condition=boolean_expression
 			ELSE falseValue=array_or_expression
 			{
-				ConditionalExpression ce = new ConditionalExpression(ToLexicalInfo(lparen));
+				ConditionalExpression ce = new ConditionalExpression(SourceLocationFactory.ToLexicalInfo(lparen));
 				ce.Condition = condition;
 				ce.TrueValue = e;
 				ce.FalseValue = falseValue;
@@ -2378,7 +2286,7 @@ typed_array returns [Expression e]
 	t:LPAREN
 	OF tr=type_reference COLON
 	{
-		e = tle = new ArrayLiteralExpression(ToLexicalInfo(t));
+		e = tle = new ArrayLiteralExpression(SourceLocationFactory.ToLexicalInfo(t));
 		tle.Type = new ArrayTypeReference(tr.LexicalInfo, tr);
 	}
 	(
@@ -2478,7 +2386,7 @@ member_reference_expression[Expression target] returns [Expression e]
 	}:
 	memberName=member
 	{
-		MemberReferenceExpression mre = new MemberReferenceExpression(ToLexicalInfo(memberName));
+		MemberReferenceExpression mre = new MemberReferenceExpression(SourceLocationFactory.ToLexicalInfo(memberName));
 		mre.Target = target;
 		mre.Name = memberName.getText();
 		e = mre;
@@ -2502,7 +2410,7 @@ slicing_expression returns [Expression e]
 				(
 					OF
 					{
-						GenericReferenceExpression gre = new GenericReferenceExpression(ToLexicalInfo(lbrack));
+						GenericReferenceExpression gre = new GenericReferenceExpression(SourceLocationFactory.ToLexicalInfo(lbrack));
 						gre.Target = e;
 						e = gre;
 						genericArguments = gre.GenericArguments;
@@ -2511,7 +2419,7 @@ slicing_expression returns [Expression e]
 				)
 				|				
 				{
-					se = new SlicingExpression(ToLexicalInfo(lbrack));				
+					se = new SlicingExpression(SourceLocationFactory.ToLexicalInfo(lbrack));				
 					se.Target = e;
 					e = se;
 				}
@@ -2523,7 +2431,7 @@ slicing_expression returns [Expression e]
 		(
 			oft:OF genericArgument=type_reference
 			{
-				GenericReferenceExpression gre = new GenericReferenceExpression(ToLexicalInfo(oft));
+				GenericReferenceExpression gre = new GenericReferenceExpression(SourceLocationFactory.ToLexicalInfo(oft));
 				gre.Target = e;
 				e = gre;
 				gre.GenericArguments.Add(genericArgument);
@@ -2543,7 +2451,7 @@ slicing_expression returns [Expression e]
 		(
 			lparen:LPAREN
 				{
-					mce = new MethodInvocationExpression(ToLexicalInfo(lparen));
+					mce = new MethodInvocationExpression(SourceLocationFactory.ToLexicalInfo(lparen));
 					mce.Target = e;
 					e = mce;
 				}
@@ -2571,7 +2479,7 @@ method_invocation_argument[MethodInvocationExpression mie]
 			{
 				mie.Arguments.Add(
 					new UnaryExpression(
-						ToLexicalInfo(t),
+						SourceLocationFactory.ToLexicalInfo(t),
 						UnaryOperatorType.Explode,
 						arg));
 			}
@@ -2604,29 +2512,29 @@ literal returns [Expression e]
 		
 protected
 self_literal returns [SelfLiteralExpression e] { e = null; }:
-	t:SELF { e = new SelfLiteralExpression(ToLexicalInfo(t)); }
+	t:SELF { e = new SelfLiteralExpression(SourceLocationFactory.ToLexicalInfo(t)); }
 	;
 	
 protected
 super_literal returns [SuperLiteralExpression e] { e = null; }:
-	t:SUPER { e = new SuperLiteralExpression(ToLexicalInfo(t)); }
+	t:SUPER { e = new SuperLiteralExpression(SourceLocationFactory.ToLexicalInfo(t)); }
 	;
 		
 protected
 null_literal returns [NullLiteralExpression e] { e = null; }:
-	t:NULL { e = new NullLiteralExpression(ToLexicalInfo(t)); }
+	t:NULL { e = new NullLiteralExpression(SourceLocationFactory.ToLexicalInfo(t)); }
 	;
 		
 protected
 bool_literal returns [BoolLiteralExpression e] { e = null; }:
 	t:TRUE
 	{
-		e = new BoolLiteralExpression(ToLexicalInfo(t));
+		e = new BoolLiteralExpression(SourceLocationFactory.ToLexicalInfo(t));
 		e.Value = true;
 	} |
 	f:FALSE
 	{
-		e = new BoolLiteralExpression(ToLexicalInfo(f));
+		e = new BoolLiteralExpression(SourceLocationFactory.ToLexicalInfo(f));
 		e.Value = false;
 	}
 	;
@@ -2643,7 +2551,7 @@ integer_literal returns [IntegerLiteralExpression e]
 		{
 			val = i.getText();
 			if (neg != null) val = neg.getText() + val;
-			e = ParseIntegerLiteralExpression(i, val, false);
+			e = PrimitiveParser.ParseIntegerLiteralExpression(i, val, false);
 		}
 		|
 		l:LONG
@@ -2651,7 +2559,7 @@ integer_literal returns [IntegerLiteralExpression e]
 			val = l.getText();
 			val = val.Substring(0, val.Length-1);
 			if (neg != null) val = neg.getText() + val;
-			e = ParseIntegerLiteralExpression(l, val, true);
+			e = PrimitiveParser.ParseIntegerLiteralExpression(l, val, true);
 		}
 	)
 	;
@@ -2664,15 +2572,15 @@ string_literal returns [Expression e]
 	e=expression_interpolation |	
 	dqs:DOUBLE_QUOTED_STRING
 	{
-		e = new StringLiteralExpression(ToLexicalInfo(dqs), dqs.getText());
+		e = new StringLiteralExpression(SourceLocationFactory.ToLexicalInfo(dqs), dqs.getText());
 	} |
 	sqs:SINGLE_QUOTED_STRING
 	{
-		e = new StringLiteralExpression(ToLexicalInfo(sqs), sqs.getText());
+		e = new StringLiteralExpression(SourceLocationFactory.ToLexicalInfo(sqs), sqs.getText());
 	} |
 	tqs:TRIPLE_QUOTED_STRING
 	{
-		e = new StringLiteralExpression(ToLexicalInfo(tqs), tqs.getText());
+		e = new StringLiteralExpression(SourceLocationFactory.ToLexicalInfo(tqs), tqs.getText());
 	}
 	;
 	
@@ -2684,7 +2592,7 @@ expression_interpolation returns [ExpressionInterpolationExpression e]
 	}:
 	separator:ESEPARATOR
 	{
-		LexicalInfo info = ToLexicalInfo(separator);
+		LexicalInfo info = SourceLocationFactory.ToLexicalInfo(separator);
 		e = new ExpressionInterpolationExpression(info);		
 	}
 	(  options { greedy = true; } :
@@ -2709,7 +2617,7 @@ list_literal returns [Expression e]
 			item=expression
 			(
 				{
-					e = lle = new ListLiteralExpression(ToLexicalInfo(lbrack));
+					e = lle = new ListLiteralExpression(SourceLocationFactory.ToLexicalInfo(lbrack));
 					lle.Items.Add(item);
 				}
 				(  options { greedy = true; } :
@@ -2719,7 +2627,7 @@ list_literal returns [Expression e]
 			(COMMA)?
 		)
 		|
-		{ e = new ListLiteralExpression(ToLexicalInfo(lbrack)); }
+		{ e = new ListLiteralExpression(SourceLocationFactory.ToLexicalInfo(lbrack)); }
 	)
 	RBRACK
 	;
@@ -2735,7 +2643,7 @@ hash_literal returns [HashLiteralExpression dle]
 		dle = null;
 		ExpressionPair pair = null;
 	}:
-	lbrace:LBRACE { dle = new HashLiteralExpression(ToLexicalInfo(lbrace)); }
+	lbrace:LBRACE { dle = new HashLiteralExpression(SourceLocationFactory.ToLexicalInfo(lbrace)); }
 	(
 		pair=expression_pair			
 		{ dle.Items.Add(pair); }
@@ -2757,13 +2665,13 @@ expression_pair returns [ExpressionPair ep]
 		Expression value = null;
 	}:
 	key=expression t:COLON value=expression
-	{ ep = new ExpressionPair(ToLexicalInfo(t), key, value); }
+	{ ep = new ExpressionPair(SourceLocationFactory.ToLexicalInfo(t), key, value); }
 	;
 		
 protected
 re_literal returns [RELiteralExpression re] { re = null; }:
 	value:RE_LITERAL
-	{ re = new RELiteralExpression(ToLexicalInfo(value), value.getText()); }
+	{ re = new RELiteralExpression(SourceLocationFactory.ToLexicalInfo(value), value.getText()); }
 	;
 	
 protected
@@ -2777,7 +2685,7 @@ double_literal returns [DoubleLiteralExpression rle]
 	{
 		val = value.getText();
 		if (neg != null) val = neg.getText() + val;
-		rle = new DoubleLiteralExpression(ToLexicalInfo(value), ParseDouble(val));
+		rle = new DoubleLiteralExpression(SourceLocationFactory.ToLexicalInfo(value), PrimitiveParser.ParseDouble(val));
 	}
 	|
 	single:FLOAT
@@ -2785,7 +2693,7 @@ double_literal returns [DoubleLiteralExpression rle]
 		val = single.getText();
 		val = val.Substring(0, val.Length-1);
 		if (neg != null) val = neg.getText() + val;
-		rle = new DoubleLiteralExpression(ToLexicalInfo(single), ParseDouble(val, true), true);
+		rle = new DoubleLiteralExpression(SourceLocationFactory.ToLexicalInfo(single), PrimitiveParser.ParseDouble(val, true), true);
 	}
 	;
 	
@@ -2796,7 +2704,7 @@ timespan_literal returns [TimeSpanLiteralExpression tsle] { tsle = null; }:
 	{
 		string val = value.getText();
 		if (neg != null) val = neg.getText() + val;
-		tsle = new TimeSpanLiteralExpression(ToLexicalInfo(value), ParseTimeSpan(val)); 
+		tsle = new TimeSpanLiteralExpression(SourceLocationFactory.ToLexicalInfo(value), PrimitiveParser.ParseTimeSpan(val)); 
 	}
 	;
 
@@ -2835,8 +2743,8 @@ argument[INodeWithArguments node]
 		{
 			node.NamedArguments.Add(
 				new ExpressionPair(
-					ToLexicalInfo(colon),
-					new ReferenceExpression(ToLexicalInfo(id), id.getText()),
+					SourceLocationFactory.ToLexicalInfo(colon),
+					new ReferenceExpression(SourceLocationFactory.ToLexicalInfo(id), id.getText()),
 					value));
 		}
 	) |
@@ -3010,6 +2918,12 @@ RBRACK : ']' { LeaveSkipWhitespaceRegion(); };
 LBRACE : '{' { EnterSkipWhitespaceRegion(); };
 	
 RBRACE : '}' { LeaveSkipWhitespaceRegion(); };
+
+SPLICE_BEGIN : "$";
+
+QQ_BEGIN: "[|"; 
+
+QQ_END: "|]";
 
 INCREMENT: "++";
 
@@ -3279,7 +3193,7 @@ protected
 REVERSE_DIGIT_GROUP : (DIGIT DIGIT DIGIT ({WSABooLexer.IsDigit(LA(2))}? '_'!)? | DIGIT)+;
 
 protected
-ID_PREFIX : '$' | '@' | '?';
+ID_PREFIX : '@' | '?';
 
 protected
 ID_LETTER : ('_' | 'a'..'z' | 'A'..'Z' | {System.Char.IsLetter(LA(1))}? '\u0080'..'\uFFFE');

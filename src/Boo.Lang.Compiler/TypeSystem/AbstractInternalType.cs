@@ -33,8 +33,9 @@ namespace Boo.Lang.Compiler.TypeSystem
 	using System.Reflection;
 	using Boo.Lang.Compiler.Ast;
 	using Attribute = Boo.Lang.Compiler.Ast.Attribute;
+	using System.Collections.Generic;
 
-	public abstract class AbstractInternalType : IInternalEntity, IType, INamespace
+	public abstract class AbstractInternalType : IInternalEntity, IType, INamespace, IGenericTypeInfo
 	{
 		public static readonly IConstructor[] NoConstructors = new IConstructor[0];
 
@@ -44,18 +45,33 @@ namespace Boo.Lang.Compiler.TypeSystem
 
 		protected INamespace _parentNamespace;
 
+		private string _fullName = null;
+
+		private IGenericParameter[] _genericParameters = null;
+
+		private Dictionary<IType[], IType> _constructedTypes = new Dictionary<IType[], IType>(ArrayEqualityComparer<IType>.Default);
+
 		protected AbstractInternalType(TypeSystemServices typeSystemServices, TypeDefinition typeDefinition)
 		{
 			_typeSystemServices = typeSystemServices;
 			_typeDefinition = typeDefinition;
 		}
 
+		protected virtual string BuildFullName()
+		{
+			string fullName = _typeDefinition.FullName;
+
+			if (GenericInfo != null)
+			{
+				fullName = string.Format("{0}`{1}", fullName, GenericInfo.GenericParameters.Length);
+			}
+
+			return fullName;
+		}
+
 		public string FullName
 		{
-			get
-			{
-				return _typeDefinition.FullName;
-			}
+			get { return _fullName ?? (_fullName = BuildFullName());  }
 		}
 
 		public string Name
@@ -98,6 +114,20 @@ namespace Boo.Lang.Compiler.TypeSystem
 		{
 			bool found = false;
 
+			// Try to resolve name as a generic parameter
+			if (NameResolutionService.IsFlagSet(flags, EntityType.Type))
+			{
+				foreach (GenericParameterDeclaration gpd in _typeDefinition.GenericParameters)
+				{
+					if (gpd.Name == name)
+					{
+						targetList.AddUnique(gpd.Entity);
+						return true;
+					}
+				}
+			}
+
+			// Try to resolve name as a member
 			foreach (IEntity entity in GetMembers())
 			{
 				if (entity.Name == name && NameResolutionService.IsFlagSet(flags, entity.EntityType))
@@ -310,14 +340,53 @@ namespace Boo.Lang.Compiler.TypeSystem
 			return FullName;
 		}
 
-		IGenericTypeDefinitionInfo IType.GenericTypeDefinitionInfo
+		public IGenericTypeInfo GenericInfo
+		{
+			get 
+			{
+				if (TypeDefinition.GenericParameters.Count != 0)
+				{
+					return this;
+				}
+				return null;
+			}
+		}
+
+		public IConstructedTypeInfo ConstructedInfo
 		{
 			get { return null; }
 		}
 
-		IGenericTypeInfo IType.GenericTypeInfo
+		IGenericParameter[] IGenericTypeInfo.GenericParameters
 		{
-			get { return null; }
+			get
+			{
+				if (_genericParameters == null)
+				{
+					_genericParameters = Array.ConvertAll<GenericParameterDeclaration, IGenericParameter>(
+						_typeDefinition.GenericParameters.ToArray(),
+						delegate(GenericParameterDeclaration gpd) { return (IGenericParameter)gpd.Entity; } );
+				}
+
+				return _genericParameters;
+			}
+		}
+
+		IType IGenericTypeInfo.ConstructType(IType[] arguments)
+		{
+			IType constructed = null;
+			if (!_constructedTypes.TryGetValue(arguments, out constructed))
+			{
+				constructed = CreateConstructedType(arguments);
+				_constructedTypes.Add(arguments, constructed);
+			}
+
+			return constructed;
+		}
+
+		protected virtual IType CreateConstructedType(IType[] arguments)
+		{
+			return new GenericConstructedType(_typeSystemServices, this, arguments);
 		}
 	}
 

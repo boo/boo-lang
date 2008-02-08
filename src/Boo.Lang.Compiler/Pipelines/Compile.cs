@@ -43,6 +43,7 @@ namespace Boo.Lang.Compiler.Pipelines
 
 			Add(new CheckIdentifiers());
 			Add(new StricterErrorChecking());
+		    Add(new CheckAttributesUsage());
 
 			Add(new ExpandDuckTypedExpressions());
 
@@ -62,6 +63,8 @@ namespace Boo.Lang.Compiler.Pipelines
 			
 			Add(new InjectCallableConversions());
 			Add(new ImplementICallableOnCallableDefinitions());
+		
+			Add(new CheckNeverUsedMembers());
 
 			// TODO:
 			//Add(new InjectCastsAndConversions());

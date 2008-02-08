@@ -1,15 +1,15 @@
 """
 [System.Runtime.CompilerServices.CompilerGlobalScopeAttribute]
-public final transient class Using0Module(System.Object):
+public final transient class Using0Module(object):
 
-	private static def Main(argv as (System.String)) as System.Void:
+	private static def Main(argv as (string)) as void:
+		__using1__ = ((f = System.IO.File.OpenText('using0.boo')) as System.IDisposable)
 		try:
-			f = System.IO.File.OpenText('using0.boo')
 			Boo.Lang.Builtins.print(f.ReadLine())
 		ensure:
-			if __disposable__ = (f as System.IDisposable):
-				__disposable__.Dispose()
-				__disposable__ = null
+			if __using1__ is not null:
+				__using1__.Dispose()
+				__using1__ = null
 
 	private def constructor():
 		super()

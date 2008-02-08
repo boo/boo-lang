@@ -29,11 +29,9 @@
 namespace Boo.NAnt
 
 import System
-import System.Diagnostics
 import System.IO
 import NAnt.Core
 import NAnt.Core.Attributes
-import NAnt.Core.Types
 import Boo.Lang.Compiler
 import Boo.Lang.Compiler.IO
 import Boo.Lang.Compiler.Ast
@@ -42,10 +40,19 @@ import Boo.Lang.Compiler.Steps
 
 class AbstractScript:
 	
-	[property(Project)]
+	Project:
+		get:
+			return _project
+		set:
+			_project = value
+	
 	_project as Project
 	
-	[property(Task)]
+	Task:
+		get:
+			return _task
+		set:
+			_task = value
 	_task as BooTask
 	
 	def print(msg):

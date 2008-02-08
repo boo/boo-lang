@@ -54,9 +54,11 @@
     <FileAlignment>4096</FileAlignment>
   </PropertyGroup>
   <ItemGroup>
-    <Reference Include="nunit.framework, Version=2.2.7.0, Culture=neutral, PublicKeyToken=96d09a1eb7f44a77, processorArchitecture=MSIL">
+    <Reference Include="Boo.Lang.Extensions, Version=2.0.0.0, Culture=neutral, PublicKeyToken=32c39770e9a21a67, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
+      <HintPath>..\..\build\Boo.Lang.Extensions.dll</HintPath>
     </Reference>
+    <Reference Include="nunit.framework" />
     <Reference Include="System" />
     <Reference Include="System.Data" />
     <Reference Include="System.Xml" />
@@ -71,6 +73,7 @@
     <Compile Include="BooTestCaseUtil.cs" />
     <Compile Include="CallablesIntegrationTestFixture.cs" />
     <Compile Include="ClosuresIntegrationTestFixture.cs" />
+    <Compile Include="ClrExtensionsIntegrationTestFixture.cs" />
     <Compile Include="ClrIntegrationTestFixture.cs" />
     <Compile Include="CompilationTestFixture.cs" />
     <Compile Include="CompilerErrorsTestFixture.cs" />
@@ -82,6 +85,7 @@
     <Compile Include="GenericsTestFixture.cs" />
     <Compile Include="LocalizationTestCase.cs" />
     <Compile Include="MacrosTestFixture.cs" />
+    <Compile Include="MetaProgrammingIntegrationTestFixture.cs" />
     <Compile Include="ModulesIntegrationTestFixture.cs" />
     <Compile Include="Net2ErrorsTestFixture.cs" />
     <Compile Include="OperatorsIntegrationTestFixture.cs" />
@@ -94,7 +98,8 @@
     <Compile Include="SupportingClasses.cs" />
     <Compile Include="SystemDrawingPoint.cs" />
     <Compile Include="TypesIntegrationTestFixture.cs" />
-    <Compile Include="Pipeline\AstAttributeProcessorTestCase.cs" />
+    <Compile Include="Pipeline\AllParametersRequiredAttribute.cs" />
+    <Compile Include="Pipeline\ViewStateAttribute.cs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\Boo.Lang.Compiler\Boo.Lang.Compiler-VS2005.csproj">

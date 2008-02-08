@@ -245,11 +245,16 @@ namespace Boo.Lang.Compiler.Ast.Visitors
 		override public void OnEvent(Event node)
 		{
 			WriteAttributes(node.Attributes, true);
-			WriteModifiers(node);
+			WriteOptionalModifiers(node);
 			WriteKeyword("event ");
 			Write(node.Name);
 			WriteTypeReference(node.Type);
 			WriteLine();
+		}
+
+		private static bool IsInterfaceMember(TypeMember node)
+		{
+			return node.DeclaringType != null && node.DeclaringType.NodeType == NodeType.InterfaceDefinition;
 		}
 
 		override public void OnField(Field f)
@@ -274,8 +279,10 @@ namespace Boo.Lang.Compiler.Ast.Visitors
 		
 		override public void OnProperty(Property node)
 		{
+			bool interfaceMember = IsInterfaceMember(node);
+
 			WriteAttributes(node.Attributes, true);
-			WriteModifiers(node);
+			WriteOptionalModifiers(node);
 			WriteIndented("");
 			Visit(node.ExplicitInfo);
 			Write(node.Name);
@@ -286,25 +293,36 @@ namespace Boo.Lang.Compiler.Ast.Visitors
 			WriteTypeReference(node.Type);
 			WriteLine(":");
 			BeginBlock();
-			if (null != node.Getter)
-			{
-				WriteAttributes(node.Getter.Attributes, true);
-				WriteModifiers(node.Getter);
-				WriteKeyword("get");
-				WriteLine(":");
-				WriteBlock(node.Getter.Body);
-			}
-			if (null != node.Setter)
-			{
-				WriteAttributes(node.Setter.Attributes, true);
-				WriteModifiers(node.Setter);
-				WriteKeyword("set");
-				WriteLine(":");
-				WriteBlock(node.Setter.Body);
-			}
+			WritePropertyAccessor(node.Getter, "get", interfaceMember);
+			WritePropertyAccessor(node.Setter, "set", interfaceMember);
 			EndBlock();
 		}
-		
+
+		private void WritePropertyAccessor(Method method, string name, bool interfaceMember)
+		{
+			if (null == method) return;
+			WriteAttributes(method.Attributes, true);
+			if (interfaceMember)
+			{
+				WriteIndented();
+			}
+			else
+			{
+				WriteModifiers(method);
+			}
+			WriteKeyword(name);
+			if (interfaceMember)
+			{
+				WriteLine();
+			}
+			else
+			{
+				WriteLine(":");
+				WriteBlock(method.Body);
+			}
+			
+		}
+
 		override public void OnEnumMember(EnumMember node)
 		{
 			WriteAttributes(node.Attributes, true);
@@ -326,8 +344,8 @@ namespace Boo.Lang.Compiler.Ast.Visitors
 		{
 			OnMethod(c);
 		}
-		
-		bool IsSimpleClosure(CallableBlockExpression node)
+
+		bool IsSimpleClosure(BlockExpression node)
 		{
 			if (1 == node.Body.Statements.Count)
 			{
@@ -352,8 +370,8 @@ namespace Boo.Lang.Compiler.Ast.Visitors
 			}
 			return false;
 		}
-		
-		override public void OnCallableBlockExpression(CallableBlockExpression node)
+
+		override public void OnBlockExpression(BlockExpression node)
 		{
 			if (IsSimpleClosure(node))
 			{
@@ -381,7 +399,8 @@ namespace Boo.Lang.Compiler.Ast.Visitors
 		void WriteCallableDefinitionHeader(string keyword, CallableDefinition node)
 		{
 			WriteAttributes(node.Attributes, true);
-			WriteModifiers(node);
+			WriteOptionalModifiers(node);
+
 			WriteKeyword(keyword);
 
 			IExplicitMember em = node as IExplicitMember;
@@ -395,14 +414,26 @@ namespace Boo.Lang.Compiler.Ast.Visitors
 				WriteGenericParameterList(node.GenericParameters);
 			}
 			WriteParameterList(node.Parameters);
-			WriteTypeReference(node.ReturnType);
 			if (node.ReturnTypeAttributes.Count > 0)
 			{
 				Write(" ");
 				WriteAttributes(node.ReturnTypeAttributes, false);
 			}
+			WriteTypeReference(node.ReturnType);
 		}
-		
+
+		private void WriteOptionalModifiers(TypeMember node)
+		{
+			if (IsInterfaceMember(node))
+			{
+				WriteIndented();
+			}
+			else
+			{
+				WriteModifiers(node);
+			}
+		}
+
 		override public void OnCallableDefinition(CallableDefinition node)
 		{
 			WriteCallableDefinitionHeader("callable ", node);
@@ -410,14 +441,19 @@ namespace Boo.Lang.Compiler.Ast.Visitors
 
 		override public void OnMethod(Method m)
 		{
-			if (m.IsRuntime)
-			{
-				WriteImplementationComment("runtime");
-			}
+			if (m.IsRuntime) WriteImplementationComment("runtime");
+
 			WriteCallableDefinitionHeader("def ", m);
-			WriteLine(":");
-			WriteLocals(m);
-			WriteBlock(m.Body);
+			if (IsInterfaceMember(m))
+			{
+				WriteLine();
+			}
+			else
+			{
+				WriteLine(":");
+				WriteLocals(m);
+				WriteBlock(m.Body);
+			}
 		}
 		
 		private void WriteImplementationComment(string comment)
@@ -790,22 +826,44 @@ namespace Boo.Lang.Compiler.Ast.Visitors
 			Write(e.Value);
 		}
 		
-		override public void OnAstLiteralExpression(AstLiteralExpression e)
+		override public void OnSpliceExpression(SpliceExpression e)
+		{
+			WriteOperator("$(");
+			Visit(e.Expression);
+			WriteOperator(")");
+		}
+		
+		override public void OnSpliceTypeReference(SpliceTypeReference node)
+		{
+			WriteOperator("$(");
+			Visit(node.Expression);
+			WriteOperator(")");
+		}
+		
+		void WriteIndentedOperator(string op)
 		{
 			WriteIndented();
-			WriteKeyword("ast");
+			WriteOperator(op);
+		}
+		
+		override public void OnQuasiquoteExpression(QuasiquoteExpression e)
+		{
+			WriteIndentedOperator("[|");
 			if (e.Node is Expression)
 			{
-				Write(" { ");
+				Write(" ");
 				Visit(e.Node);
-				Write(" }");
+				Write(" ");
+				WriteIndentedOperator("|]");
 			}
 			else
 			{
-				WriteLine(":");
-				BeginBlock();
+				WriteLine();
+				Indent();
 				Visit(e.Node);
-				EndBlock();
+				Dedent();
+				WriteIndentedOperator("|]");
+				WriteLine();
 			}
 		}
 
@@ -933,14 +991,34 @@ namespace Boo.Lang.Compiler.Ast.Visitors
 			WriteIndented();
 			WriteKeyword("try:");
 			WriteLine();
-			WriteBlock(node.ProtectedBlock);
+			Indent();
+			WriteBlockStatements(node.ProtectedBlock);
+			Dedent();
 			Visit(node.ExceptionHandlers);
+			
+			if (null != node.FailureBlock)
+			{
+				WriteIndented();
+				WriteKeyword("failure:");
+				WriteLine();
+				Indent();
+				WriteBlockStatements(node.FailureBlock);
+				Dedent();
+			}
+			
 			if (null != node.EnsureBlock)
 			{
 				WriteIndented();
 				WriteKeyword("ensure:");
 				WriteLine();
-				WriteBlock(node.EnsureBlock);
+				Indent();
+				WriteBlockStatements(node.EnsureBlock);
+				Dedent();
+			}
+			
+			if(IsWhiteSpaceAgnostic)
+			{
+				WriteEnd();
 			}
 		}
 		
@@ -948,13 +1026,42 @@ namespace Boo.Lang.Compiler.Ast.Visitors
 		{
 			WriteIndented();
 			WriteKeyword("except");
-			if (null != node.Declaration)
+			if ((node.Flags & ExceptionHandlerFlags.Untyped) == ExceptionHandlerFlags.None)
+			{
+			   if((node.Flags & ExceptionHandlerFlags.Anonymous) == ExceptionHandlerFlags.None)
+				{
+					Write(" ");
+					Visit(node.Declaration);
+				}
+				else 
+				{
+					WriteTypeReference(node.Declaration.Type);
+				}
+			}
+			else if((node.Flags & ExceptionHandlerFlags.Anonymous) == ExceptionHandlerFlags.None)
 			{
 				Write(" ");
-				Visit(node.Declaration);
+				Write(node.Declaration.Name);
+			}
+
+			if((node.Flags & ExceptionHandlerFlags.Filter) == ExceptionHandlerFlags.Filter)
+			{
+				UnaryExpression unless = node.FilterCondition as UnaryExpression;
+				if(unless != null && unless.Operator == UnaryOperatorType.LogicalNot)
+				{
+					WriteKeyword(" unless ");
+					Visit(unless.Operand);
+				}
+				else
+				{
+					WriteKeyword(" if ");
+					Visit(node.FilterCondition);					
+				}
 			}
 			WriteLine(":");
-			WriteBlock(node.Block);
+			Indent();
+			WriteBlockStatements(node.Block);
+			Dedent();
 		}
 		
 		override public void OnUnlessStatement(UnlessStatement node)
@@ -992,21 +1099,16 @@ namespace Boo.Lang.Compiler.Ast.Visitors
 			WriteConditionalBlock("while", node.Condition, node.Block);
 		}
 
-		override public void OnIfStatement(IfStatement ifs)
-		{
-			WriteIndented();
-			WriteKeyword("if ");
-			Visit(ifs.Condition);
-			WriteLine(":");
-			Indent();
-			WriteBlockStatements(ifs.TrueBlock);
-			Dedent();
-			if (null != ifs.FalseBlock)
+		override public void OnIfStatement(IfStatement node)
+		{	
+			WriteIfBlock("if ", node);
+			Block elseBlock = WriteElifs(node);
+			if (null != elseBlock)
 			{
 				WriteIndented();
 				WriteKeyword("else:");
 				WriteLine();
-				WriteBlock(ifs.FalseBlock);
+				WriteBlock(elseBlock);
 			}
 			else
 			{
@@ -1016,7 +1118,37 @@ namespace Boo.Lang.Compiler.Ast.Visitors
 				}
 			}
 		}
-		
+
+		private Block WriteElifs(IfStatement node)
+		{
+			Block falseBlock = node.FalseBlock;
+			while (IsElif(falseBlock))
+			{
+				IfStatement stmt = (IfStatement) falseBlock.Statements[0];
+				WriteIfBlock("elif ", stmt);
+				falseBlock = stmt.FalseBlock;
+			}
+			return falseBlock;
+		}
+
+		private void WriteIfBlock(string keyword, IfStatement ifs)
+		{
+			WriteIndented();
+			WriteKeyword(keyword);
+			Visit(ifs.Condition);
+			WriteLine(":");
+			Indent();
+			WriteBlockStatements(ifs.TrueBlock);
+			Dedent();
+		}
+
+		private static bool IsElif(Block block)
+		{
+			if (block == null) return false;
+			if (block.Statements.Count != 1) return false;
+			return block.Statements[0] is IfStatement;
+		}
+
 		override public void OnDeclarationStatement(DeclarationStatement d)
 		{
 			WriteIndented();
@@ -1572,16 +1704,19 @@ namespace Boo.Lang.Compiler.Ast.Visitors
 			WriteKeyword(keyword);
 			Write(" ");
 			Write(td.Name);
+
+			if (td.GenericParameters.Count != 0)
+			{
+				WriteGenericParameterList(td.GenericParameters);
+			}
+
 			if (td.BaseTypes.Count > 0)
 			{
 				Write("(");
-				for (int i=0; i<td.BaseTypes.Count; ++i)
-				{
-					if (i > 0) { Write(", "); }
-					Write(((SimpleTypeReference)td.BaseTypes[i]).Name);
-				}
+				WriteCommaSeparatedList<TypeReference>(td.BaseTypes);
 				Write(")");
 			}
+
 			WriteLine(":");
 			BeginBlock();
 			if (td.Members.Count > 0)

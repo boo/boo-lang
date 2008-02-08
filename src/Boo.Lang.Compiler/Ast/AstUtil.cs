@@ -202,8 +202,16 @@ namespace Boo.Lang.Compiler.Ast
 		
 		public static bool IsTargetOfMethodInvocation(Expression node)
 		{
-			return node.ParentNode.NodeType == NodeType.MethodInvocationExpression &&
-					node == ((MethodInvocationExpression)node.ParentNode).Target;
+			return IsTargetOfGenericMethodInvocation(node) ||
+				(node.ParentNode.NodeType == NodeType.MethodInvocationExpression &&
+					node == ((MethodInvocationExpression)node.ParentNode).Target);
+		}
+
+		public static bool IsTargetOfGenericMethodInvocation(Expression node)
+		{
+            return node.ParentNode.NodeType == NodeType.GenericReferenceExpression && node.ParentNode.ParentNode != null
+                    && node.ParentNode.ParentNode.NodeType == NodeType.MethodInvocationExpression
+                    && node.ParentNode == ((MethodInvocationExpression)node.ParentNode.ParentNode).Target;
 		}
 
 		public static bool IsTargetOfMemberReference(Expression node)
@@ -271,6 +279,13 @@ namespace Boo.Lang.Compiler.Ast
 			constructor.Modifiers = modifiers;
 			constructor.IsSynthetic = true;
 			return constructor;
+		}
+		
+		public static ReferenceExpression CreateReferenceExpression(LexicalInfo li, string fullname)
+		{
+			ReferenceExpression e = CreateReferenceExpression(fullname);
+			e.LexicalInfo = li;
+			return e;
 		}
 		
 		public static ReferenceExpression CreateReferenceExpression(string fullname)

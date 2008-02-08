@@ -96,6 +96,9 @@ namespace BooC
 				_options = new CompilerParameters(false); //false means no stdlib loading yet
 				_options.GenerateInMemory = false;
 				
+				ArrayList tempLibPaths = _options.LibPaths.Clone() as ArrayList;
+				_options.LibPaths.Clear();
+				
 				BooCompiler compiler = new BooCompiler(_options);
 				
 				ParseOptions(args);
@@ -106,10 +109,8 @@ namespace BooC
 				}
 				
 				//move standard libpaths below any new ones:
-				_options.LibPaths.Add(_options.LibPaths[0]);
-				_options.LibPaths.Add(_options.LibPaths[1]);
-				_options.LibPaths.RemoveAt(0);
-				_options.LibPaths.RemoveAt(0);
+				foreach(object o in tempLibPaths)
+					_options.LibPaths.Add(o);
 				
 				if (_options.StdLib)
 				{
@@ -229,25 +230,27 @@ namespace BooC
 					"Options:\n" +
 					" -c:CULTURE           Sets the UI culture to be CULTURE\n" +
 					" -debug[+|-]          Generate debugging information (default: +)\n" +
-					" -delaysign           Delay assembly signing\n" +
+					" -define:S1[,Sn]      Defines symbols S1..Sn with optional values (=val) (-d:)\n" +
+					" -delaysign           Delays assembly signing\n" +
 					" -ducky               Turns on duck typing by default\n" +
 					" -checked[+|-]        Turns on or off checked operations (default: +)\n" +
 					" -embedres:FILE[,ID]  Embeds FILE with the optional ID\n"+
 					" -lib:DIRS            Adds the comma-separated DIRS to the assembly search path\n" +
-					" -noconfig            Do not load the standard configuration\n" +
-					" -nostdlib            Do not reference any of the default libraries\n" +
-					" -nologo              Do not display the compiler logo\n" +
+					" -noconfig            Does not load the standard configuration\n" +
+					" -nostdlib            Does not reference any of the default libraries\n" +
+					" -nologo              Does not display the compiler logo\n" +
 					" -p:PIPELINE          Sets the pipeline to PIPELINE\n" +
-					" -o:FILE              Set the output file name to FILE\n" +
+					" -o:FILE              Sets the output file name to FILE\n" +
 					" -keyfile:FILE        The strongname key file used to strongname the assembly\n" +
 					" -keycontainer:NAME   The key pair container used to strongname the assembly\n" +
 					" -reference:ASS       References the specified assembly (-r:ASS)\n" +
 					" -srcdir:DIR          Adds DIR as a directory where sources can be found\n" +
-					" -target:TYPE         Set the target type (exe, library or winexe)\n" +
-					" -resource:FILE[,ID]  Embed FILE as a resource\n" +
-					" -utf8                Source file is in utf8 format\n" +
-					" -v, -vv, -vvv        Set verbosity level from warnings to very detailed\n" +
-					" -wsa                 Enable white-space-agnostic builds\n"
+					" -target:TYPE         Sets the target type (exe, library or winexe)\n" +
+					" -resource:FILE[,ID]  Embeds FILE as a resource\n" +
+					" -pkg:P1[,Pn]         References packages P1..Pn (on supported platforms)\n" +
+					" -utf8                Source file(s) are in utf8 format\n" +
+					" -v, -vv, -vvv        Sets verbosity level from warnings to very detailed\n" +
+					" -wsa                 Enables white-space-agnostic build\n"
 					);
 		}
 
@@ -288,7 +291,7 @@ namespace BooC
 					{
 						if (arg == "-wsa")
 						{
-							_whiteSpaceAgnostic = true;
+							_options.WhiteSpaceAgnostic = _whiteSpaceAgnostic = true;
 						}
 						else
 						{
@@ -333,21 +336,9 @@ namespace BooC
 							switch (arg.Substring(1, 8))
 							{
 								case "resource":
-								{
-									string resourceFile;
+								{	
 									int start = arg.IndexOf(":") + 1;
-									resourceFile = StripQuotes(arg.Substring(start));
-									int comma = resourceFile.LastIndexOf(',');
-									if (comma >= 0)
-									{
-										string resourceName = resourceFile.Substring(comma+1);
-										resourceFile = resourceFile.Substring(0, comma);
-										_options.Resources.Add(new NamedFileResource(resourceFile, resourceName));
-									}
-									else
-									{
-										_options.Resources.Add(new FileResource(resourceFile));
-									}
+									AddResource(StripQuotes(arg.Substring(start)));
 									break;
 								}
 
@@ -575,7 +566,30 @@ namespace BooC
 							
 							default:
 							{
-								InvalidOption(arg);
+								if (arg.StartsWith("-d:") || arg.StartsWith("-define:"))
+								{
+									int skip = arg.StartsWith("-d:") ? 3 : 8;
+									string[] symbols = StripQuotes(arg.Substring(skip)).Split(",".ToCharArray());
+									foreach (string symbol in symbols)
+									{
+										string[] s_v = symbol.Split("=".ToCharArray(), 2);
+										if (s_v[0].Length < 1) continue;
+										if (_options.Defines.ContainsKey(s_v[0]))
+										{
+											_options.Defines[s_v[0]] = (s_v.Length > 1) ? s_v[1] : null;
+											Trace.WriteLine("REPLACED DEFINE '"+s_v[0]+"' WITH VALUE '"+((s_v.Length > 1) ? s_v[1] : string.Empty) +"'");
+										}
+										else
+										{
+											_options.Defines.Add(s_v[0], (s_v.Length > 1) ? s_v[1] : null);
+											Trace.WriteLine("ADDED DEFINE '"+s_v[0]+"' WITH VALUE '"+((s_v.Length > 1) ? s_v[1] : string.Empty) +"'");
+										}
+									}
+								}
+								else
+								{							
+									InvalidOption(arg);
+								}
 								break;
 							}
 						}
@@ -588,21 +602,12 @@ namespace BooC
 						{
 							case "embedres":
 							{
-								// TODO: Add check for runtime support for "mono resources"
-								string resourceFile;
+								if (!IsMono)
+								{
+									throw new ApplicationException("-embedres is only supported on mono. Try -resource.");
+								}
 								int start = arg.IndexOf(":") + 1;
-								resourceFile = StripQuotes(arg.Substring(start));
-								int comma = resourceFile.LastIndexOf(',');
-								if (comma >= 0)
-								{
-									string resourceName = resourceFile.Substring(comma+1);
-									resourceFile = resourceFile.Substring(0, comma);
-									_options.Resources.Add(new NamedEmbeddedFileResource(resourceFile, resourceName));
-								}
-								else
-								{
-									_options.Resources.Add(new EmbeddedFileResource(resourceFile));
-								}
+								EmbedResource(StripQuotes(arg.Substring(start)));
 								break;
 							}
 
@@ -617,7 +622,14 @@ namespace BooC
 					
 					default:
 					{
-						InvalidOption(arg);
+						if (arg == "--help")
+						{
+							Help();
+						}
+						else
+						{
+							InvalidOption(arg);
+						}
 						break;
 					}
 				}
@@ -628,7 +640,43 @@ namespace BooC
 				DoLogo();
 			}
 		}
-		
+
+		private bool IsMono
+		{
+			get { return Type.GetType("System.MonoType", false) != null;  }
+		}
+
+		private void EmbedResource(string resourceFile)
+		{
+
+			int comma = resourceFile.LastIndexOf(',');
+			if (comma >= 0)
+			{
+				string resourceName = resourceFile.Substring(comma+1);
+				resourceFile = resourceFile.Substring(0, comma);
+				_options.Resources.Add(new NamedEmbeddedFileResource(resourceFile, resourceName));
+			}
+			else
+			{
+				_options.Resources.Add(new EmbeddedFileResource(resourceFile));
+			}
+		}
+
+		private void AddResource(string resourceFile)
+		{
+			int comma = resourceFile.LastIndexOf(',');
+			if (comma >= 0)
+			{
+				string resourceName = resourceFile.Substring(comma+1);
+				resourceFile = resourceFile.Substring(0, comma);
+				_options.Resources.Add(new NamedFileResource(resourceFile, resourceName));
+			}
+			else
+			{
+				_options.Resources.Add(new FileResource(resourceFile));
+			}
+		}
+
 		private void ConfigurePipeline()
 		{
 			if (null != _pipelineName)

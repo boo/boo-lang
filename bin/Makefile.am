@@ -3,6 +3,7 @@ boo_DATA = booc.exe booi.exe booish.exe booc.rsp booc.exe.config booi.exe.config
 
 BOO_GAC_DLLS = Boo.Lang.dll \
                Boo.Lang.Useful.dll \
+	       Boo.Lang.Extensions.dll \
 	       Boo.Lang.Compiler.dll \
 	       Boo.Lang.Parser.dll \
 	       Boo.Lang.Interpreter.dll \

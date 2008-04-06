@@ -3738,8 +3738,7 @@ namespace Boo.Lang.Compiler.Steps
 		
 		private static string GetReferenceTypeName(Type t)
 		{
-			//return t.FullName + "&";
-			string name = t.FullName;
+			string name = t.FullName ?? t.Name;
 			return name.EndsWith("&")
 				? name
 				: name + "&";
@@ -3758,9 +3757,13 @@ namespace Boo.Lang.Compiler.Steps
 					
 					if (byreftype == null) //internal type
 					{
-						byreftype = _moduleBuilder.GetType(typename,true);
+						byreftype = _moduleBuilder.GetType(typename, true);
 						//TODO ? - test that nested types work too
 						//GetTypeBuilder(parameters[i].Type).GetNestedType(typename);
+						if (byreftype == null) //generic parameter
+						{
+							byreftype = types[i].MakeByRefType();
+						}
 					}
 					types[i] = byreftype;
 				}

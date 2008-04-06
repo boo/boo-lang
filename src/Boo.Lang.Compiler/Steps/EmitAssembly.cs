@@ -3736,36 +3736,15 @@ namespace Boo.Lang.Compiler.Steps
 			}
 		}
 		
-		private static string GetReferenceTypeName(Type t)
-		{
-			string name = t.FullName ?? t.Name;
-			return name.EndsWith("&")
-				? name
-				: name + "&";
-		}
-		
 		Type[] GetParameterTypes(ParameterDeclarationCollection parameters)
 		{
 			Type[] types = new Type[parameters.Count];
 			for (int i=0; i<types.Length; ++i)
 			{
 				types[i] = GetSystemType(parameters[i].Type);
-				if (parameters[i].IsByRef)
+				if (parameters[i].IsByRef && !types[i].IsByRef)
 				{
-					string typename = GetReferenceTypeName(types[i]);
-					Type byreftype = types[i].Assembly.GetType(typename);
-					
-					if (byreftype == null) //internal type
-					{
-						byreftype = _moduleBuilder.GetType(typename, true);
-						//TODO ? - test that nested types work too
-						//GetTypeBuilder(parameters[i].Type).GetNestedType(typename);
-						if (byreftype == null) //generic parameter
-						{
-							byreftype = types[i].MakeByRefType();
-						}
-					}
-					types[i] = byreftype;
+					types[i] = types[i].MakeByRefType();
 				}
 			}
 			return types;
